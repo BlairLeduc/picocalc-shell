@@ -123,6 +123,7 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
   key; with the card out, a key gave the no-card message and
   `picocalc_shell_exit()` returned false; with the card back, a key
   rebooted into the shell.
+- **The owner, on the Pico 2 W, release build, 2026-10-13:** M2 worked.
 - **The owner, on a Pico 2 W, UF2 Loader 2.5, 2026-10-13:** M2 worked as
   expected. Power cut during a write: at the next power-on the PicoCalc
   showed the shell.
@@ -183,8 +184,7 @@ start, which the estimates left out.
 
 **Not checked:**
 
-- Which build the owner ran, and their timings; the release build on the
-  Plus 2 W.
+- The owner's timings; the release build on the Plus 2 W.
 - A power cut that leaves the first sector's last page half programmed:
   the owner's cut came back to the shell, but where in the write it fell
   is not known.
