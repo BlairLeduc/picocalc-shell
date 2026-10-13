@@ -38,8 +38,9 @@ typedef struct {
     const char *error;          /* what was wrong, when parse_line fails */
 } parse_t;
 
-/* Parse `line`. True with p->ncmds commands, possibly none for a blank
- * line or a comment; false with p->error set. The line is not changed. */
+/* Parse `line`, of at most SHELL_LINE_MAX characters. True with
+ * p->ncmds commands, possibly none for a blank line or a comment; false
+ * with p->error set. The line is not changed. */
 bool parse_line(parse_t *p, const char *line);
 
 #endif /* SHELL_PARSE_H */

@@ -55,6 +55,9 @@ static bool word(parse_t *p, const char **sp, char **tp) {
 
 bool parse_line(parse_t *p, const char *line) {
     memset(p, 0, sizeof *p);
+    /* A typed line is never longer; a script's could be, and the words'
+     * text, which is never longer than the line, has to fit. */
+    if (strlen(line) > SHELL_LINE_MAX) return fail(p, "line too long");
     const char *s = line;
     char *t = p->text;
     size_t nwords = 0;   /* slots used in p->words, NULLs included */

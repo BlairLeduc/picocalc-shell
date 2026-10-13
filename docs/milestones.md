@@ -90,6 +90,17 @@ checked, on the same board, 2026-10-12:** hidden and system names are
 hidden by `ls` and shown by `ls -a`; and a card pulled out during a
 `cp -r` gave a card I/O error, with the card fine afterwards.
 
+**Review of the PR** (Muse AI, 2026-10-12): the logic held up; the host
+build did not build on Linux. Fixed: `src/host/main.c` asks for POSIX
+(glibc hides `clock_gettime` under strict C11); the deep-path test's
+buffers are sized so GCC cannot see a truncation; and the FatFs/disk
+dependency is declared both ways, so GNU ld, which scans each archive
+once, links `test_shell`. These fixes are checked on macOS only; nothing
+here has a Linux toolchain. Found while fixing them: `shell_run` did not
+check a line's length, and one longer than SHELL_LINE_MAX would have
+overrun the parser's text; `parse_line` now refuses it, with tests. Left
+as it is: `nosuch > f` makes no `f`, where sh would.
+
 **Measurements:** none yet. Card timings are those in HW §7.1.
 
 | What | Estimate | Measured |

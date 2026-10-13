@@ -106,6 +106,9 @@ int main(void) {
     memset(line, 0, sizeof line);
     memset(line, 'q', SHELL_LINE_MAX);
     CHECK(parse_line(&p, line) && strlen(p.cmds[0].argv[0]) == SHELL_LINE_MAX, "one long word");
+    static char longer[SHELL_LINE_MAX + 2];
+    memset(longer, 'q', SHELL_LINE_MAX + 1);
+    CHECK(!parse_line(&p, longer) && strcmp(p.error, "line too long") == 0, "one character more");
 
     TEST_DONE();
 }

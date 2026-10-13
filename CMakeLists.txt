@@ -43,6 +43,11 @@ if (PICO_SHELL_HOST)
     set(CMAKE_C_STANDARD 11)
     set(CMAKE_C_STANDARD_REQUIRED ON)
     set(CMAKE_C_EXTENSIONS OFF)
+    # The FatFs/disk cycle below repeats two archives on the link line,
+    # which GNU ld needs and Apple's linker warns about.
+    if (APPLE)
+        add_link_options(LINKER:-no_warn_duplicate_libraries)
+    endif()
 
     shell_core_library()
     # Only the host formats disks: the tests' FAT16 and FAT32 images.
@@ -53,6 +58,10 @@ if (PICO_SHELL_HOST)
     target_include_directories(shell_host_disk PUBLIC src/host)
     target_compile_options(shell_host_disk PRIVATE ${SHELL_WARNINGS})
     target_link_libraries(shell_host_disk PUBLIC shell_fatfs)
+    # FatFs calls the disk, and the disk FatFs's types: a cycle, which
+    # CMake writes out so that GNU ld, which scans each archive once in
+    # order, finds the disk for a program that names only the core.
+    target_link_libraries(shell_fatfs PUBLIC shell_host_disk)
 
     add_executable(shell src/host/main.c)
     target_compile_options(shell PRIVATE ${SHELL_WARNINGS})

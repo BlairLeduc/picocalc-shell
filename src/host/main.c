@@ -10,6 +10,10 @@
  * shell ends at the end of input.
  */
 
+/* clock_gettime and the POSIX terminal calls: strict C11 hides them on
+ * glibc, though not on macOS. */
+#define _POSIX_C_SOURCE 200809L
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>

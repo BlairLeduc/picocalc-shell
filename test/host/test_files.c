@@ -306,6 +306,11 @@ static int files_tests(bool fat32) {
           "a parse error runs nothing: '%s'", con);
     CHECK(run("nope") == 127 && strcmp(con, "nope: not found\n") == 0, "not found");
     CHECK(run("echo -n a; echo b") == 0 && strcmp(con, "ab\n") == 0, "echo -n");
+    /* A line longer than one typed can be is refused, not overrun. */
+    static char longline[4 * SHELL_LINE_MAX];
+    memset(longline, 'x', sizeof longline - 1);
+    CHECK(run(longline) == 2 && strcmp(con, "shell: line too long\n") == 0, "long line: '%s'",
+          con);
 
     /* The lock: cp writing the file a redirection is writing. */
     CHECK(run("cp big.bin new.txt > new.txt") == 1 && strstr(con, "file in use"),
@@ -333,9 +338,9 @@ static int files_tests(bool fat32) {
     CHECK(run("rm -r /many") == 0 && !exists("/many"), "rm -r many");
 
     /* Deeper than SHELL_TREE_DEPTH: said, not overrun. */
-    char deep[SHELL_PATH_MAX + 1] = "/deep";
+    char deep[8 + 2 * SHELL_TREE_DEPTH] = "/deep";
     for (unsigned i = 0; i <= SHELL_TREE_DEPTH; i++) strcat(deep, "/d");
-    char cmd[SHELL_LINE_MAX + 1];
+    char cmd[sizeof deep + 16];
     snprintf(cmd, sizeof cmd, "mkdir -p %s", deep);
     CHECK(run(cmd) == 0, "deep: %s", con);
     CHECK(run("cp -r /deep /deep2") == 1 && strstr(con, "levels deep"), "cp -r deep: '%s'", con);
