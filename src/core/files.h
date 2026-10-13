@@ -12,6 +12,7 @@
 #define SHELL_FILES_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "shell.h"
 
@@ -26,8 +27,30 @@ void files_mount(void);
 /* FatFs's result in words: "no card", "no such file or directory". */
 const char *files_why(FRESULT r);
 
+/* f_stat, with the root, which FatFs cannot stat, as a directory. */
+FRESULT files_stat(const char *path, FILINFO *fno);
+
 /* Whether `path` (absolute) is a directory on the card. */
 bool files_is_dir(const char *path);
+
+/* A write through name.new (EL §8.6), for any command that saves a file. */
+typedef struct {
+    FIL         fil;
+    const char *why;                        /* the first failure, or NULL */
+    char        path[SHELL_PATH_MAX + 1];
+    char        tmp[SHELL_PATH_MAX + 5];    /* path + ".new" */
+} files_safe_t;
+
+/* Open `path`.new for writing: NULL, or why not. A directory or a file
+ * marked read-only is refused. */
+const char *files_safe_open(files_safe_t *w, const char *path);
+/* Write to it; the first failure is kept in w->why and later writes do
+ * nothing. */
+void files_safe_write(files_safe_t *w, const void *buf, size_t n);
+/* Close and remove name.new, leaving the old file. */
+void files_safe_abort(files_safe_t *w);
+/* Close name.new and put it in place: NULL, or why the old file stays. */
+const char *files_safe_commit(files_safe_t *w);
 
 /* `> arg` or `>> arg` for the next command: sh->out becomes the file.
  * False, with the error printed, if it cannot be opened. */

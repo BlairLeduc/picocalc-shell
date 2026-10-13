@@ -14,6 +14,10 @@ option(PICO_SHELL_HOST "Build the portable core and its host tests, with no Pico
 set(SHELL_CORE_SOURCES
     src/core/bininfo.c
     src/core/displaytest.c
+    src/core/editor_lines.c
+    src/core/editor_pattern.c
+    src/core/editor_undo.c
+    src/core/editor_vi.c
     src/core/files.c
     src/core/font-5x10.c
     src/core/font-8x10.c
@@ -25,6 +29,7 @@ set(SHELL_CORE_SOURCES
     src/core/shell.c
     src/core/term.c
     src/core/uf2.c
+    src/core/vi.c
 )
 
 set(SHELL_WARNINGS -Wall -Wextra -Werror)
@@ -38,6 +43,13 @@ function(shell_core_library)
     add_library(shell_core STATIC ${SHELL_CORE_SOURCES})
     target_include_directories(shell_core PUBLIC src/core)
     target_compile_options(shell_core PRIVATE ${SHELL_WARNINGS})
+    # Pico Logo's key layer cuts its Ctrl-G report to the status row on
+    # purpose (its limits.h says so); GCC's truncation warning is off for
+    # that file alone.
+    if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        set_source_files_properties(src/core/editor_vi.c PROPERTIES
+            COMPILE_OPTIONS -Wno-format-truncation)
+    endif()
     target_link_libraries(shell_core PUBLIC shell_fatfs)
 endfunction()
 

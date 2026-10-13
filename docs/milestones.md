@@ -16,6 +16,130 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M3 — vi (branch `m3-vi`, 2026-10-13)
+
+**Done.** vi edited `/atom/pico-atom.cfg` on the Plus 2 W's test card,
+and pico-atom then started, read it at power-on, and showed the setting
+the edit added (the owner, on the panel).
+
+**Checked on the host** (macOS, Apple clang 21, `-Wall -Wextra -Werror`,
+C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
+
+- Both builds compile clean, development and release. GCC's
+  `-Wformat-truncation` is off for `editor_vi.c` alone: its Ctrl-G report
+  is cut to the status row on purpose.
+- **Pico Logo's own tests** for the lifted files, unchanged but for one
+  include, through `test/host/unity.h`: `test_editor_vi` (255),
+  `test_editor_pattern` (54, with a differential against POSIX
+  `<regex.h>`), `test_editor_undo` (19) and `test_editor_lines` (18), all
+  passing with the page at 31 lines.
+- **`test_vi`**, through the shell over FAT16 and FAT32 images, keys typed
+  from a script, the screen read from the terminal's grid as vi left it,
+  and the file read back through FatFs:
+  - open, edit, `:w`, `:wq`, `ZZ`, `:x`, undo; the report on opening and
+    on writing, and the clean screen after;
+  - a CR LF settings file changed as the board check does it; a mixed
+    file keeping its CRs; no final line break kept, with LF and with CR LF;
+    an empty file staying empty, then gaining a line break with text; a
+    file of one empty line; NUL shown and kept;
+  - a new file made by `:wq` and not by `ZZ` or `:x`; a name against the
+    current directory;
+  - `:q` refused with a change, `:q!`, Brk from insert mode, and the end
+    of input, none of which write;
+  - `view`, `vi -R` and a file FAT marks read-only: never written, and
+    said;
+  - a directory, a missing directory, the usages, no keyboard, no card;
+  - 65,536 bytes refused with its size and the file untouched; 65,535
+    bytes going round unchanged, and an insert into it refused;
+  - a yank larger than the register refused and said;
+  - the screen: the first 31 of 100 lines and `~` past the end, `G`, `zt`,
+    tabs, `^M`, `^A` and `^@`, a 60-column line scrolled sideways and back,
+    `v` and `V` reversed, the mode on the status row, the command line
+    with the cursor on it, 64 columns in font 5x10, and moving along a
+    line sending no text;
+  - a card that fails part way through a save, at every sector of it:
+    afterwards the old file is whole, or the new one is, or the old is
+    gone and a whole `name.new` is there, and a failure is said with vi
+    still open.
+- **Planted bugs**, 7, one at a time, each rebuilt clean; every one
+  failed a test: CR LF not put back (`test_vi`); the old file removed
+  before writing (`test_vi`, the fault loop); the size limit one too
+  many; the final line break dropped; `:wq` treated as `ZZ`; an undo step
+  for every typed key; `$` broken in the key layer (`test_editor_vi` and
+  `test_vi`). `gg`, `nG` and `ngg` were added to `test_vi` afterwards;
+  the key layer already had them, with Pico Logo's tests.
+- **The stack** (`-fstack-usage`, worked by hand): vi's `:s` with a
+  32-byte pattern is the deepest chain, about 5.0 KB, since the pattern
+  matcher recurses once per atom at 120 B a level. That is more than the
+  4 KB design.md gave the stack, which was scratch Y alone; the SDK's
+  `__StackLimit` is the bottom of scratch X, 8 KB down, and nothing is
+  in scratch X while core 1 is idle. design.md §7 is corrected.
+
+**Checked on the board:** Claude, on the Plus 2 W (RP2350B rev 2, id
+`7458DC82A89AAC12`), development build from SRAM over SWD
+(`tools/swd-ram.sh`), keys typed over the UART, 2026-10-13
+(`out/m3-ram-dev-1.log`):
+
+- `/atom/pico-atom.cfg` on the test card held 123 bytes, LF, six
+  settings (the log holds them). vi showed it, its first line cut at 40
+  columns, and the report `"/atom/pico-atom.cfg" 6L, 123B`; the screen
+  dump matched the panel's grid.
+- `Go`, `perf = on`, Esc, `:wq`: `7L, 133B written`; `cat` showed the new
+  line and `ls -l` 133 bytes, with no `.new` left.
+- Then `tools/swd-shell.sh`: stage3 loaded the card's shell (the M2
+  build), and `pico-atom` wrote 10 of its 39 sectors and rebooted into
+  pico-atom, which reads the file at power-on. `perf = on` puts its
+  figures along the top of the screen.
+- **The owner, 2026-10-13:** pico-atom's figures were along the top of
+  the panel, so it took `perf = on`. The test card's file still has it.
+- **The owner, on a Pico 2 W, release build, 2026-10-13:**
+  `docs/design.md`, 41 KB, opened in vi in under a second. From the
+  PicoCalc's keyboard, `gg`, `G`, `hjkl`, the arrows, Esc, Brk, and Ctrl
+  keys such as Ctrl-F and Ctrl-B all worked.
+
+**Measurements:**
+
+| What | Estimate | Measured |
+|---|---|---|
+| RAM, development / release (link map) | +80 KB for vi's buffers | 290,628 B / 286,496 B (M2: 158,224 B / 154,284 B); vi is 35 KB of code and 94 KB of `.bss` |
+| Deepest stack | under 4 KB | about 5.0 KB (vi's `:s`), of 8 KB |
+| Opening a 41 KB file | — | under a second (the owner, Pico 2 W, release build, by eye) |
+
+**Not checked:**
+
+- The release build on the Plus 2 W; the owner ran it from the card on
+  a Pico 2 W. The development build ran only from SRAM.
+- A CR LF file on the card, a file near 64 KB, and saving a large file:
+  not timed (a 41 KB file opened in under a second, by eye).
+- The stack's depth on the board: no high-water mark was taken.
+- The host shell types the macOS terminal's arrow keys as Esc `[` A,
+  which vi takes as three keys; hjkl work.
+- Carried from M2: the owner's timings; the release build on the Plus 2
+  W; a power cut that leaves the first sector's last page half
+  programmed; a key pressed between Enter and the reboot; long programs;
+  an RP2040 or oversized UF2 on the card; the read-back catching a flash
+  fault; the emulators themselves after the shell flashed them (pico-atom
+  started here, unseen); the southbridge's version read failing (-2)
+  from the card.
+- Carried from M1: time taken by `ls` of a large directory, `df` with
+  FSINFO not trusted, and a large `cp`.
+- Carried from M0: the start time from power-on through stage3, 75 MHz by
+  eye, the cursor's blink by eye, every key code.
+
+**Review of the PR** (Muse, 2026-10-13). No blocking bug in the new
+code; these were fixed:
+
+- **The host build failed on Linux** (Muse): `test_editor_vi.c`, lifted
+  from Pico Logo, used `SIZE_MAX` without `<stdint.h>`, which macOS's
+  headers bring in and glibc's do not. `vi.c` now includes it as well,
+  rather than through `vi.h`. Built on macOS only here; Muse's Linux
+  build passed with the include.
+- **`menu > f` still emptied `f`** (carried from M2's review): `menu`
+  refused the redirection, but only after the shell had opened it, and
+  the redirection was then committed, creating `f` or emptying the one
+  there. The shell now refuses it before opening it; `test_uf2` checks
+  that a file already there is kept, for `>` and `>>`.
+
 ## M2 — Run (branch `m2-run`, 2026-10-13)
 
 **Done.** The gate held: the first-run time is close to its estimate, so

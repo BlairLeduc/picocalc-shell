@@ -2,7 +2,8 @@
  *
  * The banner, the prompt, a line read with Backspace and Ctrl-C, the
  * parser (parse.h), and the builtins: M1's file commands (files.h),
- * `echo`, `font`, `menu` and the development command `displaytest`.
+ * `echo`, `font`, `menu`, `vi` and `view` (vi.h), and the development
+ * command `displaytest`.
  * Any other command is a program (run.h). */
 #ifndef SHELL_SHELL_H
 #define SHELL_SHELL_H
@@ -21,6 +22,10 @@ typedef struct {
     /* Break, Esc or Ctrl-C pressed since the last call; for long commands
      * to poll. The port keeps the keyboard polled while they run. */
     bool (*interrupted)(void *ctx);
+    /* Wait for the next input byte (keys.h), for a command that reads the
+     * keyboard itself, such as vi. -1 when there will be no more: the end
+     * of a script or of the host's input. NULL: no keyboard. */
+    int (*getkey)(void *ctx);
     void *ctx;
 } shell_hooks_t;
 

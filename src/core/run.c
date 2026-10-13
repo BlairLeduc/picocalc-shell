@@ -162,8 +162,8 @@ int run_program(shell_t *sh, int argc, char **argv, bool redirected) {
 }
 
 int cmd_menu(shell_t *sh, int argc, char **argv) {
-    /* A redirection would be left as name.new by the reboot. */
-    if (argc > 1 || !sh->out_is_con || sh->in) {
+    /* A redirection is refused by run_cmd, before it is opened. */
+    if (argc > 1) {
         shell_error(sh, "usage: menu, with no operand or redirection\n");
         return 1;
     }

@@ -10,6 +10,7 @@
 #include "files.h"
 #include "parse.h"
 #include "run.h"
+#include "vi.h"
 
 void shell_init(shell_t *sh, const out_t *out, const shell_hooks_t *hooks, const char *version) {
     memset(sh, 0, sizeof *sh);
@@ -150,6 +151,8 @@ static const struct {
     { "rm",          cmd_rm },
     { "rmdir",       cmd_rmdir },
     { "touch",       cmd_touch },
+    { "vi",          cmd_vi },
+    { "view",        cmd_view },
 };
 
 /* One command with its redirections. */
@@ -158,6 +161,12 @@ static int run_cmd(shell_t *sh, const parse_cmd_t *c) {
     for (size_t i = 0; i < sizeof k_builtins / sizeof k_builtins[0]; i++)
         if (strcmp(c->argv[0], k_builtins[i].name) == 0) fn = k_builtins[i].fn;
     if (!fn) return run_program(sh, c->argc, c->argv, c->in || c->out);
+    /* menu reboots, which would leave a redirection as name.new: refused
+     * before the file is opened, so a file already there is kept. */
+    if (fn == cmd_menu && (c->in || c->out)) {
+        shell_error(sh, "usage: menu, with no operand or redirection\n");
+        return 1;
+    }
     if (c->in && !files_input(sh, c->in)) return 1;
     if (c->out && !files_redirect(sh, c->out, c->append)) {
         files_input_end(sh);

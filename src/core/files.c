@@ -16,20 +16,12 @@
 _Static_assert(FF_FS_LOCK >= SHELL_TREE_DEPTH + 4,
                "FatFs's lock table must hold a full walk and four files");
 
-/* A write through name.new (EL §8.6). */
-typedef struct {
-    FIL         fil;
-    const char *why;                        /* the first failure, or NULL */
-    char        path[SHELL_PATH_MAX + 1];
-    char        tmp[SHELL_PATH_MAX + 5];    /* path + ".new" */
-} safe_t;
-
 static FATFS   s_fs;
 static FILINFO s_fno;
 static FIL     s_src;      /* the file cat or cp reads */
 static FIL     s_in;       /* < */
-static safe_t  s_redir;    /* > and >> */
-static safe_t  s_copy;     /* cp's destination */
+static files_safe_t s_redir;    /* > and >> */
+static files_safe_t s_copy;     /* cp's destination */
 static uint8_t s_buf[SHELL_COPY_BUF];
 
 /* Paths, each owned by one command at a time. */
@@ -66,8 +58,7 @@ void files_mount(void) {
     f_mount(&s_fs, "", 0);
 }
 
-/* f_stat, with the root, which FatFs cannot stat, as a directory. */
-static FRESULT stat_path(const char *path, FILINFO *fno) {
+FRESULT files_stat(const char *path, FILINFO *fno) {
     if (strcmp(path, "/") == 0) {
         DIR d;
         FRESULT r = f_opendir(&d, "/");
@@ -80,7 +71,7 @@ static FRESULT stat_path(const char *path, FILINFO *fno) {
 }
 
 bool files_is_dir(const char *path) {
-    return stat_path(path, &s_fno) == FR_OK && (s_fno.fattrib & AM_DIR);
+    return files_stat(path, &s_fno) == FR_OK && (s_fno.fattrib & AM_DIR);
 }
 
 static bool resolve(shell_t *sh, const char *cmd, const char *arg, char *out) {
@@ -117,11 +108,11 @@ static int usage(shell_t *sh, const char *text) {
 
 /* ---- writing through name.new ----------------------------------------- */
 
-static const char *safe_open(safe_t *w, const char *path) {
+const char *files_safe_open(files_safe_t *w, const char *path) {
     w->why = NULL;
     size_t n = strlen(path);
     if (n + 4u > SHELL_PATH_MAX) return "name too long";
-    FRESULT r = stat_path(path, &s_fno);
+    FRESULT r = files_stat(path, &s_fno);
     if (r == FR_OK) {
         if (s_fno.fattrib & AM_DIR) return "is a directory";
         if (s_fno.fattrib & AM_RDO) return "read-only";
@@ -135,7 +126,7 @@ static const char *safe_open(safe_t *w, const char *path) {
     return r == FR_OK ? NULL : files_why(r);
 }
 
-static void safe_write(safe_t *w, const void *buf, size_t n) {
+void files_safe_write(files_safe_t *w, const void *buf, size_t n) {
     if (w->why) return;
     UINT done;
     FRESULT r = f_write(&w->fil, buf, (UINT)n, &done);
@@ -143,13 +134,12 @@ static void safe_write(safe_t *w, const void *buf, size_t n) {
     else if (done < n) w->why = NO_SPACE;
 }
 
-static void safe_abort(safe_t *w) {
+void files_safe_abort(files_safe_t *w) {
     f_close(&w->fil);
     f_unlink(w->tmp);
 }
 
-/* Close name.new and put it in place: NULL, or why the old file stays. */
-static const char *safe_commit(safe_t *w) {
+const char *files_safe_commit(files_safe_t *w) {
     FRESULT r = f_close(&w->fil);
     if (!w->why && r != FR_OK) w->why = files_why(r);
     if (w->why) {
@@ -170,12 +160,12 @@ static const char *safe_commit(safe_t *w) {
 /* ---- redirection ------------------------------------------------------ */
 
 static void redir_write(void *ctx, const char *buf, size_t n) {
-    safe_write(ctx, buf, n);
+    files_safe_write(ctx, buf, n);
 }
 
 bool files_redirect(shell_t *sh, const char *arg, bool append) {
     if (!resolve(sh, "shell", arg, s_a)) return false;
-    const char *err = safe_open(&s_redir, s_a);
+    const char *err = files_safe_open(&s_redir, s_a);
     if (!err && append) {
         /* >> copies what is there first, so the old file stays whole
          * until the new one is. */
@@ -183,12 +173,12 @@ bool files_redirect(shell_t *sh, const char *arg, bool append) {
         if (r == FR_OK) {
             UINT n;
             while ((r = f_read(&s_src, s_buf, sizeof s_buf, &n)) == FR_OK && n > 0)
-                safe_write(&s_redir, s_buf, n);
+                files_safe_write(&s_redir, s_buf, n);
             f_close(&s_src);
         }
         if (r != FR_OK && r != FR_NO_FILE) s_redir.why = files_why(r);
         err = s_redir.why;
-        if (err) safe_abort(&s_redir);
+        if (err) files_safe_abort(&s_redir);
     }
     if (err) {
         shell_error(sh, "shell: %s: %s\n", arg, err);
@@ -202,7 +192,7 @@ bool files_redirect(shell_t *sh, const char *arg, bool append) {
 bool files_redirect_end(shell_t *sh) {
     sh->out = sh->con;
     sh->out_is_con = true;
-    const char *err = safe_commit(&s_redir);
+    const char *err = files_safe_commit(&s_redir);
     if (err) shell_error(sh, "shell: %s: %s\n", s_redir.path, err);
     return err == NULL;
 }
@@ -236,7 +226,7 @@ int cmd_cd(shell_t *sh, int argc, char **argv) {
     if (argc > 2) return usage(sh, "cd [dir]");
     const char *arg = argc == 2 ? argv[1] : SHELL_HOME;
     if (!resolve(sh, "cd", arg, s_a)) return 1;
-    FRESULT r = stat_path(s_a, &s_fno);
+    FRESULT r = files_stat(s_a, &s_fno);
     if (r != FR_OK) {
         shell_error(sh, "cd: %s: %s\n", arg, files_why(r));
         return 1;
@@ -410,7 +400,7 @@ int cmd_ls(shell_t *sh, int argc, char **argv) {
             status = 1;
             continue;
         }
-        FRESULT r = stat_path(s_a, &s_fno);
+        FRESULT r = files_stat(s_a, &s_fno);
         if (r != FR_OK) {
             shell_error(sh, "ls: %s: %s\n", argv[i], files_why(r));
             status = 1;
@@ -479,7 +469,7 @@ static int copy_file(shell_t *sh, const char *src, const char *dst) {
         shell_error(sh, "cp: %s: %s\n", src, files_why(r));
         return 1;
     }
-    const char *err = safe_open(&s_copy, dst);
+    const char *err = files_safe_open(&s_copy, dst);
     if (err) {
         f_close(&s_src);
         shell_error(sh, "cp: %s: %s\n", dst, err);
@@ -490,22 +480,22 @@ static int copy_file(shell_t *sh, const char *src, const char *dst) {
         r = f_read(&s_src, s_buf, sizeof s_buf, &n);
         if (r != FR_OK) {
             f_close(&s_src);
-            safe_abort(&s_copy);
+            files_safe_abort(&s_copy);
             shell_error(sh, "cp: %s: %s\n", src, files_why(r));
             return 1;
         }
         if (n == 0) break;
-        safe_write(&s_copy, s_buf, n);
+        files_safe_write(&s_copy, s_buf, n);
         if (s_copy.why) break;
         if (shell_interrupted(sh)) {
             /* Stopped: nothing half-copied is put in place. */
             f_close(&s_src);
-            safe_abort(&s_copy);
+            files_safe_abort(&s_copy);
             return 1;
         }
     }
     f_close(&s_src);
-    err = safe_commit(&s_copy);
+    err = files_safe_commit(&s_copy);
     if (err) {
         shell_error(sh, "cp: %s: %s\n", dst, err);
         return 1;
@@ -612,7 +602,7 @@ int cmd_cp(shell_t *sh, int argc, char **argv) {
 
     const char *to = argv[argc - 1];
     if (!resolve(sh, "cp", to, s_b)) return 1;
-    FRESULT r = stat_path(s_b, &s_fno);
+    FRESULT r = files_stat(s_b, &s_fno);
     bool to_dir = r == FR_OK && (s_fno.fattrib & AM_DIR);
     if (r != FR_OK && r != FR_NO_FILE) {
         shell_error(sh, "cp: %s: %s\n", to, files_why(r));
@@ -629,7 +619,7 @@ int cmd_cp(shell_t *sh, int argc, char **argv) {
             status = 1;
             continue;
         }
-        r = stat_path(s_a, &s_fno);
+        r = files_stat(s_a, &s_fno);
         if (r != FR_OK) {
             shell_error(sh, "cp: %s: %s\n", argv[i], files_why(r));
             status = 1;
@@ -661,7 +651,7 @@ int cmd_mv(shell_t *sh, int argc, char **argv) {
     if (argc < 3) return usage(sh, "mv from... to");
     const char *to = argv[argc - 1];
     if (!resolve(sh, "mv", to, s_b)) return 1;
-    FRESULT r = stat_path(s_b, &s_fno);
+    FRESULT r = files_stat(s_b, &s_fno);
     bool to_dir = r == FR_OK && (s_fno.fattrib & AM_DIR);
     if (r != FR_OK && r != FR_NO_FILE) {
         shell_error(sh, "mv: %s: %s\n", to, files_why(r));
@@ -683,7 +673,7 @@ int cmd_mv(shell_t *sh, int argc, char **argv) {
             status = 1;
             continue;
         }
-        r = stat_path(s_a, &s_fno);
+        r = files_stat(s_a, &s_fno);
         if (r != FR_OK) {
             shell_error(sh, "mv: %s: %s\n", argv[i], files_why(r));
             status = 1;
@@ -711,7 +701,7 @@ int cmd_mv(shell_t *sh, int argc, char **argv) {
             continue;
         }
         if (!path_same(s_a, s_c)) {
-            r = stat_path(s_c, &s_fno);
+            r = files_stat(s_c, &s_fno);
             if (r == FR_OK) {
                 /* A file replaces a file; nothing replaces a directory. */
                 if ((s_fno.fattrib & AM_DIR) || dir) {
@@ -819,7 +809,7 @@ int cmd_rm(shell_t *sh, int argc, char **argv) {
             status = 1;
             continue;
         }
-        FRESULT r = stat_path(s_a, &s_fno);
+        FRESULT r = files_stat(s_a, &s_fno);
         if (r == FR_OK && (s_fno.fattrib & AM_DIR)) {
             if (!flags) {
                 shell_error(sh, "rm: %s: is a directory (use rm -r)\n", argv[i]);
@@ -847,7 +837,7 @@ int cmd_rmdir(shell_t *sh, int argc, char **argv) {
             status = 1;
             continue;
         }
-        FRESULT r = stat_path(s_a, &s_fno);
+        FRESULT r = files_stat(s_a, &s_fno);
         const char *err = NULL;
         if (r != FR_OK) err = files_why(r);
         else if (!(s_fno.fattrib & AM_DIR)) err = "not a directory";
@@ -922,7 +912,7 @@ int cmd_touch(shell_t *sh, int argc, char **argv) {
             continue;
         }
         /* No clock (design.md §4.2): a file already there is left as it is. */
-        FRESULT r = stat_path(s_a, &s_fno);
+        FRESULT r = files_stat(s_a, &s_fno);
         if (r == FR_NO_FILE) {
             r = f_open(&s_src, s_a, FA_CREATE_NEW | FA_WRITE);
             if (r == FR_OK) r = f_close(&s_src);

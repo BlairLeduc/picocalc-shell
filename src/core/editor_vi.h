@@ -1,0 +1,321 @@
+//
+//  Pico Logo
+//  Copyright 2026 Blair Leduc. See LICENSE for details.
+//
+//  Vi key layer for the full-screen editor (docs/vi-mode-design.md)
+//
+//  Copied from Pico Logo's devices/picocalc/editor_vi.h (MIT, the owner's;
+//  THIRD-PARTY.md) for the shell's vi (design.md §4.6). Changes: its
+//  capacities from config.h in place of core/limits.h; a page is
+//  VI_TEXT_ROWS.
+//
+
+#pragma once
+
+#include <stdbool.h>
+#include <stddef.h>
+
+#include "config.h"
+#include "editor_undo.h"
+
+// A page, in lines. The editor shows VI_TEXT_ROWS of content, and the
+// paging motions have to agree with it. It is here rather than in vi.h
+// because this file is built on its own for the host test and must not
+// depend on the screen.
+#define EDITOR_VI_PAGE_LINES VI_TEXT_ROWS
+
+typedef enum
+{
+    VI_NORMAL,
+    VI_INSERT,
+    VI_VISUAL,
+    VI_VISUAL_LINE,
+    VI_CMDLINE,
+} ViMode;
+
+typedef enum
+{
+    VI_ACT_NONE,          // Key consumed, nothing to do (a count, half an operator)
+    VI_ACT_MOVE,          // Put the cursor at `start`
+    VI_ACT_DELETE,        // Cut [start, end) to the copy buffer
+    VI_ACT_YANK,          // Copy [start, end) to the copy buffer
+    VI_ACT_CHANGE,        // Delete [start, end) and enter insert mode
+    VI_ACT_PASTE_AFTER,   // Paste `count` times after the cursor / below the line
+    VI_ACT_PASTE_BEFORE,  // ... before the cursor / above the line
+    VI_ACT_PASTE_OVER,    // Replace [start, end) with the copy buffer (visual `p`)
+    VI_ACT_INDENT,        // Shift the lines in [start, end) by `count` tab stops
+    VI_ACT_REPLACE_CHAR,  // Overwrite [start, end) with `ch`, or with a single
+                          // line break when `ch` is '\n' (`r` and Return)
+    VI_ACT_OPEN_BELOW,    // Open a line below the cursor's and enter insert mode
+    VI_ACT_OPEN_ABOVE,    // ... above
+    VI_ACT_JOIN,          // Join `count` lines from the cursor's
+    VI_ACT_TOGGLE_CASE,   // Flip the case of [start, end)
+    VI_ACT_INCREMENT,     // Add `count` -- negative for `Ctrl` `X` -- to the
+                          // number at or after `start` on its line
+    VI_ACT_SEARCH,        // Search for `pattern` from `start`; `ch` is '/'
+                          // (forward) or '?'
+    VI_ACT_SCROLL,        // Move the view, not the cursor: `ch` is 'z'
+                          // (centre), 't' (cursor to the top) or 'b'
+    VI_ACT_SUBSTITUTE,    // Substitute over the lines spanned by [start, end)
+    VI_ACT_MOVE_LINES,    // Move ('m') or copy ('t', in `ch`) the lines in
+                          // [start, end) to `dest`
+    VI_ACT_GLOBAL,        // Run `ch` -- 'd' or 's' -- on every line in
+                          // [start, end) that matches the pattern, or on every
+                          // line that does not when `invert` (`:g`, `:v`)
+    VI_ACT_UNDO,          // Reverse `count` changes
+    VI_ACT_REDO,          // ... and put them back
+    VI_ACT_WRITE,         // :w -- write the buffer out and stay in the editor
+    VI_ACT_ACCEPT,        // :wq :x ZZ
+    VI_ACT_CANCEL,        // :q! ZQ
+    VI_ACT_REDRAW,        // Only the mode changed; repaint the footer and cursor
+    VI_ACT_BEEP,          // Not a command; `msg` is the footer text
+    VI_ACT_MESSAGE,       // Nothing to do but say something: `msg` is the
+                          // footer text (`Ctrl` `G`, `:=`, `:.=`)
+} ViActionKind;
+
+// What a keystroke asks the editor to do. Byte offsets, never screen rows: the
+// state machine has no idea where the view is.
+typedef struct
+{
+    ViActionKind kind;
+    size_t start;      // Half-open byte range, start <= end. VI_ACT_MOVE puts
+    size_t end;        // the target in both.
+    bool linewise;     // The range is whole lines, newline included
+    size_t dest;       // Where VI_ACT_MOVE_LINES puts them: a line start, or
+                       // the end of the buffer
+    bool invert;       // VI_ACT_GLOBAL acts on the lines that do *not* match
+    char ch;           // VI_ACT_REPLACE_CHAR, VI_ACT_SEARCH, VI_ACT_MOVE_LINES
+    int count;         // Repeat count; tab stops for VI_ACT_INDENT (may be negative)
+    const char *msg;   // Footer text for VI_ACT_BEEP and VI_ACT_MESSAGE. A
+                       // literal, or `ViState.msg` -- which lives as long as
+                       // the editor session the footer belongs to
+
+    // Set only by `.` repeating a change that ended in insert mode (§20): the
+    // text that was typed then, for the editor to type again once it has
+    // carried the action out. Non-NULL says so even when the text is empty (a
+    // `cw` closed without typing anything is still a change worth repeating),
+    // and the editor stays in normal mode -- the state machine has already put
+    // it back there. Points into `ViState.repeat_insert`, which lives as long
+    // as the editor session.
+    const char *insert;
+    size_t insert_len;
+
+    // Set only by VI_ACT_GLOBAL, and only when its command is `s`: the pattern
+    // that substitute replaces (§23.5). The `:g` pattern itself is
+    // `ViState.pattern` and the replacement `ViState.replacement`, exactly as a
+    // plain `:s` leaves them -- but a nested `s` has a second pattern, and
+    // rather than a second buffer for it this points either at the command line
+    // it was typed on, which lasts until the next `:` and so outlives the
+    // action, or at `ViState.pattern` when it was left empty, which is what
+    // "the pattern that found the line" means.
+    const char *sub_pattern;
+    size_t sub_pattern_len;
+} ViAction;
+
+typedef struct
+{
+    ViMode mode;
+    int count;             // Digits typed so far, 0 = none
+    int op_count;          // Count typed before the pending operator
+    char pending_op;       // 0, 'd', 'c', 'y', '<', '>'
+    char pending_prefix;   // 0, 'g', 'z', 'Z', 'f', 'F', 't', 'T', 'r',
+                           // ']', '[', or 'i'/'a' waiting for a text
+                           // object (§15)
+    size_t anchor;         // Visual mode's other end
+    bool modified;         // Set by the editor; `:q` refuses when it is true
+
+    // The one mark (§18). Not vi's twenty-six: a jump sets it, and `` ` `` and
+    // `'` jump to it and leave it where the jump started, so the pair is a
+    // toggle between two places rather than a register file.
+    size_t mark;
+    bool mark_set;
+
+    // The last visual selection, which is what the `'<` and `'>` ex addresses
+    // name (§19). Byte offsets, taken again on every key visual mode sees, so
+    // the pair still describes the selection the key that ended visual mode
+    // was handed.
+    size_t vis_start;
+    size_t vis_end;
+    bool vis_set;
+
+    char last_find;        // The last f/F/t/T, for `;` and `,`
+    char last_find_char;
+
+    // `.` replays the keys of the last change rather than its byte range, so a
+    // repeat at a new cursor recomputes its own motion. Only the last key of a
+    // command produces an action, and none of the earlier ones touch the
+    // buffer, so the replay can feed the whole sequence through and hand back
+    // the action the final key returns.
+    char stroke[LOGO_VI_REPEAT_MAX];   // The command being typed
+    int stroke_len;
+    char repeat_keys[LOGO_VI_REPEAT_MAX];  // The last one that changed something
+    int repeat_len;
+    int repeat_count;      // The count, kept apart so `3.` can replace it
+    bool replaying;
+    bool from_visual;      // The key came from visual mode, where each key
+                           // commits and clears its own stroke -- so all that
+                           // is left of `vld` is the `d`, and a change made
+                           // that way is not recordable at all (B43)
+
+    // A change that ends in insert mode -- `i`, `a`, `o`, `c`, `s` -- is only
+    // half a change until `Esc` closes it, so it is recorded there rather than
+    // when its keys are done (§20). The keys wait in `stroke` meanwhile, and
+    // what was typed is the span between where the editor put the cursor when
+    // insert began and where it is at the `Esc`: the editor handles those keys
+    // itself and the state machine never sees them, but it does see the
+    // buffer. A session that moved somewhere else instead -- an arrow, a
+    // backspace past the origin -- has no such span and drops the record.
+    size_t insert_origin;  // Where the editor put the cursor when insert began
+    size_t insert_len0;    // ... and how long the buffer was then
+    bool insert_recording;
+    int pending_count;     // The count the opening command ran with
+
+    char repeat_insert[LOGO_VI_INSERT_MAX];  // The text the last change typed
+    int repeat_insert_len;
+    bool repeat_insert_set;  // ... and whether it ends in an insert at all
+
+    char cmdline[LOGO_VI_CMDLINE_MAX + 1];  // Includes the leading ':', '/' or '?'
+    size_t cmdline_len;
+
+    // Where a composed message is put, since `ViAction.msg` is a pointer and
+    // the caller keeps it on the footer until the next keystroke
+    char msg[LOGO_VI_MSG_MAX + 1];
+
+    char pattern[LOGO_VI_TEXT_MAX + 1];
+    size_t pattern_len;
+    char replacement[LOGO_VI_TEXT_MAX + 1];
+    size_t replacement_len;
+    bool search_forward;
+    bool sub_global;
+} ViState;
+
+// Start in normal mode with nothing pending. Search text and the `.` record are
+// cleared too: the editor calls this once per session.
+void editor_vi_reset(ViState *st);
+
+// Feed one key. `buf` is read-only and nothing is mutated but `st`.
+//
+// Returns true when vi consumed the key. False means the editor should handle
+// it as it does outside vi mode -- which is how insert mode gets the arrow
+// keys, backspace and every printable character for free, and how Brk keeps
+// its unconditional cancel from every mode.
+bool editor_vi_key(ViState *st, const char *buf, size_t len, size_t cursor,
+                   int key, ViAction *out);
+
+// Insert mode has begun: `cursor` is where the editor put the cursor and `len`
+// how long the buffer is now, which is the pair `Esc` subtracts from to find
+// what was typed (§20). Called after the action that opened insert mode has
+// been carried out, because for `o` and `c` it is the editor, not the state
+// machine, that decides where the cursor lands.
+void editor_vi_insert_began(ViState *st, size_t cursor, size_t len);
+
+// The footer text for the current mode: "-- NORMAL --" and friends, or the
+// command line while one is being typed.
+const char *editor_vi_status(const ViState *st);
+
+// Substitute `pat` with `rep` on every line the byte range [range_start,
+// range_end) touches -- the first match on each line, or all of them when
+// `global`. Matching is case-insensitive, as editor_search_find is.
+//
+// This is the one place the vi layer writes to the buffer. A substitute is a
+// loop with a capacity check and an off-by-one at every step, which is exactly
+// what wants a host test, and describing it as a byte range would need one
+// action per match.
+//
+// buf/len: the buffer to rewrite; *len is updated. capacity includes the NUL.
+// undo: journal to record each substitution in, never NULL -- a session with no
+//   undo has an `EditorUndo` whose *store* is NULL, which `editor_undo_record`
+//   checks, so there is no null journal to pass. One match is one
+//   record, which is far less than the whole rewritten span would be and is
+//   what lets a `:%s` over a large buffer still be undone.
+// out_cursor: set to the start of the last line changed.
+//
+// Returns the number of substitutions. Nothing is changed when there is no
+// match, or when the result would not fit in capacity. Returns SIZE_MAX --
+// again the out-of-band value, as editor_pattern_expand uses it -- when the
+// pattern exhausted the matcher's step budget (B36) and the substitute was
+// abandoned before a byte moved; the caller reports that, and it is not a
+// count of zero, because "your pattern is too dear to run" is a different
+// thing to say than "nothing matched".
+// Move the lines in [start, end) to `dest`, or copy them there when `copy`.
+// Both are byte offsets into buf, the range linewise and `dest` a line start or
+// the end of the buffer; the caller has already refused a move into its own
+// range (docs/vi-mode-design.md §22.1).
+//
+// Here rather than in editor.c for the reason the substitute above is: it is a
+// splice with an off-by-one at each end, and this file has a host build. The
+// text is rotated in place rather than taken through the copy buffer, which is
+// 8 KB and is the user's register besides -- so the journal is told what moved
+// *before* a byte does, while the span is still contiguous to point at (§22.3).
+//
+// buf/len: the buffer to rewrite; *len is updated. capacity includes the NUL.
+// undo: journal to record into, never NULL. Every record it makes belongs to the
+//   step the caller opened, so one `u` reverses the whole move.
+// out_cursor: set to the first non-blank of the last line moved or copied.
+//
+// Returns false having changed nothing when the copy would not fit, or when
+// the range is empty.
+bool editor_vi_move_lines(char *buf, size_t *len, size_t capacity,
+                          size_t start, size_t end, size_t dest, bool copy,
+                          EditorUndo *undo, size_t *out_cursor);
+
+size_t editor_vi_substitute(char *buf, size_t *len, size_t capacity,
+                            size_t range_start, size_t range_end,
+                            const char *pat, size_t pat_len,
+                            const char *rep, size_t rep_len,
+                            bool global, EditorUndo *undo, size_t *out_cursor);
+
+// Run one command on every line in [range_start, range_end) that matches `pat`
+// -- or on every line that does not, when `invert` (`:v` and `:g!`). `cmd` is
+// 'd', which deletes the line, or 's', which substitutes `sub_pat` with `rep`
+// on it exactly as editor_vi_substitute does over a range of one line.
+//
+// The walk runs backwards, from the last line of the range to the first, and
+// that is what lets it hold nothing at all: every edit a line makes happens
+// *below* the lines still to be visited, so no offset above it ever moves and
+// there is nothing to remember between one line and the next -- no mark set, no
+// bound on it, and no limit on how many lines a `:g` may touch (§23.3). It also
+// fixes the set of commands at these two: `d` and `s` are the ones whose result
+// does not depend on the direction of the walk.
+//
+// buf/len: the buffer to rewrite; *len is updated. capacity includes the NUL.
+// undo: journal to record into, never NULL. Every record belongs to the step the
+//   caller opened, so one `u` reverses the whole pass -- which on a board with
+//   no PSRAM can be more than the 1 KB journal holds, and then the pass cannot
+//   be undone and takes the earlier history with it (§23.4).
+// out_cursor: set to the first non-blank of the topmost line the pass changed.
+//
+// Returns the number of lines the command changed. SIZE_MAX when the pattern
+// outran the matcher's step budget (B36) before any line was touched; a pattern
+// that trips the budget part way through ends the walk instead, and what it did
+// up to there stands, complete and journalled.
+size_t editor_vi_global(char *buf, size_t *len, size_t capacity,
+                        size_t range_start, size_t range_end,
+                        const char *pat, size_t pat_len, bool invert, char cmd,
+                        const char *sub_pat, size_t sub_pat_len,
+                        const char *rep, size_t rep_len, bool sub_global,
+                        EditorUndo *undo, size_t *out_cursor);
+
+typedef enum
+{
+    VI_INC_OK,
+    VI_INC_NO_NUMBER,  // Nothing at or after the cursor on its line is a number
+    VI_INC_NO_ROOM,    // The new number is longer and the buffer is full
+} ViIncrement;
+
+// `Ctrl` `A` and `Ctrl` `X` (§24.4): add `delta` to the number under the cursor,
+// or to the first one to its right on the same line, and leave the cursor on
+// the last digit of the result. A `-` against the digits is part of the number,
+// so `fd -100` counts down to `-101`; a `.` is not, so `10.5` is two numbers.
+//
+// Here rather than in editor.c for the reason the three rewrites above are: it
+// is a scan, a re-render and a splice that changes the line's length, and this
+// file has a host build.
+//
+// buf/len: the buffer to rewrite; *len is updated. capacity includes the NUL.
+// undo: journal to record the splice in, never NULL. One record, inside the step
+//   the caller opened, so one `u` puts the old number back.
+// out_cursor: set to the last digit of the number as it now reads.
+ViIncrement editor_vi_increment(char *buf, size_t *len, size_t capacity,
+                                size_t cursor, int delta,
+                                EditorUndo *undo, size_t *out_cursor);

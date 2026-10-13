@@ -33,6 +33,20 @@ Blair Leduc, under the MIT licence, which is compatible with the GPL-3.0.
 | `src/core/keycodes.h` | `drivers/keyboard.h` | the key code table only |
 | `src/core/displaytest.c` | `tests.c`, `displaytest()` | split into its two phases; timing moved to `shell.c` |
 
+## Pico Logo — MIT, the owner's
+
+Copyright (c) 2025-2026 Blair Leduc, under the MIT licence, which is
+compatible with the GPL-3.0. Its vi key layer (design.md §4.6).
+
+| Here | From Pico Logo | Changes |
+|---|---|---|
+| `src/core/editor_vi.c`, `editor_vi.h` | `devices/picocalc/editor_vi.c`, `.h` | keys from `keycodes.h`, capacities from `config.h`, a page of `VI_TEXT_ROWS` lines |
+| `src/core/editor_pattern.c`, `.h` | the same | capacities from `config.h` |
+| `src/core/editor_undo.c`, `.h` | the same | none |
+| `src/core/editor_lines.c`, `.h` | the same | none |
+| `src/core/vi.c` (part) | `devices/picocalc/editor.c`, `editor_vi_apply` and its helpers | adapted to the shell's buffer; the rest of `vi.c` is this project's |
+| `test/host/test_editor_vi.c`, `test_editor_pattern.c`, `test_editor_undo.c`, `test_editor_lines.c` | `tests/` | `keycodes.h` for `keyboard.h`; run through `test/host/unity.h`, this project's shim for the parts of Unity they use |
+
 ## UF2 Loader — GPL-3.0, pelrun
 
 <https://github.com/pelrun/uf2loader>, v2.5, under the GPL-3.0 like this
