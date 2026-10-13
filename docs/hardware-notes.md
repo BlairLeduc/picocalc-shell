@@ -310,6 +310,32 @@ key events can be driven with no one at the keyboard, which is how scripted
 performance runs and soaks are done. Pace the characters to what the
 application can absorb.
 
+**Running an SRAM-only (`no_flash`) image over SWD, without touching
+flash.** Load it with OpenOCD's `load_image` while the cores are halted,
+then let the bootrom start it: set the watchdog's "boot to PC and SP"
+words, as the SDK's `watchdog_reboot(pc, sp, 0)` does (`scratch[4]` =
+`0xb007c0d3`, `scratch[5]` = `pc ^ -0xb007c0d3`, `scratch[6]` = SP,
+`scratch[7]` = PC with the Thumb bit; `PSM_WDSEL` = `0x01fffff3`), then set
+`WATCHDOG_CTRL.TRIGGER`. SRAM survives the watchdog reset, the bootrom
+does its whole start-up, and it jumps to the image's entry point.
+Starting the image directly instead, by setting PC, MSP and VTOR after a
+`reset halt`, fails: the core is halted at the bootrom's first
+instruction, the bootrom's enabling of the coprocessors never runs, and
+the SDK's `runtime_init_per_core_bootrom_reset` takes a UsageFault (NOCP,
+`CFSR` = `0x00080000`) on its first bootrom call. Found on a Plus 2 W,
+2026-10-12, starting the PicoCalc shell's `BOOT2350.elf`. Three more
+things seen in the same work:
+
+- A watchdog trigger written over SWD resets the chip in the middle of
+  the debug port's write, so OpenOCD reports `Failed to write memory at
+  0x00000000` although the reset happened. Put the trigger last.
+- `write_memory` (and `read_memory`) work while the target runs; the
+  watchdog's scratch registers can be set with nothing halted.
+- `TIMER0` is reset by a watchdog reset (it is in `PSM_WDSEL`) but **not**
+  by OpenOCD's `reset halt`: after one, the timer kept counting from 91 s.
+  A "time since reset" read with `time_us_64()` therefore counts from the
+  last power-on or watchdog reset.
+
 **A build with no UART can still be read over SWD**, with both cores
 running. OpenOCD started with `init` and no `reset` or `halt` reads memory
 through the debug port's memory access (`read_memory addr 32 n`), and the
@@ -612,6 +638,23 @@ polled-DMA ping-pong of §4.6 in one window, eight runs each:
 | 256×192 | 49,152 | 10.5 ms | **11.475–11.476 ms** |
 
 That is the floor any renderer adds its own cost to.
+
+**Text rows, measured.** A character terminal drawing 320×10-pixel text
+rows from RGB565 cell data through the same ping-pong DMA, one window per
+changed span, with hardware scroll (§4.8): the PicoCalc shell's display
+stress test, release build, Plus 2 W, 2026-10-12. Each scrolled line drew
+two full rows (the new text, and the row exposed at the bottom).
+
+| SPI configured | 2,000 scrolled lines | 60,000 single-cell rewrites |
+|---|---:|---:|
+| 25 MHz | 10.67 s, 187 lines/s | 7.60 s, 7,891 cells/s |
+| 75 MHz | 3.91 s, 511 lines/s | 4.74 s, 12,666 cells/s |
+
+At 25 MHz a scrolled line is 5.3 ms against 4.1 ms of wire for its two
+rows. A one-cell rewrite (8×10 pixels, 1.4 µs of wire at 75 MHz) costs
+79 µs at 75 MHz: the window setup, the escape-sequence parsing and the
+dirty-span search, not the wire. The 75 MHz figures are timings only;
+nobody looked at the panel during that run.
 
 The same holds for a 240×224 rectangle (Plus 2 W, 2026-10-08, 75 MHz, one
 run each, at boot): **12.58 ms** row by row from two line buffers and
