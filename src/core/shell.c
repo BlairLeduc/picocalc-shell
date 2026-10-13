@@ -10,6 +10,7 @@
 #include "files.h"
 #include "parse.h"
 #include "run.h"
+#include "vi.h"
 
 void shell_init(shell_t *sh, const out_t *out, const shell_hooks_t *hooks, const char *version) {
     memset(sh, 0, sizeof *sh);
@@ -150,6 +151,8 @@ static const struct {
     { "rm",          cmd_rm },
     { "rmdir",       cmd_rmdir },
     { "touch",       cmd_touch },
+    { "vi",          cmd_vi },
+    { "view",        cmd_view },
 };
 
 /* One command with its redirections. */

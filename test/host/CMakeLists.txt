@@ -3,6 +3,10 @@
 
 set(SHELL_HOST_TESTS
     test_displaytest
+    test_editor_lines
+    test_editor_pattern
+    test_editor_undo
+    test_editor_vi
     test_files
     test_keys
     test_parse
@@ -11,6 +15,7 @@ set(SHELL_HOST_TESTS
     test_skeleton
     test_term
     test_uf2
+    test_vi
 )
 
 # The core's files need a disk: the host's image file, or none.

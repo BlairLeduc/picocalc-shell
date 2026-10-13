@@ -50,4 +50,29 @@
  * (hardware-notes.md §6.1), a power of two. */
 #define SHELL_KEY_RING     64u
 
+/* vi (design.md §4.6, vi.c). The file is held whole in one buffer, its
+ * NUL included, so a file of up to VI_BUF_SIZE - 1 bytes opens and a
+ * larger one is refused. The copy buffer is the one register; a yank
+ * larger than it is refused, not cut short. The undo journal drops its
+ * oldest steps to make room (editor_undo.h). The screen is VI_TEXT_ROWS
+ * of text and a status row. */
+#define VI_BUF_SIZE        65536u
+#define VI_COPY_SIZE       8192u
+#define VI_UNDO_SIZE       16384u
+#define VI_TEXT_ROWS       31
+#define VI_TAB_STOP        8u     /* a tab's width on screen */
+#define VI_SHIFT_WIDTH     4u     /* the spaces > and < add and take */
+
+/* The vi key layer's own capacities, under Pico Logo's names (its
+ * core/limits.h explains each). Its 40-column footer fits this status
+ * row in either font. */
+#define LOGO_VI_TEXT_MAX          32
+#define LOGO_VI_CMDLINE_MAX       (LOGO_VI_TEXT_MAX * 2 + 8)
+#define LOGO_VI_MSG_MAX           40
+#define LOGO_VI_SUB_EXPAND_MAX    256
+#define LOGO_VI_PATTERN_STEPS_MAX 200000
+#define LOGO_VI_COUNT_MAX         999999
+#define LOGO_VI_REPEAT_MAX        8
+#define LOGO_VI_INSERT_MAX        80
+
 #endif /* SHELL_CONFIG_H */

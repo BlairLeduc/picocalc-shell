@@ -419,7 +419,7 @@ static int fault_tests(void) {
 
 int main(void) {
     const out_t out = { sink, NULL, false };
-    const shell_hooks_t hooks = { now, interrupted, NULL };
+    const shell_hooks_t hooks = { now, interrupted, NULL, NULL };
     shell_init(&sh, &out, &hooks, "test");
 
     if (files_tests(false)) return 1;

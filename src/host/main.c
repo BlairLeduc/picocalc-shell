@@ -56,6 +56,17 @@ static bool interrupted(void *ctx) {
     return hit;
 }
 
+/* The next key, as the PicoCalc would type it: Delete is Backspace and
+ * Return is CR. -1 at the end of input. */
+static int getkey(void *ctx) {
+    (void)ctx;
+    int c = getchar();
+    if (c == EOF) return -1;
+    if (c == 0x7F) return 0x08;
+    if (c == '\n') return '\r';
+    return c;
+}
+
 static void restore(void) {
     if (s_raw) tcsetattr(STDIN_FILENO, TCSAFLUSH, &s_saved);
     s_raw = false;
@@ -89,15 +100,13 @@ int main(int argc, char **argv) {
 
     static shell_t sh;
     const out_t out = { con_write, NULL, false };
-    const shell_hooks_t hooks = { now_us, interrupted, NULL };
+    const shell_hooks_t hooks = { now_us, interrupted, getkey, NULL };
     shell_init(&sh, &out, &hooks, "host");
     shell_start(&sh);
 
     int c;
-    while ((c = getchar()) != EOF) {
+    while ((c = getkey(NULL)) >= 0) {
         if (c == 0x04 && sh.len == 0) break;     /* Ctrl-D */
-        if (c == 0x7F) c = 0x08;
-        if (c == '\n') c = '\r';
         shell_input(&sh, c);
     }
     restore();

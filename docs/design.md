@@ -1,7 +1,7 @@
 # PicoCalc Shell — design
 
-Status: **Draft 4, 2026-10-13.** Feasibility study and first design. M0
-(the skeleton), M1 (files) and M2 (run) are done
+Status: **Draft 5, 2026-10-13.** Feasibility study and first design. M0
+(the skeleton), M1 (files), M2 (run) and M3 (vi) are done
 ([milestones.md](milestones.md)).
 
 The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
@@ -503,6 +503,63 @@ Its scope is set by the files it is for, which are small text files:
   attribute, open read-only.
 - **Saving** goes through `name.new` and a rename, as in §4.2.
 
+*As built at M3* (`src/core/vi.c`; the key layer in `src/core/editor_*.c`):
+
+- **What was lifted.** `editor_vi.c`, `editor_pattern.c`, `editor_undo.c`
+  and `editor_lines.c`, changed only in their includes and in the page,
+  which is `VI_TEXT_ROWS` (31) lines. Their capacities keep Pico Logo's
+  names in `config.h`. `editor_search.c` is not used: the key layer
+  searches with `editor_pattern.c`. Pico Logo's own tests for the four
+  files run here unchanged, through `test/host/unity.h`, a shim with only
+  the parts of Unity they use. Carrying out the key layer's actions
+  (yank, paste, join, indent, open a line, and the rest) is adapted from
+  `editor.c`'s `editor_vi_apply`, since the key layer only names byte
+  ranges.
+- **The key layer's own choices are kept.** `$` puts the cursor just past
+  the line's last character (Pico Logo's "exclusive" end), so `$r` has
+  nothing to replace; `$x` does nothing and `$a` appends. There is one
+  mark, one register, and `:w`, `:wq`, `:x`, `:q`, `:q!`, `ZZ` and `ZQ`,
+  but no `:w name` and no `:e`. `:wq` always writes, as in vi; `ZZ` and
+  `:x` write only when there is a change, so `ZZ` on a new file makes
+  nothing. Brk leaves at once from every mode, discarding changes.
+- **Keys** come through a new `getkey` hook in `shell_hooks_t`, since vi
+  blocks while it runs: on the board it polls the keyboard and the UART
+  and blinks the cursor (the prompt's loop is now the same call), on the
+  host it reads stdin, and in tests it types a script. The end of input
+  leaves vi as Brk does. Esc (0x1B) is given to the key layer as its
+  `KEY_ESC`.
+- **Insert mode.** Enter carries the line's indentation down, as `o`
+  does; Tab inserts a tab character; Backspace crosses line breaks; the
+  arrows, Home, End and the page keys move.
+- **Shifting.** `>` adds 4 spaces per step (`VI_SHIFT_WIDTH`) to every
+  line that is not empty; `<` takes up to 4 columns of spaces or tabs, a
+  tab counting as 4.
+- **Line endings.** A file is CR LF when every line break in it is; the
+  CRs come off on reading and go back on writing. A file that mixes the
+  two is LF, and its CRs are characters, shown as `^M`. Whether the last
+  line ends in a line break is kept too (`[noeol]`). An empty file stays
+  empty; text typed into it gets a final line break.
+- **Size.** The buffer is 64 KB with its NUL, so a file of up to 65,535
+  bytes opens. A larger one is refused with its size. An edit that would
+  take the buffer past that is refused and said.
+- **Copy buffer and undo.** The register is 8 KB (`VI_COPY_SIZE`); a yank
+  larger than that is refused and said, and the register keeps what it
+  had (Pico Logo's 1 KB copy buffer cut a yank short). A delete still
+  happens, and `u` brings it back. The undo journal is 16 KB, as §7
+  budgeted, and drops its oldest steps to make room.
+- **The screen.** 31 rows of text and a status row. Lines do not wrap:
+  the whole view scrolls sideways to keep the cursor in it. Tabs stop
+  every 8 columns; a control character shows as `^X`, a byte of 0x80 or
+  above as the terminal's checkerboard. Rows past the end show `~`. The
+  visual selection is in reverse video. The status row holds the command
+  line, a message (until the next key) or the mode, and the cursor's line
+  and column; it never writes its last column, where the terminal would
+  wrap and scroll. vi keeps a copy of what each row shows and sends only
+  the rows that change, as escape sequences, so the UART mirror shows the
+  same screen. Leaving clears the screen and prints what was written.
+  The cursor is the terminal's underline in every mode; Pico Logo's block
+  cursor for normal mode is not there.
+
 ## 5. Architecture
 
 The emulators' split applies (EL §2.1):
@@ -519,7 +576,8 @@ commands, the partition remap and the flash end) lives in
 
 The shell runs on one core. It polls the keyboard from its own loop, and
 nothing else in it has a deadline. Core 1 stays idle until there is a reason
-for it.
+for it; while it does, core 0's stack has scratch X as well as scratch Y
+(§7).
 
 **What comes from where.** Where the sources differ, the hardware notes
 decide (§4.1).
@@ -537,7 +595,9 @@ decide (§4.1).
 | | `southbridge.c` | battery, backlights, power-off and reset, added to the emulators' copy |
 | | `keyboard.h` | the key code table |
 | | `font-8x10.c`, `font-5x10.c` | from `references/fonts/`, the newer copies |
-| Pico Logo | `editor_vi.c` and its four companions | §4.6 |
+| Pico Logo | `editor_vi.c`, `editor_pattern.c`, `editor_undo.c`, `editor_lines.c` | as is (§4.6) |
+| | `editor.c` | its `editor_vi_apply`, adapted into `vi.c` (§4.6) |
+| | `tests/test_editor_*.c` | as is, through `test/host/unity.h` |
 | UF2 Loader | `ui/uf2.c`, `proginfo.c` | §3.3 |
 
 ## 6. Build and test
@@ -587,7 +647,7 @@ decide (§4.1).
 | Terminal cells, 64 × 32 × 6 B (character, attributes, two RGB565 colours) | 12 KB |
 | The renderer's shadow of frame memory, 64 × 48 × 6 B (§4.1) | 18 KB |
 | Fonts, 2 × 128 glyphs × 10 rows | 2.5 KB |
-| vi buffer and undo journal | 64 + 16 KB |
+| vi buffer and undo journal (*and, as built at M3, an 8 KB register*) | 64 + 16 KB |
 | Pipe buffer | 32 KB |
 | FatFs (`FATFS`, 2 × `FIL`, LFN buffer) | ~3 KB |
 | Flash sector buffer (16 UF2 blocks) | 8 KB |
@@ -607,6 +667,22 @@ its buffers (a 4 KB sector, a block, a page and the 512-byte bitmap of
 sectors that differ) and the bootrom's 4 KB work area for the partition
 table are most of the growth. The deepest call chain, `cp` down into FatFs's
 `f_rename`, needs well under 2 KB of the 4 KB stack (`-fstack-usage`).
+**Measured at M3** (the same tools, 2026-10-13): development 290,628 B,
+release 286,496 B. vi is about 35 KB of code (the key layer 21 KB, the
+pattern matcher 3.6 KB, undo 1.8 KB, the front end 8.2 KB) and 94 KB of
+`.bss`: the 64 KB buffer, the 16 KB journal, the 8 KB register, and 4 KB
+for the copy of the screen.
+
+**The stack** (*corrected at M3*). Core 0's stack starts at the top of
+scratch Y and may run down to `__StackLimit` at the bottom of scratch X:
+8 KB, because core 1 never starts and nothing is linked into scratch X.
+The 4 KB above was scratch Y alone. The deepest chain is now vi's `:s`
+with a 32-byte pattern: the pattern matcher recurses once per atom, at
+120 B a level, so about 4.0 KB for it and 1.1 KB for the shell and vi
+above it, 5.0 KB in all (`-fstack-usage`, worked by hand). Starting core 1
+would take scratch X for its own stack and leave 4 KB, which this chain
+would overrun: the pattern limit (`LOGO_VI_TEXT_MAX`) would have to come
+down first.
 
 ## 8. Risks
 

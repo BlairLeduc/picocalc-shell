@@ -4,8 +4,9 @@
  * panel, the keyboard. The shell's output goes to the terminal's grid,
  * then, in the development build, to UART1 as the same bytes, so a
  * terminal on the other end shows what the panel does; then the panel is
- * brought up to date. The loop polls the keyboard and card detect at
- * about 30 Hz, takes the UART's bytes as keys, and blinks the cursor.
+ * brought up to date. Waiting for a key, at the prompt or in vi, polls
+ * the keyboard and card detect at about 30 Hz, takes the UART's bytes as
+ * keys, and blinks the cursor.
  *
  * Two UART bytes are not keys (EL §13.1): FS (0x1C) dumps the grid as
  * text, and GS (0x1D) logs the start time and the counters.
@@ -115,6 +116,30 @@ static void log_stats(void) {
 }
 #endif
 
+/* The next input byte, from the keyboard or, in the development build,
+ * the UART, with the cursor blinking while it waits. FS and GS on the
+ * UART are acted on here and never returned. */
+static int getkey(void *ctx) {
+    (void)ctx;
+    for (;;) {
+        poll_keys();
+        uint8_t state, code;
+        while (kbd_pop(&state, &code)) {
+            int k = keys_event(&g_keys, state, code);
+            if (k != KEYS_NONE) return k;
+        }
+#if PICO_SHELL_UART
+        int c;
+        while ((c = getchar_timeout_us(0)) >= 0) {
+            if (c == UART_DUMP_SCREEN) dump_screen();
+            else if (c == UART_LOG_STATS) log_stats();
+            else return keys_uart((uint8_t)c);
+        }
+#endif
+        screen_tick(&g_term, time_us_64());
+    }
+}
+
 static void log_banner(bool clocks_ok, uint32_t i2c_hz, sb_status_t sb, const uint8_t ver[2],
                        uint32_t spi_hz) {
 #if PICO_SHELL_UART
@@ -180,27 +205,11 @@ int main(void) {
     term_init(&g_term);
     keys_init(&g_keys);
     const out_t out = { con_write, NULL, false };
-    const shell_hooks_t hooks = { now_us, interrupted, NULL };
+    const shell_hooks_t hooks = { now_us, interrupted, getkey, NULL };
     shell_init(&g_shell, &out, &hooks, SHELL_VERSION);
     shell_set_loader(&g_shell, &g_loader);
     shell_start(&g_shell);
     s_prompt_us = time_us_64();
 
-    for (;;) {
-        poll_keys();
-        uint8_t state, code;
-        while (kbd_pop(&state, &code)) {
-            int k = keys_event(&g_keys, state, code);
-            if (k != KEYS_NONE) shell_input(&g_shell, k);
-        }
-#if PICO_SHELL_UART
-        int c;
-        while ((c = getchar_timeout_us(0)) >= 0) {
-            if (c == UART_DUMP_SCREEN) dump_screen();
-            else if (c == UART_LOG_STATS) log_stats();
-            else shell_input(&g_shell, keys_uart((uint8_t)c));
-        }
-#endif
-        screen_tick(&g_term, time_us_64());
-    }
+    for (;;) shell_input(&g_shell, getkey(NULL));
 }

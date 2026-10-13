@@ -794,7 +794,7 @@ int main(void) {
         return 1;
 
     const out_t out = { sink, NULL, false };
-    const shell_hooks_t hooks = { now, interrupted, NULL };
+    const shell_hooks_t hooks = { now, interrupted, NULL, NULL };
     shell_init(&sh, &out, &hooks, "test");
     shell_set_loader(&sh, &loader);
     shell_start(&sh);
