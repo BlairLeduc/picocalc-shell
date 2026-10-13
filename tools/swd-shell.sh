@@ -11,7 +11,8 @@
 # written while the target runs; nothing is halted and flash is not
 # touched. The protocol is the loader's (common/bootloader/proginfo.c):
 # scratch[1] the mode, scratch[2] its argument, scratch[0] the magic
-# written last. src/port/loader.c will hold the firmware's copy of it.
+# written last. src/port/loader.c holds the firmware's copy of it, and
+# include/picocalc_shell.h the programs'.
 # The reboot is the SDK's watchdog_reboot(0, 0, 0): reset everything but
 # the oscillators, then trigger.
 #

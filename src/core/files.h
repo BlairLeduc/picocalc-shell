@@ -23,6 +23,9 @@
  * the port's disk layer reports the card changed. */
 void files_mount(void);
 
+/* FatFs's result in words: "no card", "no such file or directory". */
+const char *files_why(FRESULT r);
+
 /* Whether `path` (absolute) is a directory on the card. */
 bool files_is_dir(const char *path);
 

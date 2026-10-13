@@ -1,7 +1,8 @@
 # PicoCalc Shell — design
 
-Status: **Draft 3, 2026-10-12.** Feasibility study and first design. M0
-(the skeleton) and M1 (files) are done ([milestones.md](milestones.md)).
+Status: **Draft 4, 2026-10-13.** Feasibility study and first design. M0
+(the skeleton), M1 (files) and M2 (run) are done
+([milestones.md](milestones.md)).
 
 The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
 and pico-oric). Pico Logo is a special case, because it keeps a filesystem
@@ -24,6 +25,7 @@ questions are open; the design is ready for M0.
 | 2026-10-12 | The LCD's SPI runs at 75 MHz by default, after M0's measurements; 25 MHz stays as a build option. | 4.1 |
 | 2026-10-12 | `ls` hides names FAT marks hidden or system, as it hides names starting with `.`. | 4.2 |
 | 2026-10-12 | Variables come with M4. | 4.4, 10 |
+| 2026-10-12 | `include/picocalc_shell.h` is offered under the MIT licence as well as the GPL-3.0. | 9 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -104,7 +106,24 @@ files of this shape.
 | Run the same program again | ~0.5 s | differential flash: one read of the UF2 and no writes (§3.3) |
 | Exit back to the shell | ~0.5 s | the same as shell start |
 
-All four figures are **estimates**. M2 measures them (EL §14.4).
+All four figures were **estimates**. *Measured at M2* (Plus 2 W, UF2 Loader
+2.5, development build, 2026-10-13; [milestones.md](milestones.md)):
+
+| Operation | Measured | Where the time goes |
+|---|---|---|
+| Run a program for the first time | pico-oric 3.0 s, pico-atom 2.95 s, pico-ace 2.7 s from Enter to the reboot, then 0.53 s to the program's `main` | check 0.26–0.33 s; write 2.4–3.0 s, about 61 ms a sector for erase, program and read-back, plus a second read of the file |
+| Run the same program again | 0.33–0.40 s from Enter to the reboot, then 0.53 s to `main` | one read of the file and a compare; nothing written |
+| Exit back to the shell | 1.35 s from `picocalc_shell_exit()` to the prompt | stage3's 0.5 s wait for a key, loading the 158 KB UF2, and the panel's start-up (0.43 s) |
+| Reboot to a program's `main` | 0.53 s | stage3's 0.5 s wait for a key |
+
+The estimates included the boot, so they compare with the totals: a first
+run about 3.5 s to the program's `main` against ~3 s, about 15 % over; a
+repeat about 0.9 s against ~0.5 s; the exit 1.35 s against ~0.5 s. The
+repeat and the exit both pay stage3's half-second wait for a key, which
+the estimates left out and the shell cannot shorten (§3.4: no stage3
+change); the exit's other 0.35 s over is loading the shell and the panel's
+start-up. The first run was not far over its estimate, so 64 KB block
+erase was not added (§10).
 
 ## 3. Where the shell sits in the boot chain
 
@@ -172,6 +191,41 @@ The flashing code is the loader's `ui/uf2.c` with the comparison added
 (§9). The loader's own error handling, such as the RP2350-E10 dummy block
 and non-contiguous UF2s, comes with it.
 
+*As built at M2* (`src/core/uf2.c`, `run.c`; `src/port/loader.c`):
+
+- **Two passes.** The first reads the whole file and checks every block
+  before flash is touched, building each 4 KB sector as the loader would
+  leave it (pages the program does not fill are erased, and the loader's
+  proginfo words cleared) and comparing it with flash. The second runs
+  only if a sector differs: it reads the file again and erases and
+  programs just those sectors, reading each back. So a first run reads
+  the file twice; a repeat run reads it once and writes nothing.
+- **Stricter than the loader** in three ways: blocks must ascend (the
+  SDK writes them so); a block naming no family is not taken for RP2350;
+  and any block out of sequence refuses the file rather than being
+  skipped. Blocks for other chips are skipped, so a UF2 for several chips
+  works.
+- **No bootable image while writing.** The program's first sector is
+  erased before any other and written last; in it the pages holding a
+  picobin block's first word go last, highest first, so the IMAGE_DEF,
+  the block loop's head, is the very last page written. stage3 cannot start a
+  half-written program: `rom_chain_image` finds no image and stage3 loads
+  `/BOOT2350.UF2` instead, so a write cut short comes back to the shell.
+  This costs one erase and program of the first sector on any run that
+  writes.
+- **Lookup.** A builtin wins; a word with a `/` is a path; otherwise
+  `name.uf2` in `/pico2-apps`, a fixed directory until `$PATH` comes with
+  variables (M4). A name not found is "not found" whatever stopped the
+  search, as in sh; a path says why. A program ends the line: the reboot
+  drops whatever follows it. Arguments and redirections are refused
+  (§3.5).
+- **The loader.** `loader.c` reads stage3's version from its binary info
+  and runs programs only under 2.3, 2.4, 2.4.1 and 2.5, the versions with this
+  scratch-command protocol (2.2 had none). Under anything else, or with no
+  partition table, or when stage3 did not start the shell (as over SWD),
+  a program is refused before flash is touched, with the reason.
+- **Ctrl-C** stops the check; nothing stops a write once begun.
+
 ### 3.4 Coming back to the shell
 
 *Settled 2026-10-12: programs may add an exit command.* There are two ways
@@ -200,6 +254,14 @@ back:
 
 For the emulators, *Exit to shell* belongs in the shared menu (EL §10), as
 one item placed the same way in all three.
+
+*As built at M2:* the header is header-only, static inline functions over
+the SDK, so a program needs nothing but the file; `src/port/loader.c`
+checks with static asserts that it agrees with the loader's values.
+`test/pico/exit_test.c` builds `exit-test.uf2`, a program that shows what
+it does on the panel and calls `picocalc_shell_exit()` when a key is
+pressed, so the card can be taken out first to see the call refuse. It
+checked the round trip on the board.
 
 ### 3.5 Arguments
 
@@ -482,7 +544,8 @@ decide (§4.1).
 
 - **Layout:** `src/core/`, `src/port/`, `src/host/` (the host's disk
   and shell), `src/fatfs/ffconf.h`, `include/picocalc_shell.h`,
-  `test/host/`, `tools/`, `docs/`, plus `references/` (read-only).
+  `test/host/`, `test/pico/` (board-only programs, such as `exit-test`),
+  `tools/`, `docs/`, plus `references/` (read-only).
 - **Targets:** one CMake tree with two targets, as in the emulators. The
   default is the firmware: `PICO_BOARD=pico2`, `no_flash`, with output named
   `BOOT2350.UF2`. `-DPICO_SHELL_HOST=ON` builds the core with the system
@@ -497,6 +560,9 @@ decide (§4.1).
   FatFs's own `f_mkfs` in the host build, not by `mkfs.fat`, which is not
   installed on the development Mac; so the tests need no tool beyond the
   compiler. A card formatted by another tool is checked on the board.
+  The real UF2s (the emulators' release builds and the loader's own) are
+  copied into `test/suites/uf2/` by `tools/fetch-suites.sh`; `test_uf2`
+  checks them where present and skips them where not.
   `src/host/host_disk.c` can fail every write after the next *n*, which is
   how the safe-write rule is tested at each sector of a copy.
 - **Two builds** (EL §13.2). The development build has UART1 log and typed
@@ -535,16 +601,20 @@ and read-only data, 33,284 B of `.bss`), the release build 69,308 B.
 (76,940 B of code and read-only data, 66,016 B of `.bss`), release
 137,388 B. Of the growth, FatFs and the builtins are about 35 KB of code,
 and `ls`'s sorting buffers (16 KB of names, 4 KB for 512 entries) and the 4 KB copy
-buffer most of the `.bss`. The deepest call chain, `cp` down into FatFs's
+buffer most of the `.bss`. **Measured at M2** (the same tools,
+2026-10-13, after the review): development 158,224 B, release 154,284 B; the UF2 code and
+its buffers (a 4 KB sector, a block, a page and the 512-byte bitmap of
+sectors that differ) and the bootrom's 4 KB work area for the partition
+table are most of the growth. The deepest call chain, `cp` down into FatFs's
 `f_rename`, needs well under 2 KB of the 4 KB stack (`-fstack-usage`).
 
 ## 8. Risks
 
 | Risk | Mitigation |
 |---|---|
-| A loader release changes the scratch commands, the partition layout or the flash end | Everything depends on one file, `loader.c`. The shell reads stage3's binary info at startup and refuses to flash on a version it does not know. Tell pelrun about the shell early. |
+| A loader release changes the scratch commands, the partition layout or the flash end | Everything depends on one file, `loader.c`. The shell reads stage3's binary info at startup and refuses to flash on a version it does not know: 2.3, 2.4, 2.4.1 and 2.5 (*as built at M2*). Tell pelrun about the shell early. |
 | Exit with no card: stage3 drops to BOOTSEL | `picocalc_shell_exit()` checks card detect first (§3.4). If the card is removed between the check and the reboot, power-cycling recovers. |
-| A half-written program after a power loss mid-flash | stage3 cannot be touched: it is in its own partition. Hold Up at power-on, then run the program again. |
+| A half-written program after a power loss mid-flash | stage3 cannot be touched: it is in its own partition. *As built at M2:* the program's first sector is written last (§3.3), so stage3 finds no image and loads the shell; run the program again. A reset mid-write was checked on the Plus 2 W, and the owner cut the power mid-write on a Pico 2 W: both came back to the shell. |
 | Programs that keep data in flash | §3.6 |
 | Card removed while the shell runs | Debounce card detect, and fail cleanly; a failed mount is retried on the next change (HW §7.1). |
 | Running a script on the owner's own card | Test cards and directories are kept apart from real ones (EL §13.4). |
@@ -559,9 +629,9 @@ them. Pico Logo's vi files and picocalc-text-starter's terminal are MIT, which i
 compatible. Both fonts are
 the owner's own.
 
-Still to decide when M2 publishes `picocalc_shell.h`: whether to offer that
-one header under MIT as well, so that a program under any licence can
-include it.
+*Settled 2026-10-12:* `include/picocalc_shell.h` is offered under the MIT
+licence as well (`GPL-3.0-or-later OR MIT`), so that a program under any
+licence can include it.
 
 ## 10. Milestones
 

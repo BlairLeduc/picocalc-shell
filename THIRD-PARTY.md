@@ -33,6 +33,19 @@ Blair Leduc, under the MIT licence, which is compatible with the GPL-3.0.
 | `src/core/keycodes.h` | `drivers/keyboard.h` | the key code table only |
 | `src/core/displaytest.c` | `tests.c`, `displaytest()` | split into its two phases; timing moved to `shell.c` |
 
+## UF2 Loader — GPL-3.0, pelrun
+
+<https://github.com/pelrun/uf2loader>, v2.5, under the GPL-3.0 like this
+project. Its `ui/uf2.c` is itself from muzkr's hachi
+(<https://github.com/muzkr/hachi>, Copyright (c) 2024 muzkr), modified by
+pelrun in 2025.
+
+| Here | From UF2 Loader | Changes |
+|---|---|---|
+| `src/core/uf2.c`, `uf2.h` | `ui/uf2.c` | its block rules, rebuilt as a check of the whole file before flash is touched and a write of only the sectors that differ (design.md §3.3) |
+| `src/port/loader.c` | `common/bootloader/proginfo.c`, `ui/uf2.c` | the scratch commands, the flash end, the partition and the remap; erasing and programming through the bootrom |
+| `include/picocalc_shell.h` | `common/bootloader/proginfo.c` | the `BOOT_SD` command's values only; the header is offered under the MIT licence as well (design.md §9) |
+
 ## The fonts — the owner's
 
 `src/core/font.h`, `font-8x10.c` and `font-5x10.c` are copied unchanged from

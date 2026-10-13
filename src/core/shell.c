@@ -9,6 +9,7 @@
 #include "displaytest.h"
 #include "files.h"
 #include "parse.h"
+#include "run.h"
 
 void shell_init(shell_t *sh, const out_t *out, const shell_hooks_t *hooks, const char *version) {
     memset(sh, 0, sizeof *sh);
@@ -18,6 +19,10 @@ void shell_init(shell_t *sh, const out_t *out, const shell_hooks_t *hooks, const
     sh->hooks = *hooks;
     sh->version = version;
     strcpy(sh->cwd, "/");
+}
+
+void shell_set_loader(shell_t *sh, const struct shell_loader *loader) {
+    sh->loader = loader;
 }
 
 /* The current directory followed by '>' (design.md §4.4). */
@@ -138,6 +143,7 @@ static const struct {
     { "echo",        cmd_echo },
     { "font",        cmd_font },
     { "ls",          cmd_ls },
+    { "menu",        cmd_menu },
     { "mkdir",       cmd_mkdir },
     { "mv",          cmd_mv },
     { "pwd",         cmd_pwd },
@@ -151,10 +157,7 @@ static int run_cmd(shell_t *sh, const parse_cmd_t *c) {
     shell_cmd_fn fn = NULL;
     for (size_t i = 0; i < sizeof k_builtins / sizeof k_builtins[0]; i++)
         if (strcmp(c->argv[0], k_builtins[i].name) == 0) fn = k_builtins[i].fn;
-    if (!fn) {
-        shell_error(sh, "%s: not found\n", c->argv[0]);
-        return 127;
-    }
+    if (!fn) return run_program(sh, c->argc, c->argv, c->in || c->out);
     if (c->in && !files_input(sh, c->in)) return 1;
     if (c->out && !files_redirect(sh, c->out, c->append)) {
         files_input_end(sh);

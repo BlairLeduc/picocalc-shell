@@ -2,7 +2,8 @@
  *
  * The banner, the prompt, a line read with Backspace and Ctrl-C, the
  * parser (parse.h), and the builtins: M1's file commands (files.h),
- * `echo`, `font` and the development command `displaytest`. */
+ * `echo`, `font`, `menu` and the development command `displaytest`.
+ * Any other command is a program (run.h). */
 #ifndef SHELL_SHELL_H
 #define SHELL_SHELL_H
 
@@ -31,6 +32,7 @@ typedef struct shell {
     bool          stop;             /* interrupted: the rest of the line is dropped */
     int           status;           /* the last command's, kept across lines */
     shell_hooks_t hooks;
+    const struct shell_loader *loader;   /* run.h; NULL: programs cannot run */
     const char   *version;
     char          cwd[SHELL_PATH_MAX + 1];   /* absolute and normal (path.h) */
     bool          wide;             /* font_5x10, 64 columns */
@@ -42,6 +44,9 @@ typedef struct shell {
 typedef int (*shell_cmd_fn)(shell_t *sh, int argc, char **argv);
 
 void shell_init(shell_t *sh, const out_t *out, const shell_hooks_t *hooks, const char *version);
+
+/* How programs are run (run.h): the port's link to UF2 Loader. */
+void shell_set_loader(shell_t *sh, const struct shell_loader *loader);
 
 /* Mount the card, reset the terminal, print the banner and the first
  * prompt. The starting directory is /home if the card has one. */
