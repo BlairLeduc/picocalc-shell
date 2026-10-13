@@ -1,10 +1,11 @@
 /* shell.h — the command line (design.md §4.4, §4.5).
  *
- * The banner, the prompt, a line read with Backspace and Ctrl-C, the
- * parser (parse.h), and the builtins: M1's file commands (files.h),
- * `echo`, `font`, `menu`, `vi` and `view` (vi.h), and the development
- * command `displaytest`.
- * Any other command is a program (run.h). */
+ * The banner, /etc/profile, the prompt and its line editor (line.h), the
+ * parser (parse.h), expansion (expand.h), pipes (pipe.h), and the
+ * builtins: the file commands (files.h), `more` and `grep` (text.h),
+ * `echo`, `font`, `set`, `unset`, `export`, `sh`, `history`, `menu`,
+ * `usbdisk`, `vi` and `view` (vi.h), and the development command
+ * `displaytest`. Any other command is a program (run.h). */
 #ifndef SHELL_SHELL_H
 #define SHELL_SHELL_H
 
@@ -14,6 +15,7 @@
 
 #include "config.h"
 #include "ff.h"
+#include "input.h"
 #include "out.h"
 
 /* What the shell needs from the port beyond its output. */
@@ -26,23 +28,41 @@ typedef struct {
      * keyboard itself, such as vi. -1 when there will be no more: the end
      * of a script or of the host's input. NULL: no keyboard. */
     int (*getkey)(void *ctx);
+    /* Offer the card over USB until the computer ejects it or a key
+     * stops it (design.md §4.2): NULL, or why not. FatFs's volume is
+     * unmounted around the call. NULL: no USB here. */
+    const char *(*usbdisk)(void *ctx);
     void *ctx;
 } shell_hooks_t;
 
+/* The line being edited at the prompt (line.c). */
+typedef struct {
+    char   text[SHELL_LINE_MAX + 1];
+    size_t len, pos;            /* its length, and the cursor in it */
+    size_t shown;               /* characters drawn after the prompt */
+    size_t prompt;              /* the prompt's width */
+    size_t cur;                 /* the terminal's cursor, from the prompt's start */
+    bool   tabbed;              /* the last key was a Tab that added nothing */
+    int    hist;                /* the history entry shown, -1: the line typed */
+    char   typed[SHELL_LINE_MAX + 1];   /* the line typed, while history is shown */
+} line_t;
+
 typedef struct shell {
     out_t         con;              /* the terminal: prompt, echo, errors */
-    out_t         out;              /* a command's output: con, or its > file */
+    out_t         out;              /* a command's output: con, a file or a pipe */
     bool          out_is_con;
-    FIL          *in;               /* a command's < file, or NULL */
+    input_t       in;               /* a command's input: a file, a pipe, or none */
     bool          stop;             /* interrupted: the rest of the line is dropped */
     int           status;           /* the last command's, kept across lines */
+    unsigned      depth;            /* 0 at the prompt, one more in each `sh` */
+    bool          at_bol;           /* the terminal's cursor is at a line's start */
+    out_t         term;             /* the port's sink, under con */
     shell_hooks_t hooks;
     const struct shell_loader *loader;   /* run.h; NULL: programs cannot run */
     const char   *version;
     char          cwd[SHELL_PATH_MAX + 1];   /* absolute and normal (path.h) */
     bool          wide;             /* font_5x10, 64 columns */
-    char          line[SHELL_LINE_MAX + 1];
-    size_t        len;
+    line_t        line;
 } shell_t;
 
 /* A builtin: its exit status, 0 for success. */
@@ -53,16 +73,21 @@ void shell_init(shell_t *sh, const out_t *out, const shell_hooks_t *hooks, const
 /* How programs are run (run.h): the port's link to UF2 Loader. */
 void shell_set_loader(shell_t *sh, const struct shell_loader *loader);
 
-/* Mount the card, reset the terminal, print the banner and the first
- * prompt. The starting directory is /home if the card has one. */
+/* Mount the card, reset the terminal, print the banner, run
+ * /etc/profile, read the history, and show the first prompt. The
+ * starting directory is $HOME if the card has it. */
 void shell_start(shell_t *sh);
 
 /* One input byte (keys.h): a character, or a key code of 0x80 and above. */
 void shell_input(shell_t *sh, int key);
 
 /* Run one line as if typed, without echo or prompt; the last command's
- * status. For tests and, later, scripts. */
+ * status. For tests, and for scripts at the level below. */
 int shell_run(shell_t *sh, const char *line);
+
+/* Before the shell is left for a program, the menu or USB: save the
+ * history. */
+void shell_leaving(shell_t *sh);
 
 /* For builtins: an error to the terminal, never to a redirection. */
 void shell_error(shell_t *sh, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
@@ -73,5 +98,14 @@ bool shell_interrupted(shell_t *sh);
 
 /* The terminal's width in columns. */
 unsigned shell_cols(const shell_t *sh);
+
+/* Whether `name` is a builtin; and the i-th builtin's name, NULL past
+ * the last, for Tab completion. */
+bool shell_is_builtin(const char *name);
+const char *shell_builtin_at(unsigned i);
+
+/* Show the prompt: on a line of its own if the cursor is not at the
+ * start of one. */
+void shell_prompt(shell_t *sh);
 
 #endif /* SHELL_SHELL_H */

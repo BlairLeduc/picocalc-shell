@@ -1,4 +1,7 @@
-/* test_parse.c — a line into commands (parse.h, design.md §4.4). */
+/* test_parse.c — a line into commands (parse.h, design.md §4.4).
+ *
+ * The words come out as typed, quotes and all; test_expand.c checks
+ * what they become. */
 
 #include <string.h>
 
@@ -11,7 +14,7 @@ static parse_t p;
  * commands joined by their separators. */
 static const char *show(void) {
     static char buf[1024];
-    static const char *const seps[] = { "", " ; ", " && ", " || " };
+    static const char *const seps[] = { "", " ; ", " && ", " || ", " | " };
     buf[0] = '\0';
     for (int i = 0; i < p.ncmds; i++) {
         const parse_cmd_t *c = &p.cmds[i];
@@ -34,28 +37,33 @@ int main(void) {
         { "# a comment",               "" },
         { "ls",                        "ls" },
         { "  ls  -l   /home ",         "ls|-l|/home" },
-        { "echo 'a  b' \"c d\"",       "echo|a  b|c d" },
-        { "echo it\\'s",               "echo|it's" },
-        { "echo a\\ b",                "echo|a b" },
-        { "echo 'x'\"y\"z",            "echo|xyz" },
-        { "echo '' \"\"",              "echo||" },
-        { "echo \"a\\\"b\\\\c\\d\"",   "echo|a\"b\\c\\d" },
-        { "echo '\\'",                 "echo|\\" },
+        { "echo 'a  b' \"c d\"",       "echo|'a  b'|\"c d\"" },
+        { "echo it\\'s",               "echo|it\\'s" },
+        { "echo a\\ b",                "echo|a\\ b" },
+        { "echo 'x'\"y\"z",            "echo|'x'\"y\"z" },
+        { "echo '' \"\"",              "echo|''|\"\"" },
+        { "echo \"a\\\"b\\\\c\\d\"",   "echo|\"a\\\"b\\\\c\\d\"" },
+        { "echo '\\'",                 "echo|'\\'" },
         { "echo a#b # rest",           "echo|a#b" },
-        { "echo '#' \\#",              "echo|#|#" },
+        { "echo '#' \\#",              "echo|'#'|\\#" },
         { "echo $HOME",                "echo|$HOME" },
-        { "echo '>' \\; \"&&\"",       "echo|>|;|&&" },
+        { "echo '>' \\; \"&&\"",       "echo|'>'|\\;|\"&&\"" },
+        { "echo 'a|b' a\\|b",          "echo|'a|b'|a\\|b" },
         { "ls > out",                  "ls >out" },
         { "ls >out",                   "ls >out" },
         { "ls>>out",                   "ls >>out" },
         { "cat < in > out",            "cat <in >out" },
         { "> out ls -a",               "ls|-a >out" },
-        { "cat <'my file'",            "cat <my file" },
+        { "cat <'my file'",            "cat <'my file'" },
         { "a;b",                       "a ; b" },
         { "a ; b ;",                   "a ; b" },
         { "a && b || c",               "a && b || c" },
         { "a&&b||c;d",                 "a && b || c ; d" },
         { "mkdir x && cd x > log",     "mkdir|x && cd|x >log" },
+        { "ls | more",                 "ls | more" },
+        { "a|b|c",                     "a | b | c" },
+        { "cat < f | grep x > g",      "cat <f | grep|x >g" },
+        { "a | b && c || d | e ; f",   "a | b && c || d | e ; f" },
     };
     for (size_t i = 0; i < sizeof good / sizeof good[0]; i++) {
         bool ok = parse_line(&p, good[i].line);
@@ -69,8 +77,12 @@ int main(void) {
         "echo 'a",
         "echo \"a",
         "echo a\\",
-        "ls |more",
         "ls &",
+        "ls |",
+        "| ls",
+        "ls | | more",
+        "ls > f | more",
+        "ls | more < f",
         "; ls",
         "ls ;; ls",
         "ls &&",

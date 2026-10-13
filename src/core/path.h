@@ -32,4 +32,10 @@ bool path_same(const char *a, const char *b);
 /* Whether `inner` is `outer` or below it, comparing as path_same. */
 bool path_within(const char *inner, const char *outer);
 
+/* Whether `name` matches the glob `pat` (design.md §4.4): `*`, `?`, and
+ * `[…]` with ranges and `!` or `^` to negate; `\` makes the next
+ * character literal. Letters match without regard to case, as FAT names
+ * do. A '[' never closed is an ordinary character. */
+bool path_match(const char *pat, const char *name);
+
 #endif /* SHELL_PATH_H */

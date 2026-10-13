@@ -373,7 +373,7 @@ static int fault_tests(void) {
 
 int main(void) {
     const out_t out = { sink, NULL, false };
-    const shell_hooks_t hooks = { now, interrupted, getkey, NULL };
+    const shell_hooks_t hooks = { now, interrupted, getkey, NULL, NULL };
     term_init(&t);
     shell_init(&sh, &out, &hooks, "test");
 
@@ -384,7 +384,7 @@ int main(void) {
 
     /* With no keyboard, vi says so. */
     shell_t bare;
-    const shell_hooks_t none = { now, interrupted, NULL, NULL };
+    const shell_hooks_t none = { now, interrupted, NULL, NULL, NULL };
     shell_init(&bare, &out, &none, "test");
     log_len = 0;
     CHECK(shell_run(&bare, "vi /a") == 1 && strstr(log_text, "vi: no keyboard"), "no keyboard");

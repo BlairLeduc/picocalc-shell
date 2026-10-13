@@ -9,10 +9,11 @@
  *   FF_VOLUMES 1, FF_FS_RPATH 0  one card; the shell resolves paths itself
  *   FF_FS_EXFAT 0                FAT12/16/32 only (hardware-notes §7.1)
  *   FF_FS_REENTRANT 0            one core
- *   FF_FS_LOCK 24                a file open twice, or removed while open,
+ *   FF_FS_LOCK 40                a file open twice, or removed while open,
  *                                is refused rather than corrupted; room
- *                                for SHELL_TREE_DEPTH directories and four
- *                                files at once (files.c)
+ *                                for a cp -r's walk and its two files,
+ *                                each script level's file and
+ *                                redirections, and every pipe (files.c)
  *   FF_USE_MKFS                  the host build only, to format test images
  *   FF_USE_CHMOD 1               the read-only bit (design.md §4.2)
  *   FF_USE_FIND 0, STRFUNC 0     not needed
@@ -306,7 +307,7 @@
 */
 
 
-#define FF_FS_LOCK		24
+#define FF_FS_LOCK		40
 /* The option FF_FS_LOCK switches file lock function to control duplicated file open
 /  and illegal operation to open objects. This option must be 0 when FF_FS_READONLY
 /  is 1.

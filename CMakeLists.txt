@@ -18,17 +18,24 @@ set(SHELL_CORE_SOURCES
     src/core/editor_pattern.c
     src/core/editor_undo.c
     src/core/editor_vi.c
+    src/core/expand.c
     src/core/files.c
     src/core/font-5x10.c
     src/core/font-8x10.c
+    src/core/history.c
+    src/core/input.c
     src/core/keys.c
+    src/core/line.c
     src/core/out.c
     src/core/parse.c
     src/core/path.c
+    src/core/pipe.c
     src/core/run.c
     src/core/shell.c
     src/core/term.c
+    src/core/text.c
     src/core/uf2.c
+    src/core/vars.c
     src/core/vi.c
 )
 

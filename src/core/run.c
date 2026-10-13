@@ -6,6 +6,7 @@
 
 #include "files.h"
 #include "path.h"
+#include "vars.h"
 
 static FIL      s_prog;
 static FILINFO  s_fno;
@@ -88,6 +89,7 @@ static int run_path(shell_t *sh, const char *name, const char *path, bool ram_on
 
     switch (r) {
     case UF2_FLASH:
+        shell_leaving(sh);
         ld->boot(ld->ctx, NULL, &info);
         return 0;
     case UF2_RAM:
@@ -96,6 +98,7 @@ static int run_path(shell_t *sh, const char *name, const char *path, bool ram_on
             shell_error(sh, "%s: %s\n", name, files_why(fr));
             return 1;
         }
+        shell_leaving(sh);
         ld->boot(ld->ctx, s_sfn, &info);
         return 0;
     case UF2_NOT_UF2:
@@ -121,33 +124,42 @@ static int run_path(shell_t *sh, const char *name, const char *path, bool ram_on
 }
 
 /* `name` as a program: a path if it has a '/', otherwise name.uf2 in
- * the program directory. False, with the error printed, if none. */
+ * the first directory of $PATH that has it, the directories separated
+ * by ':'. False, with the error printed, if none. */
 static bool find(shell_t *sh, const char *name) {
-    char file[SHELL_PATH_MAX + 1];
-    bool is_path = strchr(name, '/') != NULL;
+    static char file[SHELL_PATH_MAX + 1], dir[SHELL_PATH_MAX + 1], abs[SHELL_PATH_MAX + 1];
     size_t n = strlen(name);
-    bool ok;
-    if (is_path) {
-        ok = path_resolve(s_path, sh->cwd, name);
-    } else {
-        ok = n + sizeof SHELL_PROGRAM_EXT <= sizeof file;
-        if (ok) {
-            memcpy(file, name, n);
-            memcpy(file + n, SHELL_PROGRAM_EXT, sizeof SHELL_PROGRAM_EXT);
-            ok = path_join(s_path, SHELL_PROGRAM_DIR, file);
+    FRESULT r;
+    if (strchr(name, '/')) {
+        if (!path_resolve(s_path, sh->cwd, name)) {
+            shell_error(sh, "%s: name too long\n", name);
+            return false;
         }
-    }
-    if (!ok) {
-        shell_error(sh, "%s: name too long\n", name);
+        r = f_stat(s_path, &s_fno);
+        if (r == FR_OK && !(s_fno.fattrib & AM_DIR)) return true;
+        if (r == FR_OK) shell_error(sh, "%s: is a directory\n", name);
+        else shell_error(sh, "%s: %s\n", name, files_why(r));
         return false;
     }
-    FRESULT r = f_stat(s_path, &s_fno);
-    if (r == FR_OK && !(s_fno.fattrib & AM_DIR)) return true;
+    if (n + sizeof SHELL_PROGRAM_EXT <= sizeof file) {
+        memcpy(file, name, n);
+        memcpy(file + n, SHELL_PROGRAM_EXT, sizeof SHELL_PROGRAM_EXT);
+        for (const char *p = vars_get("PATH", 4); p && *p;) {
+            const char *colon = strchr(p, ':');
+            size_t len = colon ? (size_t)(colon - p) : strlen(p);
+            if (len > 0 && len < sizeof dir) {
+                memcpy(dir, p, len);
+                dir[len] = '\0';
+                if (path_resolve(abs, sh->cwd, dir) && path_join(s_path, abs, file) &&
+                    f_stat(s_path, &s_fno) == FR_OK && !(s_fno.fattrib & AM_DIR))
+                    return true;
+            }
+            p = colon ? colon + 1 : NULL;
+        }
+    }
     /* A name not found is "not found", whatever stopped the search, as
-     * in sh; a path says why. */
-    if (!is_path) shell_error(sh, "%s: not found\n", name);
-    else if (r == FR_OK) shell_error(sh, "%s: is a directory\n", name);
-    else shell_error(sh, "%s: %s\n", name, files_why(r));
+     * in sh. */
+    shell_error(sh, "%s: not found\n", name);
     return false;
 }
 
@@ -155,7 +167,7 @@ int run_program(shell_t *sh, int argc, char **argv, bool redirected) {
     if (!find(sh, argv[0])) return 127;
     /* Arguments are deferred (design.md §3.5); none is ignored. */
     if (argc > 1 || redirected) {
-        shell_error(sh, "%s: a program takes no arguments or redirection yet\n", argv[0]);
+        shell_error(sh, "%s: a program takes no arguments, redirection or pipe yet\n", argv[0]);
         return 2;
     }
     return run_path(sh, argv[0], s_path, false);

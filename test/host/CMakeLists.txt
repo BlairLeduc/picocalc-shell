@@ -7,13 +7,17 @@ set(SHELL_HOST_TESTS
     test_editor_pattern
     test_editor_undo
     test_editor_vi
+    test_expand
     test_files
     test_keys
+    test_line
     test_parse
     test_path
+    test_pipe
     test_shell
     test_skeleton
     test_term
+    test_text
     test_uf2
     test_vi
 )

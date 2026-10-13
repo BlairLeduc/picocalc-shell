@@ -205,7 +205,7 @@ int main(void) {
     term_init(&g_term);
     keys_init(&g_keys);
     const out_t out = { con_write, NULL, false };
-    const shell_hooks_t hooks = { now_us, interrupted, getkey, NULL };
+    const shell_hooks_t hooks = { now_us, interrupted, getkey, NULL, NULL };
     shell_init(&g_shell, &out, &hooks, SHELL_VERSION);
     shell_set_loader(&g_shell, &g_loader);
     shell_start(&g_shell);

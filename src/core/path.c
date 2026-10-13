@@ -71,3 +71,71 @@ bool path_within(const char *inner, const char *outer) {
     size_t i = common(inner, outer);
     return outer[i] == '\0' && (inner[i] == '\0' || inner[i] == '/');
 }
+
+/* One bracket expression at *pp, just past its '['; c is the character
+ * to test. *pp moves past the closing ']'. False with *pp unchanged if
+ * the bracket is never closed, so '[' is then an ordinary character. */
+static bool bracket(const char **pp, char c, bool *in) {
+    const char *p = *pp;
+    bool negate = *p == '!' || *p == '^';
+    if (negate) p++;
+    bool hit = false;
+    /* A ']' first is a member, not the end. */
+    for (bool first = true; *p && (first || *p != ']'); first = false) {
+        char lo = *p == '\\' && p[1] ? *++p : *p;
+        p++;
+        char hi = lo;
+        if (p[0] == '-' && p[1] && p[1] != ']') {
+            p++;
+            hi = *p == '\\' && p[1] ? *++p : *p;
+            p++;
+        }
+        if (fold(c) >= fold(lo) && fold(c) <= fold(hi)) hit = true;
+    }
+    if (*p != ']') return false;
+    *pp = p + 1;
+    *in = hit != negate;
+    return true;
+}
+
+bool path_match(const char *pat, const char *name) {
+    /* The last '*' and where its run began: on a mismatch, it takes one
+     * more character and matching resumes after it. */
+    const char *star = NULL, *resume = NULL;
+    for (;;) {
+        if (*pat == '*') {
+            while (*pat == '*') pat++;
+            star = pat;
+            resume = name;
+            continue;
+        }
+        if (!*name) return !*pat;
+        const char *p = pat;
+        bool ok;
+        if (*p == '?') {
+            ok = true;
+            p++;
+        } else if (*p == '[') {
+            const char *q = p + 1;
+            if (bracket(&q, *name, &ok)) {
+                p = q;
+            } else {
+                ok = *name == '[';
+                p++;
+            }
+        } else {
+            if (*p == '\\' && p[1]) p++;
+            ok = *p && fold(*p) == fold(*name);
+            p++;
+        }
+        if (ok) {
+            pat = p;
+            name++;
+        } else if (star) {
+            pat = star;
+            name = ++resume;
+        } else {
+            return false;
+        }
+    }
+}
