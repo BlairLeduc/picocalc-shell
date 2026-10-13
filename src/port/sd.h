@@ -30,6 +30,9 @@ bool sd_present(void);
 sd_status_t sd_init(uint32_t *hz, bool *high_capacity);
 
 sd_status_t sd_read(uint32_t block, uint8_t *buf);
+
+/* The card's size in blocks of SD_BLOCK, from its CSD (CMD9). */
+sd_status_t sd_sectors(uint32_t *count);
 sd_status_t sd_write(uint32_t block, const uint8_t *buf);
 
 #endif /* SHELL_SD_H */

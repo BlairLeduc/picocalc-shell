@@ -6,7 +6,8 @@
  * and writes only; nothing here needs more.
  *
  * Copied from pico-oric's src/port/sd.c (THIRD-PARTY.md), unchanged but
- * for comments.
+ * for comments and, for usbdisk, sd_sectors: CMD9 and the CSD, with the
+ * wait for a data token shared with sd_read.
  */
 
 #include "sd.h"
@@ -191,13 +192,8 @@ static uint32_t address(uint32_t block) {
     return s_hc ? block : block * SD_BLOCK;
 }
 
-sd_status_t sd_read(uint32_t block, uint8_t *buf) {
-    uint8_t r1 = command(17, address(block));
-    if (r1 != 0) {
-        deselect();
-        return r1 == 0xFF ? SD_NO_REPLY : SD_REJECTED;
-    }
-
+/* After a read command: the data token, then n bytes and the CRC. */
+static sd_status_t read_data(uint8_t *buf, size_t n) {
     absolute_time_t until = make_timeout_time_ms(SD_TOKEN_US / 1000u);
     uint8_t tok;
     do {
@@ -208,10 +204,45 @@ sd_status_t sd_read(uint32_t block, uint8_t *buf) {
         return tok == 0xFF ? SD_NO_REPLY : SD_REJECTED;
     }
 
-    spi_read_blocking(SD_SPI, 0xFF, buf, SD_BLOCK);
+    spi_read_blocking(SD_SPI, 0xFF, buf, n);
     xfer(0xFF);    /* CRC, not checked in SPI mode */
     xfer(0xFF);
     deselect();
+    return SD_OK;
+}
+
+sd_status_t sd_read(uint32_t block, uint8_t *buf) {
+    uint8_t r1 = command(17, address(block));
+    if (r1 != 0) {
+        deselect();
+        return r1 == 0xFF ? SD_NO_REPLY : SD_REJECTED;
+    }
+    return read_data(buf, SD_BLOCK);
+}
+
+sd_status_t sd_sectors(uint32_t *count) {
+    uint8_t r1 = command(9, 0);
+    if (r1 != 0) {
+        deselect();
+        return r1 == 0xFF ? SD_NO_REPLY : SD_REJECTED;
+    }
+    uint8_t csd[16];
+    sd_status_t st = read_data(csd, sizeof csd);
+    if (st != SD_OK) return st;
+    if ((csd[0] >> 6) == 1u) {
+        /* CSD 2.0 (SDHC, SDXC): C_SIZE + 1 units of 512 KB. */
+        uint32_t c_size = ((uint32_t)(csd[7] & 0x3Fu) << 16) | ((uint32_t)csd[8] << 8) | csd[9];
+        *count = (c_size + 1u) * 1024u;
+    } else if ((csd[0] >> 6) == 0u) {
+        /* CSD 1.0: (C_SIZE + 1) << (C_SIZE_MULT + 2) blocks of
+         * 2^READ_BL_LEN bytes. */
+        uint32_t bl_len = csd[5] & 0x0Fu;
+        uint32_t c_size = ((uint32_t)(csd[6] & 0x03u) << 10) | ((uint32_t)csd[7] << 2) | (csd[8] >> 6);
+        uint32_t mult = ((uint32_t)(csd[9] & 0x03u) << 1) | (csd[10] >> 7);
+        *count = ((c_size + 1u) << (mult + 2u)) << bl_len >> 9;
+    } else {
+        return SD_UNUSABLE;
+    }
     return SD_OK;
 }
 

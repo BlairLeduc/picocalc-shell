@@ -24,6 +24,9 @@
  * the port's disk layer reports the card changed. */
 void files_mount(void);
 
+/* Let the volume go, for usbdisk: nothing may be open. */
+void files_unmount(void);
+
 /* FatFs's result in words: "no card", "no such file or directory". */
 const char *files_why(FRESULT r);
 

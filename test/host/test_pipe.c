@@ -33,6 +33,20 @@ static bool interrupted(void *ctx) {
     return interrupt_after-- == 0;
 }
 
+/* usbdisk's hook: whether the volume was let go while it ran, and what
+ * it says. */
+static int         usb_calls;
+static FRESULT     usb_seen;
+static const char *usb_says;
+
+static const char *fake_usbdisk(void *ctx) {
+    (void)ctx;
+    FILINFO fno;
+    usb_calls++;
+    usb_seen = f_stat("/a.txt", &fno);
+    return usb_says;
+}
+
 static int run(const char *line) {
     con_len = 0;
     con[0] = '\0';
@@ -239,6 +253,28 @@ static int pipe_tests(bool fat32) {
     }
     CHECK(history_count() < 400 && strcmp(history_get(history_count() - 1), "echo 399") == 0,
           "full: %u kept", history_count());
+
+    /* ---- usbdisk ---- */
+    CHECK(run("usbdisk") == 1 && strcmp(con, "usbdisk: no USB here\n") == 0, "no USB: '%s'", con);
+    sh.hooks.usbdisk = fake_usbdisk;
+    usb_calls = 0;
+    usb_says = NULL;
+    history_add("echo before usb");
+    CHECK(run("usbdisk") == 0 && usb_calls == 1 && strstr(con, "The card is on USB"),
+          "usbdisk: '%s'", con);
+    CHECK(usb_seen == FR_NOT_ENABLED, "FatFs let the card go: %d", (int)usb_seen);
+    s = slurp(HISTORY_FILE);
+    CHECK(s && strstr(s, "echo before usb\n"), "history saved first: '%s'", s ? s : "");
+    CHECK(run("cat /a.txt") == 0 && strcmp(con, "one\ntwo\nthree\n") == 0, "mounted after: '%s'",
+          con);
+    usb_says = "the card was taken out";
+    CHECK(run("usbdisk") == 1 && strstr(con, "usbdisk: the card was taken out"), "error: '%s'", con);
+    usb_calls = 0;
+    CHECK(run("usbdisk > /u.txt") == 1 && usb_calls == 0 && !exists("/u.txt.new"),
+          "> refused: '%s'", con);
+    CHECK(run("echo | usbdisk") == 1 && usb_calls == 0, "| refused: '%s'", con);
+    CHECK(run("usbdisk x") == 1 && usb_calls == 0 && strstr(con, "usage: usbdisk"), "usage");
+    sh.hooks.usbdisk = NULL;
 
     host_disk_close();
     return test_failures;

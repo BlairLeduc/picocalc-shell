@@ -61,6 +61,10 @@ void files_mount(void) {
     f_mount(&s_fs, "", 0);
 }
 
+void files_unmount(void) {
+    f_mount(NULL, "", 0);
+}
+
 FRESULT files_stat(const char *path, FILINFO *fno) {
     if (strcmp(path, "/") == 0) {
         DIR d;

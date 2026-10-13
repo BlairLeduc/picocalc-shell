@@ -15,7 +15,7 @@ The same licence as this project, and the same owner.
 | `src/port/kbd.c`, `.h` | the same | one core's ring in place of the cross-core rings |
 | `src/port/board.c`, `.h` | the same | trimmed: no die temperature |
 | `cmake/version.cmake` | the same | the header's name |
-| `src/port/sd.c`, `sd.h` | the same | comments only |
+| `src/port/sd.c`, `sd.h` | the same | `sd_sectors()`, the card's size from its CSD, for `usbdisk` |
 | `src/port/diskio.c` | the same | `card_poll()`, for one mount held while the card stays in |
 | `src/fatfs/ffconf.h` | `src/port/fatfs/ffconf.h` | the values its header lists |
 | `test/host/test_util.h` | the same | the include guard |
@@ -59,6 +59,13 @@ pelrun in 2025.
 | `src/core/uf2.c`, `uf2.h` | `ui/uf2.c` | its block rules, rebuilt as a check of the whole file before flash is touched and a write of only the sectors that differ (design.md §3.3) |
 | `src/port/loader.c` | `common/bootloader/proginfo.c`, `ui/uf2.c` | the scratch commands, the flash end, the partition and the remap; erasing and programming through the bootrom |
 | `include/picocalc_shell.h` | `common/bootloader/proginfo.c` | the `BOOT_SD` command's values only; the header is offered under the MIT licence as well (design.md §9) |
+| `src/port/usbdisk.c` | `ui/lib/usb_msc/usb_msc.c` | its MSC callbacks; an eject ends the run, and a card taken out |
+| `src/port/usb_descriptors.c` | `ui/lib/usb_msc/usb_descriptors.c` | the same numbers and strings; the full-speed descriptor only, the serial number through the SDK |
+| `src/port/tusb_config.h` | `ui/lib/usb_msc/tusb_config.h` | comments and unused options dropped |
+
+The last three files started as TinyUSB's `msc` example (MIT, Copyright (c)
+2019 Ha Thach, tinyusb.org), which the loader adapted. TinyUSB itself is
+not in the tree: the firmware links the Pico SDK's copy.
 
 ## The fonts — the owner's
 

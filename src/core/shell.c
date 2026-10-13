@@ -273,7 +273,9 @@ static int cmd_usbdisk(shell_t *sh, int argc, char **argv) {
         return 1;
     }
     shell_leaving(sh);
-    out_puts(&sh->con, "The card is on USB. Eject it on the computer, or press Esc.\n");
+    out_puts(&sh->con, "The card is on USB. Eject it on the computer to come back;\n"
+                       "Esc comes back at once, which may lose what it was writing.\n");
+    files_unmount();
     const char *err = sh->hooks.usbdisk(sh->hooks.ctx);
     files_mount();
     sh->stop = false;   /* Esc is how it ends, not a reason to drop the line */
