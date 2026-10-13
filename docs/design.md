@@ -26,6 +26,7 @@ questions are open; the design is ready for M0.
 | 2026-10-12 | `ls` hides names FAT marks hidden or system, as it hides names starting with `.`. | 4.2 |
 | 2026-10-12 | Variables come with M4. | 4.4, 10 |
 | 2026-10-12 | `include/picocalc_shell.h` is offered under the MIT licence as well as the GPL-3.0. | 9 |
+| 2026-10-13 | A patched stage3 that starts the shell at power-on, and the last program with Up/F1/F5 held, is an optional milestone (M7). Until it is installed, the stock loader's behaviour above stands. | 3.4, 10 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -234,6 +235,8 @@ back:
 - **Hold Up/F1/F5 at power-on.** This is the loader's existing gesture,
   and it works for every program. Power-on with no key held starts the last
   program. *Settled 2026-10-12:* that stays as it is, with no stage3 change.
+  *Decided 2026-10-13:* the optional M7 swaps this with a patched stage3
+  (§10), for an owner who installs it.
 - **An exit command in the program.** The shell publishes one small
   header, `include/picocalc_shell.h`:
 
@@ -852,3 +855,27 @@ in [milestones.md](milestones.md).
   bounded below the southbridge's 2.5 s (§4.2). Done when the rate each
   way is measured on the board, before and after, with a large file
   copied each way and compared byte for byte.
+- **M7 — Shell at power-on (optional).** A patched UF2 Loader, so that
+  power-on with no key held loads the shell, and Up/F1/F5 start the last
+  program; Down/F3 still give BOOTSEL. pelrun's loader is a submodule
+  pinned at v2.5 (`5c44a4b`) in `third_party/uf2loader`, with
+  `references/` left alone; `patches/uf2loader-boot-shell.patch` changes
+  only `stage3/stage3.c`, and `tools/build-loader.sh` applies it to a copy
+  and builds `bootloader_pico2.uf2`. The patch:
+  - swaps the no-key and Up/F1/F5 modes in `read_bootmode()`;
+  - starts the program in flash, not BOOTSEL, when there is no card or
+    `/BOOT2350.UF2` cannot be loaded, so a power-on without a card still
+    does something;
+  - names its version `2.5-shell`.
+
+  The shell sends `BOOT_DEFAULT` as an explicit command when it starts a
+  program, instead of no command, which stock stage3 also accepts; and
+  `loader.c` accepts `2.5-shell`. The owner installs the loader in
+  BOOTSEL; the shell never writes stage3's partition, and reinstalling
+  the stock loader undoes M7. Check first whether the emulators reboot
+  themselves with no command: with the patch, that would land in the
+  shell. Done when, on the board with the patched loader, power-on
+  gives the shell, Up held gives the last program, power-on with no card
+  starts the program, and a program still runs, and comes back by its
+  exit command, under both the patched and the stock loader. Offer the
+  change to pelrun as an option.
