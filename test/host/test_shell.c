@@ -45,7 +45,7 @@ static bool has_row(const char *text) {
 }
 
 int main(void) {
-    const out_t out = { sink, NULL };
+    const out_t out = { sink, NULL, false };
     const shell_hooks_t hooks = { now, interrupted, NULL };
 
     term_init(&t);

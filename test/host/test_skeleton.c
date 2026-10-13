@@ -5,10 +5,13 @@
 
 #include "config.h"
 #include "displaytest.h"
+#include "files.h"
 #include "font.h"
 #include "keycodes.h"
 #include "keys.h"
 #include "out.h"
+#include "parse.h"
+#include "path.h"
 #include "shell.h"
 #include "term.h"
 #include "test_util.h"

@@ -1,11 +1,11 @@
-/* main.c — bring-up, then the shell's loop (design.md §5; §10, M0).
+/* main.c — bring-up, then the shell's loop (design.md §5, §10).
  *
  * One core. Bring-up follows hardware-notes.md §10: the southbridge, the
  * panel, the keyboard. The shell's output goes to the terminal's grid,
  * then, in the development build, to UART1 as the same bytes, so a
  * terminal on the other end shows what the panel does; then the panel is
- * brought up to date. The loop polls the keyboard at about 30 Hz, takes
- * the UART's bytes as keys, and blinks the cursor.
+ * brought up to date. The loop polls the keyboard and card detect at
+ * about 30 Hz, takes the UART's bytes as keys, and blinks the cursor.
  *
  * Two UART bytes are not keys (EL §13.1): FS (0x1C) dumps the grid as
  * text, and GS (0x1D) logs the start time and the counters.
@@ -19,6 +19,7 @@
 #include "pico/stdlib.h"
 
 #include "board.h"
+#include "card.h"
 #include "kbd.h"
 #include "keycodes.h"
 #include "keys.h"
@@ -50,6 +51,7 @@ static void poll_keys(void) {
     if (now < s_next_poll) return;
     s_next_poll = now + KBD_POLL_US;
     kbd_poll();
+    card_poll();
 }
 
 static void con_write(void *ctx, const char *buf, size_t n) {
@@ -162,7 +164,7 @@ int main(void) {
 
     term_init(&g_term);
     keys_init(&g_keys);
-    const out_t out = { con_write, NULL };
+    const out_t out = { con_write, NULL, false };
     const shell_hooks_t hooks = { now_us, interrupted, NULL };
     shell_init(&g_shell, &out, &hooks, SHELL_VERSION);
     shell_start(&g_shell);
