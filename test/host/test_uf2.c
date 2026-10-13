@@ -759,8 +759,18 @@ static int test_shell(void) {
     make(UF2_SRAM_BASE, 64, -1, 1, 0, FAM_ARM_S);
     CHECK(put("/BOOT2350.ORG", ubuf, ulen), "menu");
     FILINFO fno;
-    CHECK(run("menu > /m.txt") == 1 && boots == 0 && f_stat("/m.txt.new", &fno) == FR_NO_FILE,
+    CHECK(run("menu > /m.txt") == 1 && boots == 0 && f_stat("/m.txt.new", &fno) == FR_NO_FILE &&
+              f_stat("/m.txt", &fno) == FR_NO_FILE,
           "menu > f: '%s'", con);
+    /* Refused before the redirection is opened: a file there is kept. */
+    CHECK(put("/m.txt", "kept\n", 5) && run("menu >> /m.txt") == 1 && boots == 0 &&
+              f_stat("/m.txt", &fno) == FR_OK && fno.fsize == 5 &&
+              run("menu > /m.txt") == 1 && f_stat("/m.txt", &fno) == FR_OK && fno.fsize == 5 &&
+              f_stat("/m.txt.new", &fno) == FR_NO_FILE,
+          "menu > f, f kept: '%s'", con);
+    CHECK(run("menu < /m.txt") == 1 && boots == 0 &&
+              strcmp(con, "usage: menu, with no operand or redirection\n") == 0,
+          "menu < f: '%s'", con);
     CHECK(run("menu") == 0 && boots == 1 && strcmp(boot_ram, "/BOOT2350.ORG") == 0,
           "menu: '%s'", boot_ram);
 

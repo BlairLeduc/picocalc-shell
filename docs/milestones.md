@@ -126,6 +126,20 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
 - Carried from M0: the start time from power-on through stage3, 75 MHz by
   eye, the cursor's blink by eye, every key code.
 
+**Review of the PR** (Muse, 2026-10-13). No blocking bug in the new
+code; these were fixed:
+
+- **The host build failed on Linux** (Muse): `test_editor_vi.c`, lifted
+  from Pico Logo, used `SIZE_MAX` without `<stdint.h>`, which macOS's
+  headers bring in and glibc's do not. `vi.c` now includes it as well,
+  rather than through `vi.h`. Built on macOS only here; Muse's Linux
+  build passed with the include.
+- **`menu > f` still emptied `f`** (carried from M2's review): `menu`
+  refused the redirection, but only after the shell had opened it, and
+  the redirection was then committed, creating `f` or emptying the one
+  there. The shell now refuses it before opening it; `test_uf2` checks
+  that a file already there is kept, for `>` and `>>`.
+
 ## M2 — Run (branch `m2-run`, 2026-10-13)
 
 **Done.** The gate held: the first-run time is close to its estimate, so
