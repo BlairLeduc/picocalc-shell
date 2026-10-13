@@ -20,7 +20,9 @@
  *     modes) are accepted and ignored.
  *   - Reset also clears bold and selects G0, which the starter left set.
  *   - The CSI parameter index is bounded by the array's length; the
- *     starter bounded it by its size in bytes.
+ *     starter bounded it by its size in bytes. A parameter saturates at
+ *     65535 instead of wrapping, and a 256-colour index or an RGB
+ *     component above 255 is ignored, not taken modulo 256.
  *   - DECSET and DECRST act on every parameter, not only the first. */
 
 #include "term.h"
@@ -303,7 +305,8 @@ static void escape(term_t *t, uint8_t ch) {
 /* A digit or a ';' inside CSI or CSI ?; false for anything else. */
 static bool param_byte(term_t *t, uint8_t ch) {
     if (ch >= '0' && ch <= '9') {
-        t->params[t->nparam] = (uint16_t)(t->params[t->nparam] * 10u + (ch - '0'));
+        unsigned v = t->params[t->nparam] * 10u + (unsigned)(ch - '0');
+        t->params[t->nparam] = (uint16_t)(v > 0xFFFFu ? 0xFFFFu : v);
         return true;
     }
     if (ch == ';') {
@@ -344,15 +347,19 @@ static void sgr(term_t *t) {
         } else if (p >= 30 && p <= 37) {
             set_fg(t, palette[p - 30]);
         } else if ((p == 38 || p == 48) && i + 4 <= t->nparam && t->params[i + 1] == 2) {
-            uint16_t c = TERM_RGB((uint8_t)t->params[i + 2], (uint8_t)t->params[i + 3],
-                                  (uint8_t)t->params[i + 4]);
-            if (p == 38) set_fg(t, c);
-            else set_bg(t, c);
+            const uint16_t *rgb = &t->params[i + 2];
+            if (rgb[0] <= 255 && rgb[1] <= 255 && rgb[2] <= 255) {
+                uint16_t c = TERM_RGB(rgb[0], rgb[1], rgb[2]);
+                if (p == 38) set_fg(t, c);
+                else set_bg(t, c);
+            }
             i += 4;
         } else if ((p == 38 || p == 48) && i + 2 <= t->nparam && t->params[i + 1] == 5) {
-            uint16_t c = xterm_palette[(uint8_t)t->params[i + 2]];
-            if (p == 38) set_fg(t, c);
-            else set_bg(t, c);
+            if (t->params[i + 2] <= 255) {
+                uint16_t c = xterm_palette[t->params[i + 2]];
+                if (p == 38) set_fg(t, c);
+                else set_bg(t, c);
+            }
             i += 2;
         } else if (p == 39) {
             set_fg(t, t->default_fg);

@@ -68,7 +68,7 @@ last of these.
 **Checked on the host** (macOS, Apple clang 21, `-Wall -Wextra -Werror`,
 C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
 
-- Both builds compile clean: `-DPICO_SHELL_HOST=ON` (the core and five
+- Both builds compile clean: `-DPICO_SHELL_HOST=ON` (the core and six
   test binaries) and the firmware, development and release
   (`-DPICO_SHELL_UART=OFF`). The firmware is `BOOT2350.uf2`: family
   `rp2350-arm-s`, 147 blocks at `0x20000000`–`0x20009300` (stage3 accepts
@@ -93,6 +93,19 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
   Ctrl-C, the line limit, `font`, and `displaytest` stopping when asked.
 - `test_keys`: presses type, holds and releases do not (a release with no
   press included), Caps Lock is accepted, Ctrl chords, UART bytes.
+- `test_screen` (added after the PR's review): the port's renderer,
+  `src/port/screen.c`, built on the host against a model of the panel
+  (`fake_lcd.c`: 480 rows of frame memory, the scroll offset, windows
+  that must not wrap). After every flush of 1,500 random runs of
+  sequences, in both fonts, every panel pixel must be the one the grid
+  calls for, with the cursor at the terminal's cursor and nowhere else; a
+  panel that ignores the scroll must differ, and does. Also: scrolling
+  under a visible cursor leaves no stray underline, the blink's two
+  phases, output showing the cursor at once, and a one-cell change
+  sending one cell's 80 pixels.
+- CSI parameters saturate at 65535, and an out-of-range 256-colour index
+  or RGB component is ignored (also from the review); `test_term` checks
+  both.
 - **Planted bugs**, one at a time in a scratch copy, each rebuilt clean;
   every one failed at least one test: the dirty mask not moved on a
   scroll up (term, displaytest), moved the wrong way on a scroll down
@@ -101,6 +114,12 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
   graphics off by one (term, displaytest), regions ignored (term), no
   LF to CR LF (shell, displaytest), releases typing (keys), no
   checkerboard for 0x80 and above (term), reverse not swapping (term).
+  In `screen.c`, each caught by `test_screen`: the cursor erased after the
+  scroll instead of before, the cursor kept through a scroll, a span one
+  cell short in the shadow, the shadow indexed by panel row, no bold, a
+  font change keeping the shadow, no blink, output not restarting the
+  blink, the scroll sent the wrong way. In `term.c`: parameters wrapping,
+  and a colour index taken modulo 256.
 
 **Not checked:**
 
@@ -113,7 +132,7 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
   take the command. Check it on a board with the loader.
 - 75 MHz on the panel by eye. The owner made it the default after M0's
   measurements (design.md §4.1); M1's board run is the first at that rate.
-- The cursor's blink on the panel, and that a scroll leaves no stray
-  underline.
+- The cursor's blink and the scroll's underline by eye on the panel; both
+  are now checked on the host against the panel model (`test_screen`).
 - Every key code and event on the southbridge (HW §6.2); key events are
   not logged in this build, since the UART carries the screen.

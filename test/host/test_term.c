@@ -120,6 +120,8 @@ static int test_cursor(void) {
     CHECK(t.row == 31 && t.col == 39, "CUP clamps to %u,%u", t.row, t.col);
     feed("\033[H");
     CHECK(t.row == 0 && t.col == 0, "CUP home");
+    feed("\033[65537;9999999999H");
+    CHECK(t.row == 31 && t.col == 39, "huge counts saturate, not wrap: %u,%u", t.row, t.col);
     feed("\033[12G\033[7d");
     CHECK(t.row == 6 && t.col == 11, "CHA and VPA to %u,%u", t.row, t.col);
     feed("\0337\033[H\0338");
@@ -183,6 +185,14 @@ static int test_sgr(void) {
     CHECK(ink_of("\033[2m") == TERM_DIM, "SGR 2 is dim");
     CHECK(ink_of("\033[31;0m") == TERM_FOREGROUND, "SGR 0 resets");
     CHECK(ink_of("\033[31;39m") == TERM_FOREGROUND, "SGR 39");
+
+    /* Out of range: ignored, never taken modulo 256 or 65536. 65792 wraps
+     * a 16-bit parameter to 256, and 256 wraps a byte to black. */
+    CHECK(ink_of("\033[38;5;300m") == TERM_FOREGROUND, "SGR 38;5;300 is ignored");
+    CHECK(ink_of("\033[38;5;65792m") == TERM_FOREGROUND, "SGR 38;5;65792 is ignored");
+    CHECK(ink_of("\033[38;2;300;0;0m") == TERM_FOREGROUND, "SGR 38;2 with 300 is ignored");
+    CHECK(ink_of("\033[38;5;300;31m") == TERM_RGB(205, 0, 0),
+          "an ignored colour still consumes its parameters");
 
     fresh();
     feed("\033[1;4ma\033[22;24mb");
