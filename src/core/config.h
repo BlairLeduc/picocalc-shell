@@ -37,6 +37,10 @@
 #define SHELL_LS_MAX       512u
 #define SHELL_TREE_DEPTH   16u
 
+/* Running a program (uf2.c): the most 4 KB flash sectors an app
+ * partition can have, 16 MB, for the bitmap of those that differ. */
+#define SHELL_FLASH_SECTORS_MAX 4096u
+
 /* out_printf formats into this, and out_write translates LF to CR LF in
  * chunks of this, so neither needs an allocator. */
 #define SHELL_OUT_CHUNK    128u

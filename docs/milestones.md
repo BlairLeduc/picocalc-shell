@@ -16,6 +16,157 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M2 — Run (branch `m2-run`, 2026-10-13)
+
+**Done.** The gate held: the first-run time is close to its estimate, so
+64 KB block erase was not added. Checked on the Plus 2 W, which now has
+UF2 Loader 2.5, and by the owner on a Pico 2 W.
+
+**Checked on the host** (macOS, Apple clang 21, `-Wall -Wextra -Werror`,
+C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
+
+- Both builds compile clean, development and release, and `exit-test`.
+- `test_uf2`, over a FAT16 image and a fake 4 MB app partition that
+  behaves as NOR flash (erase to 0xFF, programming only clears bits),
+  counts its operations, and can lose power after any number of them:
+  - **Binary info:** a synthetic image (strings in flash and, through the
+    mapping table, in RAM; a pointer out of the image; an unterminated
+    string; a cut image; no header); and the real ones: stage3 and the
+    loader's menu (2.2, the published build), pico-oric, pico-atom and
+    pico-ace by name.
+  - **The rules:** each RP2350 family, with and without the E10 block and
+    the malformed kind; another chip's blocks refused, a UF2 for two chips
+    taken; no family refused; past the partition's end, to it, below it;
+    RAM programs to stage3's limit and past it; damaged files (a block
+    missing, repeated, out of order, misnumbered, the count changing, a
+    short payload, misaligned, the file cut short, flash and RAM mixed,
+    a bad magic, one marked not for flash); a gap.
+  - **Flashing:** a first run over junk writes every sector, and flash
+    then holds the program with the gap erased and the proginfo words
+    cleared; the check writes nothing; a second run writes nothing; one
+    changed page writes its sector and the first; a shorter program
+    writes only its sectors; a page no longer filled is erased; a failed
+    write leaves nothing bootable, and the next run completes.
+  - **Power lost after every number of flash operations** (40 or more),
+    switching between two programs: each time, flash holds the old
+    program untouched or nothing bootable, never a part of the new one
+    that could boot.
+  - **The real UF2s:** the three emulators flash, each again writes
+    nothing, and pico-oric after pico-ace wrote 39 of its 44 sectors; the
+    loader's menu is a RAM program; stage3 (family absolute) and the
+    RP2040 menu are not for this device.
+  - **The shell:** not found, with and without `/pico2-apps`; by name, in
+    any case, by absolute and relative path; a path as given; a directory;
+    arguments and redirection refused; a builtin beating a program of the
+    same name; not for this device, not a UF2, damaged, each with flash
+    untouched; Ctrl-C in the check; a flash failure's message; RAM
+    programs by their 8.3 path (`/PICO2-~1/LONGPR~1.UF2`); `menu` missing,
+    with an operand, a flash program (refused, never flashed) and a RAM
+    one; a loader problem and no loader; no card.
+- **Planted bugs**, 24, one at a time in a scratch copy, each rebuilt
+  clean; every one failed `test_uf2`: the proginfo words not cleared; the
+  first sector not erased first; the IMAGE_DEF page programmed first;
+  blocks allowed to descend; no family accepted; RP2040 accepted; the
+  malformed E10 kind not noticed; misnumbering after it; a short file
+  accepted; RAM to the end of SRAM; never differing; always differing;
+  the partition's end unchecked; a differing sector not erased; Ctrl-C
+  ignored; writing when nothing differs; `menu` flashed; arguments
+  allowed; long names given to stage3; programs before builtins; a loader
+  problem ignored; a path with no card saying "not found"; an unbounded
+  binary info string; the mapping table ignored. A first try at "the E10
+  block not skipped" changed nothing: its family, absolute, is skipped
+  anyway, so the address rule only serves to notice the malformed kind.
+
+**Checked on the board:** Claude, on the Plus 2 W (RP2350B rev 2, id
+`7458DC82A89AAC12`), development build, 2026-10-13.
+
+- **UF2 Loader installed.** With the owner's approval, its first 512 KB of
+  flash was saved, and UF2 Loader 2.5's stage3, built for `pico2` from a
+  copy of `references/uf2loader` against SDK 2.3.1 (the loader pins
+  2.2.0), was written at offset 0 over SWD and verified. That overwrote
+  the start of pico-oric there. The owner put the shell, the loader's 2.5
+  menu as `/BOOT2350.ORG`, the three emulators and `exit-test` on the
+  board's test card.
+- **From SRAM over SWD** (`out/m2-ram-dev-3.log`): the partition (0x2000,
+  4,088 KB) and stage3's version (2.5) were read, and programs refused,
+  as stage3 had not started the shell. The first tries found neither:
+  after a boot from SRAM, flash is not set up (hardware-notes.md §2.7).
+- **From the card** (`tools/swd-shell.sh`; `out/m2-card-dev-*.log`): stage3
+  2.5 loaded the shell, which read the flash end (0x103fe000) and could
+  run programs. pico-oric's first run wrote 44 sectors, and afterwards all
+  703 pages in the partition matched its UF2, proginfo words erased (read
+  back over SWD). Its second run wrote nothing.
+- **`exit-test`** ran and called `picocalc_shell_exit()`: the card was
+  found, and stage3 loaded the shell again. Three times, timed.
+- **A reset in the middle of a write** (a watchdog reset over SWD, no
+  command, about a second into pico-atom's 2.7 s write): stage3 found no
+  image and loaded the shell; the partition's first sector was all 0xFF;
+  the next `pico-atom` wrote the 25 sectors left.
+- **`menu`** handed `/BOOT2350.ORG` to stage3 by `BOOT_RAM`, and SRAM then
+  held the loader's menu (`uf2load` 2.5, read over SWD).
+- Ctrl-C right after Enter stopped the check with nothing written and no
+  reboot; `pico-ace x` was refused.
+- **`exit-test` waiting for a key** (after the owner's run, below; written
+  into the partition over SWD and started by stage3,
+  `out/m2-exit-key.log`): it showed its instructions on the panel, a key
+  typed over the UART found the card in, and the shell came back. With
+  the card out: not tried here. On the owner's Pico 2 W the first build
+  of it returned at once without a key. It took any UART byte as a key,
+  and the likely cause is that GP5, with nothing on it, floats and reads
+  as bytes; not yet confirmed. GP5 is now
+  pulled up, what is waiting is dropped before the prompt, only a
+  printable character or CR counts, and the panel says which key woke
+  it and from where; that build waited on the Plus 2 W
+  (`out/m2-exit-key-2.log`), where the probe holds GP5, so the fault
+  itself was not seen here.
+- **The owner, on the Pico 2 W, 2026-10-13, that build:** it waited for a
+  key; with the card out, a key gave the no-card message and
+  `picocalc_shell_exit()` returned false; with the card back, a key
+  rebooted into the shell.
+- **The owner, on a Pico 2 W, UF2 Loader 2.5, 2026-10-13:** M2 worked as
+  expected. Power cut during a write: at the next power-on the PicoCalc
+  showed the shell.
+
+**Measurements** (Plus 2 W, development build, UF2 Loader 2.5,
+2026-10-13). Times from Enter are host timestamps on the UART lines
+(a script in the session's scratchpad, not committed); the passes are the
+shell's own clock.
+
+| What | Estimate | Measured |
+|---|---|---|
+| First run, Enter to reboot | ~3 s (with the boot) | pico-oric 3.00 s (check 0.33, write 2.65 s), pico-atom 2.96 s, pico-ace 2.72 s; pico-oric over junk 3.32 s (write 3.00 s) |
+| Run again, Enter to reboot | ~0.5 s (with the boot) | pico-oric 0.40 s, pico-atom 0.35 s, pico-ace 0.33 s |
+| Reboot to the program's first line | — | 0.53 s, three runs within 2 ms (`exit-test`) |
+| Exit to the shell's prompt | ~0.5 s | 1.35 s: banner 1.26 s after `exit-test` started, prompt 0.09 s later; three runs within 3 ms |
+| A sector written (erase, 16 pages, read back) | ~56 ms (datasheet) | about 61 ms |
+| RAM, development / release (link map) | ~504 KB available | 158,064 B / 154,140 B |
+
+So a first run is about 3.5 s to the program and a repeat about 0.9 s.
+Both reboot figures are stage3's: its 0.5 s wait for a key at every
+start, which the estimates left out.
+
+**Not checked:**
+
+- Which build the owner ran, and their timings; the release build on the
+  Plus 2 W.
+- A power cut that leaves the first sector's last page half programmed:
+  the owner's cut came back to the shell, but where in the write it fell
+  is not known.
+- Pressing a key at the prompt between Enter and the reboot; long
+  programs (more than the emulators' 176 KB); a UF2 on the card for
+  RP2040 or past the partition (host only).
+- The write's read-back catching a flash fault: no test makes flash
+  fail silently.
+- The emulators themselves running after the shell flashed them: flash
+  matched pico-oric's UF2 byte for byte, but its screen was not looked at.
+- The southbridge's version read failed (-2) at every start from the card
+  on this board, and not over SWD: not looked into.
+- Carried from M1: time taken by `ls` of a large directory, `df` with
+  FSINFO not trusted, and a large `cp`.
+- Carried from M0: the start time from power-on through stage3 (now
+  timed from a reboot: 1.26 s to the banner), 75 MHz by eye, the
+  cursor's blink by eye, every key code.
+
 ## M1 — Files (branch `m1-files`, 2026-10-12)
 
 **Done.** Timings of card work are carried forward (below).

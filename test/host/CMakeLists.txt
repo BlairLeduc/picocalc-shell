@@ -10,6 +10,7 @@ set(SHELL_HOST_TESTS
     test_shell
     test_skeleton
     test_term
+    test_uf2
 )
 
 # The core's files need a disk: the host's image file, or none.
@@ -30,3 +31,6 @@ target_include_directories(test_screen PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMA
 target_compile_options(test_screen PRIVATE ${SHELL_WARNINGS})
 add_test(NAME test_screen COMMAND test_screen)
 set_tests_properties(test_screen PROPERTIES SKIP_RETURN_CODE 77)
+
+# The real UF2s test_uf2 reads, if tools/fetch-suites.sh has fetched them.
+target_compile_definitions(test_uf2 PRIVATE SHELL_SUITES_DIR="${CMAKE_SOURCE_DIR}/test/suites")

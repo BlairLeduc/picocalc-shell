@@ -335,6 +335,17 @@ things seen in the same work:
   by OpenOCD's `reset halt`: after one, the timer kept counting from 91 s.
   A "time since reset" read with `time_us_64()` therefore counts from the
   last power-on or watchdog reset.
+- **Flash is not set up after such a boot.** The bootrom set up neither
+  XIP nor its partition table, because it booted from SRAM, not flash:
+  reads through XIP returned garbage, and `rom_get_partition_table_info`
+  reported no table (`PT_INFO_PT_INFO` gave a partition count of 0)
+  even after `rom_load_partition_table(..., force_reload)`. Calling
+  `rom_connect_internal_flash()`, `rom_flash_exit_xip()`,
+  `rom_flash_flush_cache()` and `rom_flash_enter_cmd_xip()` first fixed
+  both: the table then read correctly. A program the bootrom started
+  from flash, such as UF2 Loader's stage3, and a RAM program stage3
+  loads after it, find flash already set up. Found on a Plus 2 W,
+  2026-10-13, with the PicoCalc shell started over SWD.
 
 **A build with no UART can still be read over SWD**, with both cores
 running. OpenOCD started with `init` and no `reset` or `halt` reads memory
@@ -1253,6 +1264,21 @@ Additional constraints:
 - **Choose the visible behavior.** Pause/mute explicitly or provision a path
   that can continue safely without flash. Do storage at defined application
   boundaries rather than inside a latency-sensitive frame loop.
+
+**What a write costs.** Erasing one 4 KB sector and programming its 16
+pages through the bootrom's `rom_flash_op`, then reading it back through
+XIP, took **about 61 ms a sector** on a Plus 2 W (16 MiB Winbond) at
+150 MHz: 39 sectors of pico-atom in 2.66 s, less 0.28 s spent reading
+the UF2 from the card in the same loop (PicoCalc shell, 2026-10-13). This
+is the time from the shell's own clock, not a datasheet figure.
+
+**`time_us_64()` at `main` does not count a bootloader's time.** A
+program started by UF2 Loader's stage3 read about 490 µs at its first
+line, though stage3 had waited 0.5 s for a key before starting it, and
+the UART on the host saw 0.53 s from the reboot to that line. Something
+between, stage3 or the bootrom's `rom_chain_image`, resets the timer.
+Time a whole boot from outside, as with timestamps on the host. Seen on a
+Plus 2 W, 2026-10-13.
 
 ---
 

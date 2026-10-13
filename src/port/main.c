@@ -24,6 +24,7 @@
 #include "keycodes.h"
 #include "keys.h"
 #include "lcd.h"
+#include "loader.h"
 #include "screen.h"
 #include "shell.h"
 #include "shell_version.h"
@@ -39,6 +40,8 @@ static term_t       g_term;
 static shell_t      g_shell;
 static keys_t       g_keys;
 static board_info_t g_board;
+static shell_loader_t  g_loader;
+static loader_status_t g_loader_st;
 
 static uint64_t s_next_poll;
 /* volatile, so the release build keeps them for a read over SWD. */
@@ -130,6 +133,12 @@ static void log_banner(bool clocks_ok, uint32_t i2c_hz, sb_status_t sb, const ui
         printf("  southbridge  : i2c %lu Hz, version read failed (%d)\n", (unsigned long)i2c_hz,
                (int)sb);
     printf("  lcd          : spi %lu Hz configured\n", (unsigned long)spi_hz);
+    if (g_loader_st.part_size)
+        printf("  loader       : stage3 %s, app partition 0x%06lx + %lu KB, flash end 0x%08lx\n",
+               g_loader_st.version ? g_loader_st.version : "(no version)",
+               (unsigned long)g_loader_st.part_offset, (unsigned long)(g_loader_st.part_size >> 10),
+               (unsigned long)g_loader_st.flash_end);
+    printf("  programs     : %s\n", g_loader.problem ? g_loader.problem : "can be run");
     printf("  memory       : static data ends at %p, %lu bytes of SRAM\n", (void *)&__end__,
            (unsigned long)((uintptr_t)&__end__ - SRAM_BASE));
     printf("  start        : main at %llu us, lcd up at %llu us since reset\n",
@@ -151,6 +160,7 @@ int main(void) {
     bool clocks_ok = board_init_clocks();
     stdio_init_all();
     board_identify(&g_board);
+    loader_init(&g_loader, &g_loader_st);
 
     uint32_t i2c_hz = sb_init();
     uint8_t ver[2] = { 0, 0 };
@@ -167,6 +177,7 @@ int main(void) {
     const out_t out = { con_write, NULL, false };
     const shell_hooks_t hooks = { now_us, interrupted, NULL };
     shell_init(&g_shell, &out, &hooks, SHELL_VERSION);
+    shell_set_loader(&g_shell, &g_loader);
     shell_start(&g_shell);
     s_prompt_us = time_us_64();
 

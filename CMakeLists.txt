@@ -12,6 +12,7 @@ option(PICO_SHELL_HOST "Build the portable core and its host tests, with no Pico
 
 # Every fixed capacity lives in src/core/config.h; nothing here duplicates one.
 set(SHELL_CORE_SOURCES
+    src/core/bininfo.c
     src/core/displaytest.c
     src/core/files.c
     src/core/font-5x10.c
@@ -20,8 +21,10 @@ set(SHELL_CORE_SOURCES
     src/core/out.c
     src/core/parse.c
     src/core/path.c
+    src/core/run.c
     src/core/shell.c
     src/core/term.c
+    src/core/uf2.c
 )
 
 set(SHELL_WARNINGS -Wall -Wextra -Werror)
@@ -127,6 +130,7 @@ else()
         src/port/diskio.c
         src/port/kbd.c
         src/port/lcd.c
+        src/port/loader.c
         src/port/main.c
         src/port/screen.c
         src/port/sd.c
@@ -139,7 +143,9 @@ else()
     pico_set_program_name(shell "shell")
     pico_set_program_description(shell "UNIX-like command line for the PicoCalc")
 
-    target_include_directories(shell PRIVATE src/port ${SHELL_GENERATED})
+    # include/: the header programs use to return to the shell, which
+    # loader.c checks against its own idea of the protocol.
+    target_include_directories(shell PRIVATE src/port include ${SHELL_GENERATED})
     target_compile_options(shell PRIVATE ${SHELL_WARNINGS})
     add_dependencies(shell shell_version)
     target_compile_definitions(shell PRIVATE
@@ -158,6 +164,7 @@ else()
         pico_unique_id
         hardware_clocks
         hardware_dma
+        hardware_flash
         hardware_i2c
         hardware_spi
         hardware_vreg
@@ -165,6 +172,30 @@ else()
     pico_enable_stdio_uart(shell ${PICO_SHELL_UART_ON})
     pico_enable_stdio_usb(shell 0)
     pico_add_extra_outputs(shell)
+
+    # A flash program that returns to the shell when a key is pressed: the
+    # board check of include/picocalc_shell.h (design.md §3.4). It shows
+    # what it does with the shell's own panel, terminal and keyboard code.
+    add_executable(exit-test
+        test/pico/exit_test.c
+        src/port/kbd.c
+        src/port/lcd.c
+        src/port/screen.c
+        src/port/southbridge.c
+    )
+    target_include_directories(exit-test PRIVATE include src/port)
+    target_compile_options(exit-test PRIVATE ${SHELL_WARNINGS})
+    target_compile_definitions(exit-test PRIVATE
+        PICO_SHELL_LCD_SPI_HZ=${PICO_SHELL_LCD_SPI_HZ}
+        PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1
+        PICO_DEFAULT_UART=1
+        PICO_DEFAULT_UART_TX_PIN=4
+        PICO_DEFAULT_UART_RX_PIN=5
+    )
+    target_link_libraries(exit-test shell_core pico_stdlib hardware_dma hardware_i2c hardware_spi)
+    pico_enable_stdio_uart(exit-test 1)
+    pico_enable_stdio_usb(exit-test 0)
+    pico_add_extra_outputs(exit-test)
 
     # Memory use on every build (design.md §7, EL §2.1).
     target_link_options(shell PRIVATE -Wl,--print-memory-usage)
