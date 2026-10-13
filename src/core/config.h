@@ -19,9 +19,23 @@
 #define TERM_COLS_MAX      TERM_COLS_5X10
 #define TERM_PARAMS        16u    /* CSI parameters kept; more are dropped */
 
-/* One line typed at the prompt, without its terminator. */
+/* One line typed at the prompt, without its terminator, and what the
+ * parser makes of it (parse.h): words across all its commands, and
+ * commands joined by ;, && and ||. */
 #define SHELL_LINE_MAX     255u
-#define SHELL_WORDS_MAX    16u
+#define SHELL_WORDS_MAX    32u
+#define SHELL_CMDS_MAX     8u
+
+/* A path on the card, as the shell resolves it (path.h): FAT's own limit
+ * on a name, and room for a few levels above it. */
+#define SHELL_PATH_MAX     255u
+
+/* Files (files.c): the buffer cat, cp and redirection copy through; the
+ * names ls sorts, packed, and how many; how deep cp -r and rm -r go. */
+#define SHELL_COPY_BUF     4096u
+#define SHELL_LS_NAMES     16384u
+#define SHELL_LS_MAX       512u
+#define SHELL_TREE_DEPTH   16u
 
 /* out_printf formats into this, and out_write translates LF to CR LF in
  * chunks of this, so neither needs an allocator. */

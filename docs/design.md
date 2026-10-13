@@ -1,7 +1,7 @@
 # PicoCalc Shell — design
 
 Status: **Draft 3, 2026-10-12.** Feasibility study and first design. M0
-(the skeleton) is done ([milestones.md](milestones.md)).
+(the skeleton) and M1 (files) are done ([milestones.md](milestones.md)).
 
 The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
 and pico-oric). Pico Logo is a special case, because it keeps a filesystem
@@ -22,6 +22,8 @@ questions are open; the design is ready for M0.
 | 2026-10-12 | RP2350 boards only; RP2040 boards are left out. | 1 |
 | 2026-10-12 | Programs live in `/pico2-apps/`, the loader menu's own directory, not `/bin`. | 4.3 |
 | 2026-10-12 | The LCD's SPI runs at 75 MHz by default, after M0's measurements; 25 MHz stays as a build option. | 4.1 |
+| 2026-10-12 | `ls` hides names FAT marks hidden or system, as it hides names starting with `.`. | 4.2 |
+| 2026-10-12 | Variables come with M4. | 4.4, 10 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -315,20 +317,39 @@ runs at 115,200 baud; measure display speed in the release build.
 
 ### 4.2 Filesystem
 
-- **FatFs R0.15**, with the emulators' `ffconf.h` plus `FF_FS_RPATH = 2`
-  (current directory and `..`) and `FF_USE_CHMOD`. FAT12, FAT16 and FAT32
-  are all supported; exFAT stays off.
+- **FatFs R0.15**, with the emulators' `ffconf.h` (`src/fatfs/ffconf.h`)
+  plus `FF_USE_CHMOD` and `FF_FS_LOCK`, so a file open twice, or removed
+  while open, is refused rather than corrupted. FAT12, FAT16 and FAT32 are
+  all supported; exFAT stays off. The host build adds `FF_USE_MKFS` to
+  format its test images.
+- **The shell resolves paths itself** (`src/core/path.c`): it keeps the
+  current directory as a string, resolves `.` and `..` against it, and
+  gives FatFs absolute paths only (`FF_FS_RPATH = 0`). *Changed at M1*
+  from `FF_FS_RPATH = 2`: FatFs forgets its current directory when it
+  mounts a changed card, and the prompt would need a walk up the tree
+  after every command. `cd` stores each name as the card spells it, so
+  `cd DOCS` into `Docs` shows `/home/Docs>`.
+- **One mount, while the card stays in.** The main loop polls card
+  detect; any reading of "out" marks the disk uninitialised, and FatFs
+  mounts afresh at the next command that touches it (HW §7.1's bounce).
+  No file or directory stays open between commands.
 - **The SD card driver** is the emulators' `sd.c` and `diskio.c` (HW §7.1).
   Every wait is bounded below the southbridge's 2.5 s watchdog.
 - **UNIX paths on FAT.** `/` is the card root and the separator. Names are
   case-insensitive but keep their case, as FAT has them, and the
   documentation says so. `ls` and globs hide names starting with `.` or
-  `._` (macOS AppleDouble, HW §7.1) unless `-a` is given.
+  `._` (macOS AppleDouble, HW §7.1), and names with FAT's hidden or
+  system attribute, such as Windows's `System Volume Information`, unless
+  `-a` is given (*settled 2026-10-12*). A hidden name given as an operand
+  is shown.
 - **No clock** (HW §1.2). `FF_FS_NORTC`, as in the emulators, gives files a
   fixed timestamp. `date` may set a time for the session later.
-- **Safe writes** (EL §8.6). `cp`, `mv` across volumes, and vi's `:w` write
-  `name.new`, unlink `name`, then rename. Shell files that are read at
-  startup fall back to a whole `.new`.
+- **Safe writes** (EL §8.6). `cp`, `>`, `>>`, and vi's `:w` write
+  `name.new`, unlink `name`, then rename; `>>` copies the old file into
+  `name.new` first. A write that fails or is stopped removes `name.new`
+  and leaves `name` as it was. Shell files that are read at startup fall
+  back to a whole `.new`. `mv` is a rename: one volume, so it never
+  copies.
 - **USB disk.** `usbdisk` unmounts FatFs and offers the card over USB MSC,
   as the loader's menu does. Ejecting on the host returns to the shell.
 
@@ -370,6 +391,14 @@ This is deliberately small: UNIX spelling with a 1980s micro's ambitions.
 - `;`, `&&` and `||`. There is no `if`, `for` or functions in v1.
 - **Line editing** with history and Tab completion of commands and paths.
 - **Scripts:** `/etc/profile` runs at startup, and `sh file` runs a script.
+
+*As built at M1* (`src/core/parse.c`): words, quoting and escapes, `#`
+comments, `;`, `&&`, `||` and the three redirections. The whole line is
+parsed before any of it runs, so a mistake at its end stops all of it, as
+in sh. `|` is refused with a message until M4. Errors go to the terminal,
+never to a redirection. Break, Esc or Ctrl-C stops a long command and drops
+the rest of the line. Variables come with M4 (*settled 2026-10-12*);
+until then `$` is an ordinary character.
 
 ### 4.5 Builtins
 
@@ -451,7 +480,8 @@ decide (§4.1).
 
 ## 6. Build and test
 
-- **Layout:** `src/core/`, `src/port/`, `include/picocalc_shell.h`,
+- **Layout:** `src/core/`, `src/port/`, `src/host/` (the host's disk
+  and shell), `src/fatfs/ffconf.h`, `include/picocalc_shell.h`,
   `test/host/`, `tools/`, `docs/`, plus `references/` (read-only).
 - **Targets:** one CMake tree with two targets, as in the emulators. The
   default is the firmware: `PICO_BOARD=pico2`, `no_flash`, with output named
@@ -462,8 +492,13 @@ decide (§4.1).
   everything except drivers.
 - **Tests:** no framework, as in EL §11.1: one binary per area under CTest,
   with exit code 77 for a skip. The builtins are tested against FAT16 and
-  FAT32 images made with `mkfs.fat`, the UF2 parser against the emulators'
-  real UF2s, and vi against key sequences.
+  FAT32 images, the UF2 parser against the emulators' real UF2s, and vi
+  against key sequences. *Changed at M1:* the images are formatted by
+  FatFs's own `f_mkfs` in the host build, not by `mkfs.fat`, which is not
+  installed on the development Mac; so the tests need no tool beyond the
+  compiler. A card formatted by another tool is checked on the board.
+  `src/host/host_disk.c` can fail every write after the next *n*, which is
+  how the safe-write rule is tested at each sector of a copy.
 - **Two builds** (EL §13.2). The development build has UART1 log and typed
   keys. The release build has no UART; `tools/swd-drive.py` types into it
   and reads its screen and counters over SWD.
@@ -496,6 +531,12 @@ Comfortable. Print the memory use on every build (EL §2.1). **Measured at
 M0** (link map, 2026-10-12, Pico SDK 2.3.1, Arm GCC 15.2, `pico2`
 Release): the development build uses 72,884 B of RAM (41,648 B of code
 and read-only data, 33,284 B of `.bss`), the release build 69,308 B.
+**Measured at M1** (the same tools, 2026-10-12): development 140,908 B
+(76,940 B of code and read-only data, 66,016 B of `.bss`), release
+137,388 B. Of the growth, FatFs and the builtins are about 35 KB of code,
+and `ls`'s sorting buffers (16 KB of names, 4 KB for 512 entries) and the 4 KB copy
+buffer most of the `.bss`. The deepest call chain, `cp` down into FatFs's
+`f_rename`, needs well under 2 KB of the 4 KB stack (`-fstack-usage`).
 
 ## 8. Risks
 
@@ -543,6 +584,6 @@ in [milestones.md](milestones.md).
 - **M3 — vi.** The lifted key layer, the front end, CRLF handling and safe
   save. Done when it has edited `/atom/pico-atom.cfg` on the board and
   pico-atom has read the result.
-- **M4 — Comfort.** History, Tab completion, globs, pipes, `more`, `grep`,
-  `/etc/profile` and `usbdisk`.
+- **M4 — Comfort.** History, Tab completion, globs, pipes, variables
+  (§4.4), `more`, `grep`, `/etc/profile` and `usbdisk`.
 - **M5 — Exit everywhere.** *Exit to shell* in the emulators' shared menu.

@@ -13,20 +13,29 @@ option(PICO_SHELL_HOST "Build the portable core and its host tests, with no Pico
 # Every fixed capacity lives in src/core/config.h; nothing here duplicates one.
 set(SHELL_CORE_SOURCES
     src/core/displaytest.c
+    src/core/files.c
     src/core/font-5x10.c
     src/core/font-8x10.c
     src/core/keys.c
     src/core/out.c
+    src/core/parse.c
+    src/core/path.c
     src/core/shell.c
     src/core/term.c
 )
 
 set(SHELL_WARNINGS -Wall -Wextra -Werror)
 
+include(cmake/fatfs.cmake)
+
+# The core uses FatFs's API for files (design.md §5); the disk under it is
+# the port's (the SD card) or the host's (an image file).
 function(shell_core_library)
+    shell_fatfs_library()
     add_library(shell_core STATIC ${SHELL_CORE_SOURCES})
     target_include_directories(shell_core PUBLIC src/core)
     target_compile_options(shell_core PRIVATE ${SHELL_WARNINGS})
+    target_link_libraries(shell_core PUBLIC shell_fatfs)
 endfunction()
 
 if (PICO_SHELL_HOST)
@@ -34,8 +43,29 @@ if (PICO_SHELL_HOST)
     set(CMAKE_C_STANDARD 11)
     set(CMAKE_C_STANDARD_REQUIRED ON)
     set(CMAKE_C_EXTENSIONS OFF)
+    # The FatFs/disk cycle below repeats two archives on the link line,
+    # which GNU ld needs and Apple's linker warns about.
+    if (APPLE)
+        add_link_options(LINKER:-no_warn_duplicate_libraries)
+    endif()
 
     shell_core_library()
+    # Only the host formats disks: the tests' FAT16 and FAT32 images.
+    target_compile_definitions(shell_fatfs PUBLIC SHELL_FATFS_MKFS=1)
+
+    # The host's disk, an image file, and the host shell over it.
+    add_library(shell_host_disk STATIC src/host/host_disk.c)
+    target_include_directories(shell_host_disk PUBLIC src/host)
+    target_compile_options(shell_host_disk PRIVATE ${SHELL_WARNINGS})
+    target_link_libraries(shell_host_disk PUBLIC shell_fatfs)
+    # FatFs calls the disk, and the disk FatFs's types: a cycle, which
+    # CMake writes out so that GNU ld, which scans each archive once in
+    # order, finds the disk for a program that names only the core.
+    target_link_libraries(shell_fatfs PUBLIC shell_host_disk)
+
+    add_executable(shell src/host/main.c)
+    target_compile_options(shell PRIVATE ${SHELL_WARNINGS})
+    target_link_libraries(shell PRIVATE shell_core shell_host_disk)
 
     enable_testing()
     add_subdirectory(test/host)
@@ -94,10 +124,12 @@ else()
 
     add_executable(shell
         src/port/board.c
+        src/port/diskio.c
         src/port/kbd.c
         src/port/lcd.c
         src/port/main.c
         src/port/screen.c
+        src/port/sd.c
         src/port/southbridge.c
     )
     # The loader's stage3 loads /BOOT2350.UF2 into SRAM and runs it

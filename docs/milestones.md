@@ -16,6 +16,107 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M1 — Files (branch `m1-files`, 2026-10-12)
+
+**Done.** Timings of card work are carried forward (below).
+
+**Checked on the host** (macOS, Apple clang 21, `-Wall -Wextra -Werror`,
+C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
+
+- Both builds compile clean, development and release.
+- `test_path`: `.`, `..` (at the root too), repeated and trailing `/`,
+  the length limit, and FAT's case-blind comparisons.
+- `test_parse`: quoting, escapes, comments, `;` `&&` `||`, the three
+  redirections, attached or not, and fifteen lines it must refuse; the
+  word and command limits.
+- `test_files`, once over a FAT16 image and once over FAT32, both
+  formatted by FatFs: every M1 builtin through `shell_run`, as typed.
+  Files hold LF, never CR LF; `>>` keeps what was there; `cat a > a`
+  reads the old file; errors go to the terminal, not into the file. `ls`
+  sorts without regard to case, goes down the columns in 40 and 64
+  columns and one per line into a file, hides `.name` and `._name`, and
+  with more than 512 names lists them all unsorted, with a note. `cd`
+  shows the card's spelling. `cp`, `cp -r` (made, or merged into),
+  `mv` (rename, into a directory, over a file, a change of case), `rm`,
+  `rm -r` (which carries on past a read-only file), `rmdir`, `mkdir -p`
+  and `touch`, each with its errors: the same file, into itself, a file
+  in the way, read-only, not empty, deeper than 16 levels. FatFs's lock
+  refuses a file written twice at once.
+- **Faults**, the same test: a card that stops taking writes after *n*
+  sectors, for every *n* across a `cp` over an existing file. Afterwards
+  the old file is whole, or the new one is, or the old is gone and a
+  whole `name.new` remains (EL §8.6); success is never claimed for a
+  copy that did not land. A full card: `cp` and `>>` say so and keep the
+  old file, and `df` shows 100 %. No card: each command says so and the
+  shell carries on. Ctrl-C stops `cp` and puts nothing half-copied in
+  place.
+- **Planted bugs**, 26, one at a time in a scratch copy, each rebuilt
+  clean; every one failed at least one test: writes straight to the file
+  (no `.new`); a failed write published; `..` keeping its slash; `ls`
+  sorting with case, across instead of down, columns into a file, hiding
+  only `._`; `||` after success; `cp` onto itself; `mv` into itself;
+  `cd` showing the typed case; `>` writing CR LF; `>>` not copying the
+  old file; `cp -r` not descending; `rm -r` stopping at the first
+  failure; a stopped `cp` putting its part in place; unknown options
+  ignored; a line ending in `&&`; Ctrl-C not lasting the line; `rmdir`
+  leaving emptiness to FatFs; the start directory kept from before; `df`
+  counting nothing used; `\` escaping everything in double quotes;
+  `path_within` without its root case; after the owner's decision on
+  hidden files, `ls` hiding by name only, and not hiding system files.
+  The first try missed `df`'s used figure, and the full-card `df` check
+  was added for it.
+- The host shell, `build/host/shell card.img`, made a FAT32 image and ran
+  `mkdir -p`, `cd`, `>`, `ls -l`, `cat`, `df`.
+
+**Checked on the board:**
+
+- **The owner, on a Pico 2 W, release build, 2026-10-12:** every M1
+  command, cards taken out and put back, no card, and cards formatted by
+  other tools; all worked as designed. This covers the writing commands,
+  the card swap (`card_poll` and the remount) and other tools' formats,
+  which the host tests cannot.
+- **Claude, on the Plus 2 W** (RP2350B rev 2, id
+`7458DC82A89AAC12`), development build from SRAM (`tools/swd-ram.sh`), the
+card that was in it, **reading only** (`out/m1-ram-dev-1.log`, `-2.log`):
+  the shell mounted a 30 GB FAT32 card at the first command and `pwd`,
+  `ls`, `ls /`, `ls -la /` and `df` were right. The card holds a
+  39,644-byte file whose long name is two spaces. `ls` shows it as it
+  is, but FatFs strips trailing spaces from a name it is given, so the
+  shell cannot name it to remove it.
+
+After the owner's run, `ls` was changed to hide FAT's hidden and system
+names as well (design.md §4.2, settled 2026-10-12). **The owner then
+checked, on the same board, 2026-10-12:** hidden and system names are
+hidden by `ls` and shown by `ls -a`; and a card pulled out during a
+`cp -r` gave a card I/O error, with the card fine afterwards.
+
+**Review of the PR** (Muse AI, 2026-10-12): the logic held up; the host
+build did not build on Linux. Fixed: `src/host/main.c` asks for POSIX
+(glibc hides `clock_gettime` under strict C11); the deep-path test's
+buffers are sized so GCC cannot see a truncation; and the FatFs/disk
+dependency is declared both ways, so GNU ld, which scans each archive
+once, links `test_shell`. These fixes are checked on macOS only; nothing
+here has a Linux toolchain. Found while fixing them: `shell_run` did not
+check a line's length, and one longer than SHELL_LINE_MAX would have
+overrun the parser's text; `parse_line` now refuses it, with tests. Left
+as it is: `nosuch > f` makes no `f`, where sh would.
+
+**Measurements:** none yet. Card timings are those in HW §7.1.
+
+| What | Estimate | Measured |
+|---|---|---|
+| RAM, development / release (link map) | ~504 KB available | 140,908 B / 137,388 B |
+
+**Not checked:**
+
+- Time taken by `ls` of a large directory, `df` on a card whose FSINFO is
+  not trusted (FatFs then reads the whole FAT, which can take seconds and
+  does not poll the keyboard), and a large `cp`.
+- Variables: moved to M4 (design.md §10).
+- Carried from M0: the start time from power-on through stage3,
+  `tools/swd-shell.sh` on a board with the loader, 75 MHz by eye, the
+  cursor's blink by eye, every key code.
+
 ## M0 — Skeleton (branch `m0-skeleton`, 2026-10-12)
 
 **Done**, but one measurement is carried forward: the start time from power-on

@@ -1,0 +1,979 @@
+/* files.c — the card's files (files.h).
+ *
+ * Everything large is static: the shell runs on a 4 KB stack (scratch Y),
+ * so FILs, FILINFOs, path buffers and the copy buffer live here, each
+ * owned by one step at a time. cp -r and rm -r walk the tree with an
+ * explicit stack of open directories rather than by recursion. */
+
+#include "files.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "path.h"
+
+_Static_assert(FF_FS_LOCK >= SHELL_TREE_DEPTH + 4,
+               "FatFs's lock table must hold a full walk and four files");
+
+/* A write through name.new (EL §8.6). */
+typedef struct {
+    FIL         fil;
+    const char *why;                        /* the first failure, or NULL */
+    char        path[SHELL_PATH_MAX + 1];
+    char        tmp[SHELL_PATH_MAX + 5];    /* path + ".new" */
+} safe_t;
+
+static FATFS   s_fs;
+static FILINFO s_fno;
+static FIL     s_src;      /* the file cat or cp reads */
+static FIL     s_in;       /* < */
+static safe_t  s_redir;    /* > and >> */
+static safe_t  s_copy;     /* cp's destination */
+static uint8_t s_buf[SHELL_COPY_BUF];
+
+/* Paths, each owned by one command at a time. */
+static char s_a[SHELL_PATH_MAX + 1], s_b[SHELL_PATH_MAX + 1], s_c[SHELL_PATH_MAX + 1];
+
+/* cp -r and rm -r: the directories open on the way down, and the length
+ * of each walked path at each level. */
+static DIR    s_dirs[SHELL_TREE_DEPTH];
+static size_t s_srclen[SHELL_TREE_DEPTH], s_dstlen[SHELL_TREE_DEPTH];
+static char   s_wsrc[SHELL_PATH_MAX + 1], s_wdst[SHELL_PATH_MAX + 1];
+
+static const char *why(FRESULT r) {
+    switch (r) {
+    case FR_OK:                  return "ok";
+    case FR_DISK_ERR:            return "card I/O error";
+    case FR_NOT_READY:           return "no card";
+    case FR_NO_FILE:
+    case FR_NO_PATH:             return "no such file or directory";
+    case FR_INVALID_NAME:        return "invalid name";
+    case FR_DENIED:              return "permission denied";
+    case FR_EXIST:               return "file exists";
+    case FR_WRITE_PROTECTED:     return "card is write-protected";
+    case FR_NOT_ENABLED:
+    case FR_NO_FILESYSTEM:       return "no FAT volume on the card";
+    case FR_LOCKED:              return "file in use";
+    case FR_TOO_MANY_OPEN_FILES: return "too many open files";
+    default:                     return "filesystem error";
+    }
+}
+
+static const char *const NO_SPACE = "no space left on the card";
+
+void files_mount(void) {
+    f_mount(&s_fs, "", 0);
+}
+
+/* f_stat, with the root, which FatFs cannot stat, as a directory. */
+static FRESULT stat_path(const char *path, FILINFO *fno) {
+    if (strcmp(path, "/") == 0) {
+        DIR d;
+        FRESULT r = f_opendir(&d, "/");
+        if (r == FR_OK) f_closedir(&d);
+        memset(fno, 0, sizeof *fno);
+        fno->fattrib = AM_DIR;
+        return r;
+    }
+    return f_stat(path, fno);
+}
+
+bool files_is_dir(const char *path) {
+    return stat_path(path, &s_fno) == FR_OK && (s_fno.fattrib & AM_DIR);
+}
+
+static bool resolve(shell_t *sh, const char *cmd, const char *arg, char *out) {
+    if (path_resolve(out, sh->cwd, arg)) return true;
+    shell_error(sh, "%s: %s: name too long\n", cmd, arg);
+    return false;
+}
+
+/* Leading options, such as -l -a or -la, up to "--" or the first
+ * operand: each letter of `allowed` found sets its bit in *flags. The
+ * index of the first operand, or -1 after printing the usage. */
+static int options(shell_t *sh, int argc, char **argv, const char *allowed, unsigned *flags,
+                   const char *usage) {
+    *flags = 0;
+    int i = 1;
+    for (; i < argc && argv[i][0] == '-' && argv[i][1]; i++) {
+        if (strcmp(argv[i], "--") == 0) return i + 1;
+        for (const char *c = argv[i] + 1; *c; c++) {
+            const char *p = strchr(allowed, *c);
+            if (!p) {
+                shell_error(sh, "%s: -%c: unknown option\nusage: %s\n", argv[0], *c, usage);
+                return -1;
+            }
+            *flags |= 1u << (p - allowed);
+        }
+    }
+    return i;
+}
+
+static int usage(shell_t *sh, const char *text) {
+    shell_error(sh, "usage: %s\n", text);
+    return 1;
+}
+
+/* ---- writing through name.new ----------------------------------------- */
+
+static const char *safe_open(safe_t *w, const char *path) {
+    w->why = NULL;
+    size_t n = strlen(path);
+    if (n + 4u > SHELL_PATH_MAX) return "name too long";
+    FRESULT r = stat_path(path, &s_fno);
+    if (r == FR_OK) {
+        if (s_fno.fattrib & AM_DIR) return "is a directory";
+        if (s_fno.fattrib & AM_RDO) return "read-only";
+    } else if (r != FR_NO_FILE) {
+        return why(r);
+    }
+    memcpy(w->path, path, n + 1);
+    memcpy(w->tmp, path, n);
+    memcpy(w->tmp + n, ".new", 5);
+    r = f_open(&w->fil, w->tmp, FA_CREATE_ALWAYS | FA_WRITE);
+    return r == FR_OK ? NULL : why(r);
+}
+
+static void safe_write(safe_t *w, const void *buf, size_t n) {
+    if (w->why) return;
+    UINT done;
+    FRESULT r = f_write(&w->fil, buf, (UINT)n, &done);
+    if (r != FR_OK) w->why = why(r);
+    else if (done < n) w->why = NO_SPACE;
+}
+
+static void safe_abort(safe_t *w) {
+    f_close(&w->fil);
+    f_unlink(w->tmp);
+}
+
+/* Close name.new and put it in place: NULL, or why the old file stays. */
+static const char *safe_commit(safe_t *w) {
+    FRESULT r = f_close(&w->fil);
+    if (!w->why && r != FR_OK) w->why = why(r);
+    if (w->why) {
+        f_unlink(w->tmp);
+        return w->why;
+    }
+    r = f_unlink(w->path);
+    if (r != FR_OK && r != FR_NO_FILE) {
+        f_unlink(w->tmp);
+        return why(r);
+    }
+    r = f_rename(w->tmp, w->path);
+    /* The old file is gone and the new one is whole, under its .new name. */
+    if (r != FR_OK) return "left as .new";
+    return NULL;
+}
+
+/* ---- redirection ------------------------------------------------------ */
+
+static void redir_write(void *ctx, const char *buf, size_t n) {
+    safe_write(ctx, buf, n);
+}
+
+bool files_redirect(shell_t *sh, const char *arg, bool append) {
+    if (!resolve(sh, "shell", arg, s_a)) return false;
+    const char *err = safe_open(&s_redir, s_a);
+    if (!err && append) {
+        /* >> copies what is there first, so the old file stays whole
+         * until the new one is. */
+        FRESULT r = f_open(&s_src, s_a, FA_READ);
+        if (r == FR_OK) {
+            UINT n;
+            while ((r = f_read(&s_src, s_buf, sizeof s_buf, &n)) == FR_OK && n > 0)
+                safe_write(&s_redir, s_buf, n);
+            f_close(&s_src);
+        }
+        if (r != FR_OK && r != FR_NO_FILE) s_redir.why = why(r);
+        err = s_redir.why;
+        if (err) safe_abort(&s_redir);
+    }
+    if (err) {
+        shell_error(sh, "shell: %s: %s\n", arg, err);
+        return false;
+    }
+    sh->out = (out_t){ redir_write, &s_redir, true };
+    sh->out_is_con = false;
+    return true;
+}
+
+bool files_redirect_end(shell_t *sh) {
+    sh->out = sh->con;
+    sh->out_is_con = true;
+    const char *err = safe_commit(&s_redir);
+    if (err) shell_error(sh, "shell: %s: %s\n", s_redir.path, err);
+    return err == NULL;
+}
+
+bool files_input(shell_t *sh, const char *arg) {
+    if (!resolve(sh, "shell", arg, s_a)) return false;
+    FRESULT r = f_open(&s_in, s_a, FA_READ);
+    if (r != FR_OK) {
+        shell_error(sh, "shell: %s: %s\n", arg, why(r));
+        return false;
+    }
+    sh->in = &s_in;
+    return true;
+}
+
+void files_input_end(shell_t *sh) {
+    if (sh->in) f_close(sh->in);
+    sh->in = NULL;
+}
+
+/* ---- pwd, cd ---------------------------------------------------------- */
+
+int cmd_pwd(shell_t *sh, int argc, char **argv) {
+    (void)argv;
+    if (argc != 1) return usage(sh, "pwd");
+    out_printf(&sh->out, "%s\n", sh->cwd);
+    return 0;
+}
+
+int cmd_cd(shell_t *sh, int argc, char **argv) {
+    if (argc > 2) return usage(sh, "cd [dir]");
+    const char *arg = argc == 2 ? argv[1] : SHELL_HOME;
+    if (!resolve(sh, "cd", arg, s_a)) return 1;
+    FRESULT r = stat_path(s_a, &s_fno);
+    if (r != FR_OK) {
+        shell_error(sh, "cd: %s: %s\n", arg, why(r));
+        return 1;
+    }
+    if (!(s_fno.fattrib & AM_DIR)) {
+        shell_error(sh, "cd: %s: not a directory\n", arg);
+        return 1;
+    }
+    /* The prompt shows each name as the card spells it, not as typed.
+     * f_stat gives a long name back as it was asked for, so each one is
+     * found in its directory's listing. */
+    size_t len = 0;
+    s_b[0] = '\0';
+    for (char *p = s_a + 1; *p;) {
+        char *e = strchr(p, '/');
+        if (e) *e = '\0';
+        DIR d;
+        r = f_opendir(&d, len ? s_b : "/");
+        while (r == FR_OK && (r = f_readdir(&d, &s_fno)) == FR_OK && s_fno.fname[0])
+            if (path_same(s_fno.fname, p) || path_same(s_fno.altname, p)) break;
+        f_closedir(&d);
+        if (r == FR_OK && !s_fno.fname[0]) r = FR_NO_PATH;
+        if (r != FR_OK) {
+            shell_error(sh, "cd: %s: %s\n", arg, why(r));
+            return 1;
+        }
+        size_t n = strlen(s_fno.fname);
+        if (len + 1u + n > SHELL_PATH_MAX) {
+            shell_error(sh, "cd: %s: name too long\n", arg);
+            return 1;
+        }
+        s_b[len++] = '/';
+        memcpy(s_b + len, s_fno.fname, n + 1);
+        len += n;
+        p = e ? e + 1 : p + strlen(p);
+    }
+    strcpy(sh->cwd, len ? s_b : "/");
+    return 0;
+}
+
+/* ---- ls --------------------------------------------------------------- */
+
+typedef struct {
+    uint16_t name;     /* offset in s_names */
+    uint8_t  attr;
+    uint32_t size;
+} ent_t;
+
+static ent_t s_ents[SHELL_LS_MAX];
+static char  s_names[SHELL_LS_NAMES];
+
+enum { LS_L = 1u << 0, LS_A = 1u << 1 };
+
+static int fold(int c) {
+    return (c >= 'a' && c <= 'z') ? c - 'a' + 'A' : c;
+}
+
+/* Names in order without regard to case, as FAT compares them. */
+static int ent_cmp(const void *a, const void *b) {
+    const char *x = s_names + ((const ent_t *)a)->name;
+    const char *y = s_names + ((const ent_t *)b)->name;
+    for (;; x++, y++) {
+        int d = fold((unsigned char)*x) - fold((unsigned char)*y);
+        if (d || !*x) return d ? d : strcmp(s_names + ((const ent_t *)a)->name,
+                                            s_names + ((const ent_t *)b)->name);
+    }
+}
+
+/* `.name`, macOS's `._name` (hardware-notes.md §7.1), and anything FAT
+ * marks hidden or system, such as Windows's `System Volume Information`,
+ * are hidden (design.md §4.2). */
+static bool hidden(const FILINFO *fno) {
+    return fno->fname[0] == '.' || (fno->fattrib & (AM_HID | AM_SYS));
+}
+
+static void ls_long(shell_t *sh, const char *name, uint8_t attr, uint32_t size) {
+    char mode[4] = { (attr & AM_DIR) ? 'd' : '-', 'r', (attr & AM_RDO) ? '-' : 'w', '\0' };
+    if (attr & AM_DIR) out_printf(&sh->out, "%s %8s ", mode, "");
+    else out_printf(&sh->out, "%s %8lu ", mode, (unsigned long)size);
+    out_puts(&sh->out, name);
+    out_puts(&sh->out, "\n");
+}
+
+/* Down the columns, as ls does on a terminal, and one per line when the
+ * output is a file. */
+static void ls_names(shell_t *sh, unsigned n) {
+    if (!sh->out_is_con) {
+        for (unsigned i = 0; i < n; i++) {
+            out_puts(&sh->out, s_names + s_ents[i].name);
+            out_puts(&sh->out, "\n");
+        }
+        return;
+    }
+    size_t wmax = 0;
+    for (unsigned i = 0; i < n; i++) {
+        size_t w = strlen(s_names + s_ents[i].name);
+        if (w > wmax) wmax = w;
+    }
+    unsigned colw = (unsigned)wmax + 2u;
+    unsigned cols = (shell_cols(sh) + 2u) / colw;
+    if (cols == 0) cols = 1;
+    unsigned rows = (n + cols - 1u) / cols;
+    for (unsigned r = 0; r < rows; r++) {
+        for (unsigned i = r; i < n; i += rows) {
+            const char *name = s_names + s_ents[i].name;
+            out_puts(&sh->out, name);
+            if (i + rows < n)
+                for (size_t pad = strlen(name); pad < colw; pad++) out_puts(&sh->out, " ");
+        }
+        out_puts(&sh->out, "\n");
+    }
+}
+
+static int ls_dir(shell_t *sh, const char *shown, const char *path, unsigned flags) {
+    DIR d;
+    FRESULT r = f_opendir(&d, path);
+    unsigned n = 0;
+    size_t used = 0;
+    bool full = false;
+    while (r == FR_OK && (r = f_readdir(&d, &s_fno)) == FR_OK && s_fno.fname[0]) {
+        if (!(flags & LS_A) && hidden(&s_fno)) continue;
+        size_t len = strlen(s_fno.fname) + 1u;
+        if (n == SHELL_LS_MAX || used + len > sizeof s_names) {
+            full = true;
+            break;
+        }
+        memcpy(s_names + used, s_fno.fname, len);
+        s_ents[n++] = (ent_t){ (uint16_t)used, s_fno.fattrib, (uint32_t)s_fno.fsize };
+        used += len;
+    }
+    f_closedir(&d);
+    if (r != FR_OK) {
+        shell_error(sh, "ls: %s: %s\n", shown, why(r));
+        return 1;
+    }
+
+    if (full) {
+        /* Too many to sort: the lot, in the card's order, one per line. */
+        shell_error(sh, "ls: %s: more than %u names, not sorted\n", shown, SHELL_LS_MAX);
+        r = f_opendir(&d, path);
+        while (r == FR_OK && (r = f_readdir(&d, &s_fno)) == FR_OK && s_fno.fname[0]) {
+            if (!(flags & LS_A) && hidden(&s_fno)) continue;
+            if (flags & LS_L) ls_long(sh, s_fno.fname, s_fno.fattrib, (uint32_t)s_fno.fsize);
+            else out_printf(&sh->out, "%s\n", s_fno.fname);
+            if (shell_interrupted(sh)) break;
+        }
+        f_closedir(&d);
+        return r == FR_OK ? 0 : 1;
+    }
+
+    qsort(s_ents, n, sizeof s_ents[0], ent_cmp);
+    if (flags & LS_L) {
+        for (unsigned i = 0; i < n; i++)
+            ls_long(sh, s_names + s_ents[i].name, s_ents[i].attr, s_ents[i].size);
+    } else {
+        ls_names(sh, n);
+    }
+    return 0;
+}
+
+int cmd_ls(shell_t *sh, int argc, char **argv) {
+    unsigned flags;
+    int first = options(sh, argc, argv, "la", &flags, "ls [-l] [-a] [path...]");
+    if (first < 0) return 1;
+    if (first == argc) return ls_dir(sh, ".", sh->cwd, flags);
+
+    int status = 0;
+    bool headers = argc - first > 1;
+    for (int i = first; i < argc && !sh->stop; i++) {
+        if (!resolve(sh, "ls", argv[i], s_a)) {
+            status = 1;
+            continue;
+        }
+        FRESULT r = stat_path(s_a, &s_fno);
+        if (r != FR_OK) {
+            shell_error(sh, "ls: %s: %s\n", argv[i], why(r));
+            status = 1;
+        } else if (!(s_fno.fattrib & AM_DIR)) {
+            if (flags & LS_L) ls_long(sh, argv[i], s_fno.fattrib, (uint32_t)s_fno.fsize);
+            else out_printf(&sh->out, "%s\n", argv[i]);
+        } else {
+            if (headers) out_printf(&sh->out, "%s%s:\n", i > first ? "\n" : "", argv[i]);
+            status |= ls_dir(sh, argv[i], s_a, flags);
+        }
+    }
+    return status;
+}
+
+/* ---- cat -------------------------------------------------------------- */
+
+static int cat_file(shell_t *sh, FIL *f, const char *shown) {
+    for (;;) {
+        UINT n;
+        FRESULT r = f_read(f, s_buf, sizeof s_buf, &n);
+        if (r != FR_OK) {
+            shell_error(sh, "cat: %s: %s\n", shown, why(r));
+            return 1;
+        }
+        if (n == 0) return 0;
+        out_write(&sh->out, (const char *)s_buf, n);
+        if (shell_interrupted(sh)) return 1;
+    }
+}
+
+int cmd_cat(shell_t *sh, int argc, char **argv) {
+    if (argc == 1) {
+        if (!sh->in) return usage(sh, "cat file... (or cat < file)");
+        return cat_file(sh, sh->in, "input");
+    }
+    int status = 0;
+    for (int i = 1; i < argc && !sh->stop; i++) {
+        if (!resolve(sh, "cat", argv[i], s_a)) {
+            status = 1;
+            continue;
+        }
+        FRESULT r = f_open(&s_src, s_a, FA_READ);
+        if (r != FR_OK) {
+            /* FatFs opens a directory as no file at all. */
+            bool dir = r == FR_NO_FILE && files_is_dir(s_a);
+            shell_error(sh, "cat: %s: %s\n", argv[i], dir ? "is a directory" : why(r));
+            status = 1;
+            continue;
+        }
+        status |= cat_file(sh, &s_src, argv[i]);
+        f_close(&s_src);
+    }
+    return status;
+}
+
+/* ---- cp --------------------------------------------------------------- */
+
+/* One file to `dst`, both absolute, through dst.new. */
+static int copy_file(shell_t *sh, const char *src, const char *dst) {
+    if (path_same(src, dst)) {
+        shell_error(sh, "cp: %s and %s are the same file\n", src, dst);
+        return 1;
+    }
+    FRESULT r = f_open(&s_src, src, FA_READ);
+    if (r != FR_OK) {
+        shell_error(sh, "cp: %s: %s\n", src, why(r));
+        return 1;
+    }
+    const char *err = safe_open(&s_copy, dst);
+    if (err) {
+        f_close(&s_src);
+        shell_error(sh, "cp: %s: %s\n", dst, err);
+        return 1;
+    }
+    for (;;) {
+        UINT n;
+        r = f_read(&s_src, s_buf, sizeof s_buf, &n);
+        if (r != FR_OK) {
+            f_close(&s_src);
+            safe_abort(&s_copy);
+            shell_error(sh, "cp: %s: %s\n", src, why(r));
+            return 1;
+        }
+        if (n == 0) break;
+        safe_write(&s_copy, s_buf, n);
+        if (s_copy.why) break;
+        if (shell_interrupted(sh)) {
+            /* Stopped: nothing half-copied is put in place. */
+            f_close(&s_src);
+            safe_abort(&s_copy);
+            return 1;
+        }
+    }
+    f_close(&s_src);
+    err = safe_commit(&s_copy);
+    if (err) {
+        shell_error(sh, "cp: %s: %s\n", dst, err);
+        return 1;
+    }
+    return 0;
+}
+
+/* mkdir that accepts a directory already there. */
+static FRESULT make_dir(const char *path) {
+    FRESULT r = f_mkdir(path);
+    if (r == FR_EXIST) return files_is_dir(path) ? FR_OK : FR_EXIST;
+    return r;
+}
+
+/* Append `name` to a walked path whose length at this level is *len. */
+static bool walk_join(char *buf, size_t len, const char *name) {
+    size_t n = strlen(name);
+    if (len + 1u + n > SHELL_PATH_MAX) return false;
+    buf[len] = '/';
+    memcpy(buf + len + 1, name, n + 1);
+    return true;
+}
+
+/* cp -r: src's tree as dst, made or merged into. Both absolute. */
+static int copy_tree(shell_t *sh, const char *src, const char *dst) {
+    if (path_within(dst, src)) {
+        shell_error(sh, "cp: cannot copy %s into itself\n", src);
+        return 1;
+    }
+    FRESULT r = make_dir(dst);
+    if (r != FR_OK) {
+        shell_error(sh, "cp: %s: %s\n", dst, r == FR_EXIST ? "not a directory" : why(r));
+        return 1;
+    }
+    strcpy(s_wsrc, src);
+    strcpy(s_wdst, dst);
+    int status = 0;
+    unsigned depth = 0;
+    s_srclen[0] = strlen(s_wsrc);
+    s_dstlen[0] = strlen(s_wdst);
+    r = f_opendir(&s_dirs[0], s_wsrc);
+    if (r != FR_OK) {
+        shell_error(sh, "cp: %s: %s\n", src, why(r));
+        return 1;
+    }
+    depth = 1;
+    while (depth > 0) {
+        unsigned top = depth - 1;
+        s_wsrc[s_srclen[top]] = '\0';
+        s_wdst[s_dstlen[top]] = '\0';
+        if (sh->stop || shell_interrupted(sh)) {
+            while (depth > 0) f_closedir(&s_dirs[--depth]);
+            return 1;
+        }
+        r = f_readdir(&s_dirs[top], &s_fno);
+        if (r != FR_OK || !s_fno.fname[0]) {
+            if (r != FR_OK) {
+                shell_error(sh, "cp: %s: %s\n", s_wsrc, why(r));
+                status = 1;
+            }
+            f_closedir(&s_dirs[--depth]);
+            continue;
+        }
+        if (!walk_join(s_wsrc, s_srclen[top], s_fno.fname) ||
+            !walk_join(s_wdst, s_dstlen[top], s_fno.fname)) {
+            shell_error(sh, "cp: %s/%s: name too long\n", s_wsrc, s_fno.fname);
+            status = 1;
+            continue;
+        }
+        if (!(s_fno.fattrib & AM_DIR)) {
+            status |= copy_file(sh, s_wsrc, s_wdst);
+            continue;
+        }
+        r = make_dir(s_wdst);
+        if (r != FR_OK) {
+            shell_error(sh, "cp: %s: %s\n", s_wdst, r == FR_EXIST ? "not a directory" : why(r));
+            status = 1;
+            continue;
+        }
+        if (depth == SHELL_TREE_DEPTH) {
+            shell_error(sh, "cp: %s: more than %u levels deep\n", s_wsrc, SHELL_TREE_DEPTH);
+            status = 1;
+            continue;
+        }
+        r = f_opendir(&s_dirs[depth], s_wsrc);
+        if (r != FR_OK) {
+            shell_error(sh, "cp: %s: %s\n", s_wsrc, why(r));
+            status = 1;
+            continue;
+        }
+        s_srclen[depth] = strlen(s_wsrc);
+        s_dstlen[depth] = strlen(s_wdst);
+        depth++;
+    }
+    return status;
+}
+
+int cmd_cp(shell_t *sh, int argc, char **argv) {
+    static const char use[] = "cp [-r] from... to";
+    unsigned flags;
+    int first = options(sh, argc, argv, "r", &flags, use);
+    if (first < 0) return 1;
+    if (argc - first < 2) return usage(sh, use);
+
+    const char *to = argv[argc - 1];
+    if (!resolve(sh, "cp", to, s_b)) return 1;
+    FRESULT r = stat_path(s_b, &s_fno);
+    bool to_dir = r == FR_OK && (s_fno.fattrib & AM_DIR);
+    if (r != FR_OK && r != FR_NO_FILE) {
+        shell_error(sh, "cp: %s: %s\n", to, why(r));
+        return 1;
+    }
+    if (argc - first > 2 && !to_dir) {
+        shell_error(sh, "cp: %s: not a directory\n", to);
+        return 1;
+    }
+
+    int status = 0;
+    for (int i = first; i < argc - 1 && !sh->stop; i++) {
+        if (!resolve(sh, "cp", argv[i], s_a)) {
+            status = 1;
+            continue;
+        }
+        r = stat_path(s_a, &s_fno);
+        if (r != FR_OK) {
+            shell_error(sh, "cp: %s: %s\n", argv[i], why(r));
+            status = 1;
+            continue;
+        }
+        bool dir = s_fno.fattrib & AM_DIR;
+        if (dir && !flags) {
+            shell_error(sh, "cp: %s: is a directory (use cp -r)\n", argv[i]);
+            status = 1;
+            continue;
+        }
+        if (to_dir) {
+            if (!path_join(s_c, s_b, path_base(s_a))) {
+                shell_error(sh, "cp: %s: name too long\n", to);
+                status = 1;
+                continue;
+            }
+        } else {
+            strcpy(s_c, s_b);
+        }
+        status |= dir ? copy_tree(sh, s_a, s_c) : copy_file(sh, s_a, s_c);
+    }
+    return status;
+}
+
+/* ---- mv --------------------------------------------------------------- */
+
+int cmd_mv(shell_t *sh, int argc, char **argv) {
+    if (argc < 3) return usage(sh, "mv from... to");
+    const char *to = argv[argc - 1];
+    if (!resolve(sh, "mv", to, s_b)) return 1;
+    FRESULT r = stat_path(s_b, &s_fno);
+    bool to_dir = r == FR_OK && (s_fno.fattrib & AM_DIR);
+    if (r != FR_OK && r != FR_NO_FILE) {
+        shell_error(sh, "mv: %s: %s\n", to, why(r));
+        return 1;
+    }
+    if (argc > 3 && !to_dir) {
+        shell_error(sh, "mv: %s: not a directory\n", to);
+        return 1;
+    }
+
+    int status = 0;
+    for (int i = 1; i < argc - 1 && !sh->stop; i++) {
+        if (!resolve(sh, "mv", argv[i], s_a)) {
+            status = 1;
+            continue;
+        }
+        if (strcmp(s_a, "/") == 0) {
+            shell_error(sh, "mv: cannot move /\n");
+            status = 1;
+            continue;
+        }
+        r = stat_path(s_a, &s_fno);
+        if (r != FR_OK) {
+            shell_error(sh, "mv: %s: %s\n", argv[i], why(r));
+            status = 1;
+            continue;
+        }
+        bool dir = s_fno.fattrib & AM_DIR;
+        /* `mv name NAME` renames, though FAT finds NAME as name. */
+        if (to_dir && !path_same(s_a, s_b)) {
+            if (!path_join(s_c, s_b, path_base(s_a))) {
+                shell_error(sh, "mv: %s: name too long\n", to);
+                status = 1;
+                continue;
+            }
+        } else {
+            strcpy(s_c, s_b);
+        }
+        if (strcmp(s_a, s_c) == 0) {
+            shell_error(sh, "mv: %s and %s are the same file\n", argv[i], to);
+            status = 1;
+            continue;
+        }
+        if (dir && path_within(s_c, s_a) && !path_same(s_c, s_a)) {
+            shell_error(sh, "mv: cannot move %s into itself\n", argv[i]);
+            status = 1;
+            continue;
+        }
+        if (!path_same(s_a, s_c)) {
+            r = stat_path(s_c, &s_fno);
+            if (r == FR_OK) {
+                /* A file replaces a file; nothing replaces a directory. */
+                if ((s_fno.fattrib & AM_DIR) || dir) {
+                    shell_error(sh, "mv: %s: %s\n", s_c,
+                                (s_fno.fattrib & AM_DIR) ? "is a directory" : "file exists");
+                    status = 1;
+                    continue;
+                }
+                r = f_unlink(s_c);
+            } else if (r == FR_NO_FILE) {
+                r = FR_OK;
+            }
+            if (r != FR_OK) {
+                shell_error(sh, "mv: %s: %s\n", s_c, why(r));
+                status = 1;
+                continue;
+            }
+        }
+        r = f_rename(s_a, s_c);
+        if (r != FR_OK) {
+            shell_error(sh, "mv: %s: %s\n", argv[i], why(r));
+            status = 1;
+        }
+    }
+    return status;
+}
+
+/* ---- rm, rmdir -------------------------------------------------------- */
+
+/* rm -r: everything below `path`, then path itself. */
+static int remove_tree(shell_t *sh, const char *path) {
+    strcpy(s_wsrc, path);
+    s_srclen[0] = strlen(s_wsrc);
+    FRESULT r = f_opendir(&s_dirs[0], s_wsrc);
+    if (r != FR_OK) {
+        shell_error(sh, "rm: %s: %s\n", path, why(r));
+        return 1;
+    }
+    unsigned depth = 1;
+    int status = 0;
+    while (depth > 0) {
+        unsigned top = depth - 1;
+        s_wsrc[s_srclen[top]] = '\0';
+        if (sh->stop || shell_interrupted(sh)) {
+            while (depth > 0) f_closedir(&s_dirs[--depth]);
+            return 1;
+        }
+        r = f_readdir(&s_dirs[top], &s_fno);
+        if (r != FR_OK || !s_fno.fname[0]) {
+            f_closedir(&s_dirs[--depth]);
+            /* The directory itself, once empty. A failure below it has
+             * been reported and leaves it not empty. */
+            if (r == FR_OK) r = f_unlink(s_wsrc);
+            if (r != FR_OK) {
+                if (status == 0) shell_error(sh, "rm: %s: %s\n", s_wsrc, why(r));
+                status = 1;
+            }
+            continue;
+        }
+        if (!walk_join(s_wsrc, s_srclen[top], s_fno.fname)) {
+            shell_error(sh, "rm: %s/%s: name too long\n", s_wsrc, s_fno.fname);
+            status = 1;
+            continue;
+        }
+        if (!(s_fno.fattrib & AM_DIR)) {
+            r = f_unlink(s_wsrc);
+            if (r != FR_OK) {
+                shell_error(sh, "rm: %s: %s\n", s_wsrc,
+                            (s_fno.fattrib & AM_RDO) ? "read-only" : why(r));
+                status = 1;
+            }
+            continue;
+        }
+        if (depth == SHELL_TREE_DEPTH) {
+            shell_error(sh, "rm: %s: more than %u levels deep\n", s_wsrc, SHELL_TREE_DEPTH);
+            status = 1;
+            continue;
+        }
+        r = f_opendir(&s_dirs[depth], s_wsrc);
+        if (r != FR_OK) {
+            shell_error(sh, "rm: %s: %s\n", s_wsrc, why(r));
+            status = 1;
+            continue;
+        }
+        s_srclen[depth] = strlen(s_wsrc);
+        depth++;
+    }
+    return status;
+}
+
+int cmd_rm(shell_t *sh, int argc, char **argv) {
+    static const char use[] = "rm [-r] path...";
+    unsigned flags;
+    int first = options(sh, argc, argv, "r", &flags, use);
+    if (first < 0) return 1;
+    if (first == argc) return usage(sh, use);
+    int status = 0;
+    for (int i = first; i < argc && !sh->stop; i++) {
+        if (!resolve(sh, "rm", argv[i], s_a)) {
+            status = 1;
+            continue;
+        }
+        if (strcmp(s_a, "/") == 0) {
+            shell_error(sh, "rm: refusing to remove /\n");
+            status = 1;
+            continue;
+        }
+        FRESULT r = stat_path(s_a, &s_fno);
+        if (r == FR_OK && (s_fno.fattrib & AM_DIR)) {
+            if (!flags) {
+                shell_error(sh, "rm: %s: is a directory (use rm -r)\n", argv[i]);
+                status = 1;
+            } else {
+                status |= remove_tree(sh, s_a);
+            }
+            continue;
+        }
+        if (r == FR_OK) r = f_unlink(s_a);
+        if (r != FR_OK) {
+            shell_error(sh, "rm: %s: %s\n", argv[i],
+                        r == FR_DENIED && (s_fno.fattrib & AM_RDO) ? "read-only" : why(r));
+            status = 1;
+        }
+    }
+    return status;
+}
+
+int cmd_rmdir(shell_t *sh, int argc, char **argv) {
+    if (argc < 2) return usage(sh, "rmdir dir...");
+    int status = 0;
+    for (int i = 1; i < argc; i++) {
+        if (!resolve(sh, "rmdir", argv[i], s_a)) {
+            status = 1;
+            continue;
+        }
+        FRESULT r = stat_path(s_a, &s_fno);
+        const char *err = NULL;
+        if (r != FR_OK) err = why(r);
+        else if (!(s_fno.fattrib & AM_DIR)) err = "not a directory";
+        else if (strcmp(s_a, "/") == 0) err = "cannot remove the root";
+        else {
+            DIR d;
+            r = f_opendir(&d, s_a);
+            if (r == FR_OK) {
+                r = f_readdir(&d, &s_fno);
+                f_closedir(&d);
+            }
+            if (r != FR_OK) err = why(r);
+            else if (s_fno.fname[0]) err = "directory not empty";
+            else if ((r = f_unlink(s_a)) != FR_OK) err = why(r);
+        }
+        if (err) {
+            shell_error(sh, "rmdir: %s: %s\n", argv[i], err);
+            status = 1;
+        }
+    }
+    return status;
+}
+
+/* ---- mkdir, touch ----------------------------------------------------- */
+
+int cmd_mkdir(shell_t *sh, int argc, char **argv) {
+    static const char use[] = "mkdir [-p] dir...";
+    unsigned flags;
+    int first = options(sh, argc, argv, "p", &flags, use);
+    if (first < 0) return 1;
+    if (first == argc) return usage(sh, use);
+    int status = 0;
+    for (int i = first; i < argc; i++) {
+        if (!resolve(sh, "mkdir", argv[i], s_a)) {
+            status = 1;
+            continue;
+        }
+        FRESULT r;
+        if (strcmp(s_a, "/") == 0) {
+            r = flags ? FR_OK : FR_EXIST;
+        } else if (!flags) {
+            r = f_mkdir(s_a);
+        } else {
+            /* -p: each directory on the way, and no complaint for one
+             * that is there. */
+            r = FR_OK;
+            for (char *p = s_a + 1; r == FR_OK;) {
+                char *e = strchr(p, '/');
+                if (e) *e = '\0';
+                r = make_dir(s_a);
+                if (!e) break;
+                *e = '/';
+                p = e + 1;
+            }
+            if (r == FR_EXIST) r = FR_NO_PATH;   /* a file in the way */
+        }
+        if (r != FR_OK) {
+            shell_error(sh, "mkdir: %s: %s\n", argv[i],
+                        r == FR_NO_PATH && flags ? "not a directory" : why(r));
+            status = 1;
+        }
+    }
+    return status;
+}
+
+int cmd_touch(shell_t *sh, int argc, char **argv) {
+    if (argc < 2) return usage(sh, "touch file...");
+    int status = 0;
+    for (int i = 1; i < argc; i++) {
+        if (!resolve(sh, "touch", argv[i], s_a)) {
+            status = 1;
+            continue;
+        }
+        /* No clock (design.md §4.2): a file already there is left as it is. */
+        FRESULT r = stat_path(s_a, &s_fno);
+        if (r == FR_NO_FILE) {
+            r = f_open(&s_src, s_a, FA_CREATE_NEW | FA_WRITE);
+            if (r == FR_OK) r = f_close(&s_src);
+        }
+        if (r != FR_OK) {
+            shell_error(sh, "touch: %s: %s\n", argv[i], why(r));
+            status = 1;
+        }
+    }
+    return status;
+}
+
+/* ---- df --------------------------------------------------------------- */
+
+/* Bytes as df -h gives them: "512K", "1.5M", "29G". */
+static void human(char *buf, size_t size, uint64_t bytes) {
+    static const char units[] = "KMGT";
+    uint64_t tenths = (bytes * 10u + 512u) / 1024u;   /* of a KB */
+    unsigned u = 0;
+    while (tenths >= 10240u && u + 2u < sizeof units) {
+        tenths = (tenths + 512u) / 1024u;
+        u++;
+    }
+    if (tenths < 100u)
+        snprintf(buf, size, "%lu.%lu%c", (unsigned long)(tenths / 10u),
+                 (unsigned long)(tenths % 10u), units[u]);
+    else
+        snprintf(buf, size, "%lu%c", (unsigned long)((tenths + 5u) / 10u), units[u]);
+}
+
+int cmd_df(shell_t *sh, int argc, char **argv) {
+    (void)argv;
+    if (argc != 1) return usage(sh, "df");
+    DWORD free_clusters;
+    FATFS *fs;
+    FRESULT r = f_getfree("", &free_clusters, &fs);
+    if (r != FR_OK) {
+        shell_error(sh, "df: %s\n", why(r));
+        return 1;
+    }
+    uint64_t cluster = (uint64_t)fs->csize * FF_MAX_SS;
+    uint64_t total = (uint64_t)(fs->n_fatent - 2u) * cluster;
+    uint64_t avail = (uint64_t)free_clusters * cluster;
+    uint64_t used = total - avail;
+    const char *type = fs->fs_type == FS_FAT12 ? "FAT12" : fs->fs_type == FS_FAT16 ? "FAT16" : "FAT32";
+    char a[16], b[16], c[16];
+    human(a, sizeof a, total);
+    human(b, sizeof b, used);
+    human(c, sizeof c, avail);
+    unsigned pct = total ? (unsigned)((used * 100u + total - 1u) / total) : 0;
+    out_printf(&sh->out, "Type    Size  Used Avail Use%%\n");
+    out_printf(&sh->out, "%-5s %6s %5s %5s %3u%%\n", type, a, b, c, pct);
+    return 0;
+}

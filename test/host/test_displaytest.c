@@ -26,7 +26,7 @@ static void sink(void *ctx, const char *buf, size_t n) {
     writes++;
 }
 
-static const out_t out = { sink, NULL };
+static const out_t out = { sink, NULL, false };
 
 static uint16_t xterm(int n) {
     static term_t s;

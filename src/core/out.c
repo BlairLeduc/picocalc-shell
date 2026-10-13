@@ -9,6 +9,10 @@
 #include "config.h"
 
 void out_write(const out_t *o, const char *s, size_t n) {
+    if (o->raw) {
+        if (n) o->write(o->ctx, s, n);
+        return;
+    }
     char chunk[SHELL_OUT_CHUNK];
     size_t len = 0;
     for (size_t i = 0; i < n; i++) {
