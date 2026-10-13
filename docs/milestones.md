@@ -18,11 +18,10 @@ Each entry gives:
 
 ## M4 — comfort (branch `m4-comfort`, 2026-10-13)
 
-**Built; one check left for the owner.** History, Tab completion, globs,
-pipes, variables, `more`, `grep`, `sh` and `/etc/profile` were checked
-on the host and on the Plus 2 W. `usbdisk` was checked up to the USB
-cable: no computer is on the PicoCalc's own USB port here, so a disk
-offered, mounted, written and ejected is the owner's to see.
+**Done.** History, Tab completion, globs, pipes, variables, `more`,
+`grep`, `sh` and `/etc/profile` were checked on the host and on the
+Plus 2 W. `usbdisk` was checked by Claude up to the USB cable, and by the
+owner with a computer: files copied to and from the card.
 
 **Checked on the host** (macOS, Apple clang 21, `-Wall -Wextra -Werror`,
 C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1, TinyUSB 0.18):
@@ -115,6 +114,10 @@ over the UART, on the test card in a scratch directory since removed,
 - `/etc/profile` made on the card; after a restart over SWD it ran
   before the first prompt (its `cd` and its message), and Up recalled the
   last line of the session before, read from `/.shell/history`.
+- **The owner, on a Pico 2 W, release build, 2026-10-13:** `usbdisk`
+  offered the card to a computer, and files were copied to and from it.
+  `more` and the history worked, and a line piped through four commands,
+  `ls | grep txt | grep ls | grep g`.
 - The release build, started over SWD and driven by `tools/swd-drive.py`:
   a glob into a pipe, a variable and `$?`, and Tab, each as on the
   development build.
@@ -129,11 +132,10 @@ over the UART, on the test card in a scratch directory since removed,
 
 **Not checked:**
 
-- `usbdisk` with a computer: the disk appearing, a copy each way, the
-  computer's eject bringing the shell back, the card taken out during
-  it, and the transfer rate. The owner's, with a cable to the PicoCalc's
-  USB port. Whether macOS sends START STOP UNIT on eject is not known
-  here; if it does not, Esc after ejecting is the way back.
+- `usbdisk`: whether the computer's eject brings the shell back (that
+  is, whether it sends START STOP UNIT; if not, Esc after ejecting is the
+  way back), the card taken out during it, and the transfer rate. The
+  owner's run copied files each way but did not report these.
 - How long a spilled pipe takes, and the history's write on leaving.
 - The line editor in the host shell: it assumes the panel's 40 or 64
   columns and its wrap at once, where the macOS terminal is wider and

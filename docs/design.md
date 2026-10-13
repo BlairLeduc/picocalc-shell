@@ -1,8 +1,7 @@
 # PicoCalc Shell — design
 
 Status: **Draft 6, 2026-10-13.** Feasibility study and first design. M0
-(the skeleton), M1 (files), M2 (run) and M3 (vi) are done; M4 (comfort)
-is built and checked but for `usbdisk` with a computer on the other end
+(the skeleton), M1 (files), M2 (run), M3 (vi) and M4 (comfort) are done
 ([milestones.md](milestones.md)).
 
 The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
