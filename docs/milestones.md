@@ -122,7 +122,10 @@ over the UART, on the test card in a scratch directory since removed,
   30 MB PDF took about 3 minutes to copy from the Mac to the card (by
   eye).
   `more` and the history worked, and a line piped through four commands,
-  `ls | grep txt | grep ls | grep g`.
+  `ls | grep txt | grep ls | grep g`. Lines longer than a row were
+  edited correctly across the wrap. The history came back after `menu`,
+  after `usbdisk` and after a program, and lines typed since the last of
+  those were lost on switching off, as designed (design.md §4.4).
 - The release build, started over SWD and driven by `tools/swd-drive.py`:
   a glob into a pipe, a variable and `$?`, and Tab, each as on the
   development build.
@@ -144,9 +147,8 @@ over the UART, on the test card in a scratch directory since removed,
 - How long a spilled pipe takes, and the history's write on leaving.
 - The line editor in the host shell: it assumes the panel's 40 or 64
   columns and its wrap at once, where the macOS terminal is wider and
-  wraps late, so a long line there is drawn wrongly. The board is right.
-- The history after a power cut: lines since the last program, menu or
-  `usbdisk` are lost by design (design.md §4.4).
+  wraps late, so a long line there is drawn wrongly. The board is right
+  (the owner's run).
 - Carried from M3: the release build from the card on the Plus 2 W; a
   CR LF file near 64 KB; the stack's depth on the board.
 - Carried from M2: the owner's timings; a power cut that leaves the
