@@ -2,8 +2,8 @@
 
 - **shell** (repo `picocalc-shell`) is a UNIX-like command line for the ClockworkPi PicoCalc, written in **C11** against the **Pico SDK**, for RP2350 boards. It manages files on the SD card (FAT16/32 via FatFs), edits text files in a simplified **vi**, and runs UF2 programs by name: `pico-oric` runs `/pico2-apps/pico-oric.uf2` (the loader menu's own directory).
 - It is a **`no_flash` RAM program installed as `/BOOT2350.UF2`**, in place of pelrun's UF2 Loader menu. It runs a program by flashing the app partition and rebooting. A program returns to the shell through `picocalc_shell_exit()`, or by the user holding Up/F1 at power-on. Its prompt is the current directory followed by `>` (`/home>`).
-- **Settled decisions** are in the table at the top of docs/design.md. Do not reopen them: the shell replaces `BOOT2350.UF2`; programs may add an exit command; power-on with no key held starts the last program; program arguments are deferred; the terminal uses the owner's fonts; the shell is called shell and its prompt is the current directory followed by `>`; the licence is GPL-3.0; RP2350 only, no RP2040; programs live in `/pico2-apps/`.
-- **Status:** design complete (Draft 3); no milestone started. Each milestone's record (what was verified, on which board, on what date, and what was not checked) goes in `docs/milestones.md`, not here. Keep this line to one sentence per milestone.
+- **Settled decisions** are in the table at the top of docs/design.md. Do not reopen them: the shell replaces `BOOT2350.UF2`; programs may add an exit command; power-on with no key held starts the last program; program arguments are deferred; the terminal uses the owner's fonts; the shell is called shell and its prompt is the current directory followed by `>`; the licence is GPL-3.0; RP2350 only, no RP2040; programs live in `/pico2-apps/`; the LCD's SPI runs at 75 MHz.
+- **Status:** M0 (skeleton) done on branch `m0-skeleton`, 2026-10-12: on a Pico 2 W from the card (owner) and a Plus 2 W over SWD; power-on start time carried forward. Each milestone's record (what was verified, on which board, on what date, and what was not checked) goes in `docs/milestones.md`, not here. Keep this line to one sentence per milestone.
 
 ## The documents
 
@@ -26,7 +26,12 @@ Read docs/design.md before starting work. **EL §N** refers to `references/pico-
 
 # Build & Test
 
-Not set up yet (design §6). The intended shape is the emulators': one CMake tree. The default build is the `pico2` firmware (`BOOT2350.UF2`). `-DPICO_SHELL_HOST=ON` builds the core and its CTest tests with the system compiler. Both build under `-Wall -Wextra -Werror`. Logic is developed and tested on the host, with FatFs over FAT16/FAT32 image files; write a host test rather than relying on a hardware run.
+One CMake tree (design §6), both builds under `-Wall -Wextra -Werror`. Logic is developed and tested on the host (from M1, with FatFs over FAT16/FAT32 image files); write a host test rather than relying on a hardware run.
+
+- Host tests: `cmake -S . -B build/host -DPICO_SHELL_HOST=ON && cmake --build build/host -j && ctest --test-dir build/host --output-on-failure`
+- Firmware: `tools/build.sh` gives `build/pico/BOOT2350.uf2` (development: UART1 log, mirror and typed keys); `tools/build.sh -DPICO_SHELL_UART=OFF build/pico-release` is the release build. It finds the newest SDK and toolchain under `~/.pico-sdk/`.
+- On the board: `tools/uart-log.sh` captures UART1, `tools/uart-type.sh` types, `tools/uart-screen.sh` dumps the grid as text.
+- Over SWD, with no card: `tools/swd-ram.sh [elf]` runs a build from SRAM (no flash written); `tools/swd-drive.py elf type|screen|stats` drives the release build; `tools/swd-shell.sh` sends the loader's `BOOT_SD`. The Plus 2 W on the probe has no UF2 Loader.
 
 # How to work
 

@@ -1,7 +1,7 @@
 # PicoCalc Shell — design
 
-Status: **Draft 3, 2026-10-12.** Feasibility study and first design. Nothing
-is built yet.
+Status: **Draft 3, 2026-10-12.** Feasibility study and first design. M0
+(the skeleton) is done ([milestones.md](milestones.md)).
 
 The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
 and pico-oric). Pico Logo is a special case, because it keeps a filesystem
@@ -21,6 +21,7 @@ questions are open; the design is ready for M0.
 | 2026-10-12 | The licence is GPL-3.0. | 9 |
 | 2026-10-12 | RP2350 boards only; RP2040 boards are left out. | 1 |
 | 2026-10-12 | Programs live in `/pico2-apps/`, the loader menu's own directory, not `/bin`. | 4.3 |
+| 2026-10-12 | The LCD's SPI runs at 75 MHz by default, after M0's measurements; 25 MHz stays as a build option. | 4.1 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -271,6 +272,19 @@ in two:
   marked dirty (EL §5.3).
 - `src/port/` draws the dirty rows.
 
+*As built in M0 (2026-10-12).* The contract between them is in
+`term.h`: the grid counts whole-screen scrolls, and its dirty mask moves
+with each one. The renderer (`src/port/screen.c`) applies the count as a
+hardware scroll, then draws each dirty row from its first changed cell
+to its last, by comparing it with a shadow of what frame memory holds.
+The shadow is indexed by frame-memory row, so a scroll moves nothing in
+it. A scroll inside a `DECSTBM` region is done by redrawing the region's
+rows. The scroll band is all 480 rows of frame memory (`VSCRDEF` 0/480/0,
+as Pico Logo sets it; the starter set a 320-row band and wrapped at 480).
+`term.c`'s header lists its small departures from the starter's
+`display.c`: the region scrolls, the VT100 defaults for a missing count,
+tab stops, and the checkerboard for unknown sequences.
+
 The cell grid is what makes the terminal testable on the host, and lets the
 development build dump the screen as text over the UART (EL §11.2). It also
 lets vi and `more` redraw without re-sending their output. On the host, the
@@ -284,7 +298,7 @@ than the hardware notes, and the notes win:
 |---|---|---|
 | keyboard polled from a repeating timer IRQ every 100 ms | polled from the main loop at about 30 Hz, draining the whole FIFO, the I²C bus guarded by a flag | HW §6.1 |
 | key events taken as they come | ignore a release with no press; accept Caps Lock (`0xc1`); auto-repeat arrives as more presses | HW §6.2 |
-| LCD SPI at 75 MHz | start at 25 MHz and report the configured rate; 75 MHz only if measured on our panels | HW §4.2 |
+| LCD SPI at 75 MHz | started at 25 MHz and reports the configured rate; 75 MHz by default since M0 measured both (*settled 2026-10-12*), with `-DPICO_SHELL_LCD_SPI_HZ=25000000` as the fallback | HW §4.2, §4.7 |
 | its own `lcd.c` blit | the emulators' newer `lcd.c` underneath; the starter's glyph drawing, cursor and scroll layered on it | HW §4.3, §4.6 |
 | hardware scroll offset applied in several places | every draw remaps y through the scroll offset in one `blit_begin`; the terminal is the scroll register's only user | HW §4.8 |
 | its own `sdcard.c` and `fat32.c` | the emulators' `sd.c` and FatFs | HW §7.1; the starter's FAT32 is buggy |
@@ -293,7 +307,11 @@ Key codes come from the starter's `keyboard.h`, checked against HW §6.2.
 
 Keys come from the southbridge FIFO. In the development build, UART1
 mirrors the screen and its received bytes are typed as keys (EL §13.1,
-§13.2), so a scripted run needs nobody at the keyboard.
+§13.2), so a scripted run needs nobody at the keyboard. Two bytes are not
+keys: FS (`0x1C`) dumps the grid as text, and GS (`0x1D`) logs the start
+time and the counters (`tools/uart-screen.sh`). The mirror writes to the
+UART as the output happens, so a long output in the development build
+runs at 115,200 baud; measure display speed in the release build.
 
 ### 4.2 Filesystem
 
@@ -369,6 +387,10 @@ costs a flash and a reboot.
 | `battery` `backlight` `poweroff` (southbridge; HW §6) | |
 | `info` (shell version, board, chip, flash, loader version, card, battery) `reboot` `bootsel` `menu` `usbdisk` | `which` `uf2info` (name, version, size from binary info) |
 
+`displaytest` is a development command, not a builtin: the starter's
+display stress test (M0), which reports rows and characters per second.
+Break, Esc or Ctrl-C stops it.
+
 ### 4.6 vi
 
 Pico Logo's vi key layer is pure functions of (buffer, cursor, key), with
@@ -443,7 +465,12 @@ decide (§4.1).
   FAT32 images made with `mkfs.fat`, the UF2 parser against the emulators'
   real UF2s, and vi against key sequences.
 - **Two builds** (EL §13.2). The development build has UART1 log and typed
-  keys. The release build has no UART.
+  keys. The release build has no UART; `tools/swd-drive.py` types into it
+  and reads its screen and counters over SWD.
+- **Running without the card.** `tools/swd-ram.sh` loads a build into
+  SRAM over SWD and has the bootrom start it (HW §2.7), so a change can be
+  tried without copying it to the card and without writing flash. It
+  skips stage3, so the boot chain is checked from the card.
 - **Generated output:** `build/<variant>/` holds build trees, `out/` holds
   UART captures, and `test/suites/` holds fetched test data. None of these
   are committed (`.gitignore`).
@@ -457,14 +484,18 @@ decide (§4.1).
 | RAM image limit: 520 KB SRAM, minus stage3's 8 KB and the scratch banks | ~504 KB |
 | Code: core, FatFs, drivers, TinyUSB MSC | ~120 KB |
 | Terminal cells, 64 × 32 × 6 B (character, attributes, two RGB565 colours) | 12 KB |
+| The renderer's shadow of frame memory, 64 × 48 × 6 B (§4.1) | 18 KB |
 | Fonts, 2 × 128 glyphs × 10 rows | 2.5 KB |
 | vi buffer and undo journal | 64 + 16 KB |
 | Pipe buffer | 32 KB |
 | FatFs (`FATFS`, 2 × `FIL`, LFN buffer) | ~3 KB |
 | Flash sector buffer (16 UF2 blocks) | 8 KB |
-| Stacks and slack | the rest, ~250 KB |
+| Stacks and slack | the rest, ~230 KB |
 
-Comfortable. Print the memory use on every build (EL §2.1).
+Comfortable. Print the memory use on every build (EL §2.1). **Measured at
+M0** (link map, 2026-10-12, Pico SDK 2.3.1, Arm GCC 15.2, `pico2`
+Release): the development build uses 72,884 B of RAM (41,648 B of code
+and read-only data, 33,284 B of `.bss`), the release build 69,308 B.
 
 ## 8. Risks
 
