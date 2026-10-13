@@ -16,6 +16,152 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M4 — comfort (branch `m4-comfort`, 2026-10-13)
+
+**Done.** History, Tab completion, globs, pipes, variables, `more`,
+`grep`, `sh` and `/etc/profile` were checked on the host and on the
+Plus 2 W. `usbdisk` was checked by Claude up to the USB cable, and by the
+owner with a computer: files copied to and from the card.
+
+**Checked on the host** (macOS, Apple clang 21, `-Wall -Wextra -Werror`,
+C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1, TinyUSB 0.18):
+
+- Both builds compile clean, development and release; 19 host test
+  binaries pass.
+- **`test_expand`**: `path_match` on its own (24 cases: ranges, `!` and
+  `^`, `]` first, an unclosed `[`, escapes, a backtracking worst case);
+  the quoting cases `test_parse` had before, now through expansion;
+  `$NAME`, `${NAME}`, `$?` after a failure, a missing command and a
+  success; `$` before anything else; empty words dropped; assignments,
+  `set`, `unset`, `export`, a full table keeping the old value, and
+  `NAME=value cmd` refused; `$HOME` for `cd`. Globs over FAT16 and FAT32:
+  sorting with case folded, `?`, brackets, hidden names (dot, AppleDouble
+  and the FAT hidden bit) left out unless the pattern starts with `.`,
+  another directory as typed, no match, quoted and escaped parts, a glob
+  in a directory's name left alone, a variable's value not globbed,
+  `rm *.txt`, and 129 matches refused.
+- **`test_pipe`**, over FAT16 and FAT32: small pipes with no file; three
+  stages; `|` with `<` and `>`; `ls` one name a line into a pipe; errors
+  to the terminal; the status and `&&`/`||` over a pipeline; a 40 KB
+  pipe spilling to `/.shell` and coming out whole, and its file gone; four
+  stages, two of them large; a card failing as the pipe spills, said and
+  recovered from; a stop in the first stage; `menu` in a pipe refused.
+  Scripts: variables, `cd` and redirection inside; CR LF and no final
+  line break; a mistake reported with file and line and the script going
+  on; a line too long; `sh > f` and `sh | grep`; nesting past three
+  refused and the level put back; a stop. `/etc/profile` at startup,
+  from `profile.new` alone, and with none. The history file: blank and
+  repeated lines not kept, written only on leaving and only if changed,
+  read back, a failed write keeping the old file and saying so, and the
+  oldest dropped. `usbdisk` through a fake hook: refused with no USB,
+  the history saved first, FatFs unmounted during the hook and mounted
+  after, an error passed back, and refusal with `>`, in a pipe and with
+  an operand.
+- **`test_text`**: `more` on the grid with keys typed: no prompt for a
+  short file, 31 rows then `--More--` in reverse on the last, Space,
+  Enter, each way to stop, the end of input, wrapped lines counting as
+  rows in 40 and 64 columns, a pipe, `<`, two files with headers, and
+  copying when not to the terminal. `grep`: case, `-v -n -c -i` and
+  combined, CR LF with `$`, `\<`, names for several files, no final line
+  break, the three statuses, a bad pattern, the usages, `<` and `|`, and
+  a 1.5 KB line matched in pieces.
+- **`test_line`**, on the grid: each editing key at the start, middle
+  and end; a 71-character line over two rows with Home, End, Left and
+  Right across the row, an insert pushing text over, and a shrinking
+  line blanking the row it left; a line exactly a row long, Backspace
+  back over the wrap and forward again; a full line; moves after the
+  screen scrolled; the prompt on its own row after `echo -n`. History:
+  Up and Down, the typed line restored, an edited recall run and kept,
+  Ctrl-P and Ctrl-N. Tab: a builtin, a program without `.uf2`, a shared
+  part, the list on a second Tab, only programs as commands, case, a
+  file, a directory with `/` and the card's case, into it, a name with a
+  space escaped, after `;` and `>`, an absolute path, a hidden name asked
+  for, no match, mid-line, and a sorted listing of a directory.
+- `test_parse` checks the raw words and `|` (four new good lines, five
+  new bad); `test_uf2` checks `$PATH` (a second directory, a relative
+  one, empty, unset) and programs refused in a pipe.
+- **Planted bugs**, 10, one at a time; every one failed a test: globs
+  matching hidden names (`test_expand`); a spill dropping what was in
+  RAM (`test_pipe`); a pipeline not setting `$?` (`test_expand`); the
+  cursor's column off by one across rows (`test_line`); the history
+  written every time (`test_pipe`); `sh` not putting the level back
+  (`test_pipe`); `more` showing a row too many (`test_text`); `> f |`
+  accepted (`test_parse`); `$PATH` stopping at its first directory
+  (`test_uf2`); completion not folding case (`test_line`).
+- **The stack** (`-fstack-usage`, by hand): each `sh` level adds about
+  232 B, so vi's `:s` three levels down is about 5.7 KB of the 8 KB.
+
+**Checked on the board:** Claude, on the Plus 2 W (RP2350B rev 2, id
+`7458DC82A89AAC12`), development build from SRAM over SWD, keys typed
+over the UART, on the test card in a scratch directory since removed,
+2026-10-13 (`out/m4-board-1.log`):
+
+- `*.txt`, `[a-b]*` and a glob with no match; `cat *.txt | grep -n o`;
+  `$X`, `${X}x`, `"$X"`, `'$X'`, `$?` after success and after a missing
+  command (127); `$PATH` and `$HOME`.
+- `cat /BOOT2350.ORG | cat | grep -c .`: 89 KB through two pipes, both
+  spilling to `/.shell`, counted 558 lines, and `/.shell` was empty after.
+- A script made with `echo >`, run with `sh`: its output, its pipe and
+  its `$?`.
+- `ls -la / | more`: `--More--` after 31 rows, and Space showed the rest.
+- Tab completed `ec` to `echo `, `/readme` to `/readme.md `, `gr` to
+  `grep `, and `/pi` to `/pic` (shared by `pico2-apps` and `pics`); Up
+  recalled a line, Left five times, and an insert there ran as edited;
+  `history` listed 22 lines.
+- `usbdisk`: the message, then no disk on the Mac, as no cable is there;
+  Esc came back with status 0, the card mounted again, and
+  `/.shell/history` written (23 lines).
+- `/etc/profile` made on the card; after a restart over SWD it ran
+  before the first prompt (its `cd` and its message), and Up recalled the
+  last line of the session before, read from `/.shell/history`.
+- **The owner, on a Pico 2 W, release build, 2026-10-13:** `usbdisk`
+  offered the card to a Mac, and files were copied to and from it.
+  Ejecting on the Mac brought the shell back by itself, so macOS sends
+  START STOP UNIT on eject. Taking the card out during it gave
+  `usbdisk: the card was taken out`, and the disk went from the Mac. A
+  30 MB PDF took about 3 minutes to copy from the Mac to the card (by
+  eye).
+  `more` and the history worked, and a line piped through four commands,
+  `ls | grep txt | grep ls | grep g`. Lines longer than a row were
+  edited correctly across the wrap. The history came back after `menu`,
+  after `usbdisk` and after a program, and lines typed since the last of
+  those were lost on switching off, as designed (design.md §4.4).
+- The release build, started over SWD and driven by `tools/swd-drive.py`:
+  a glob into a pipe, a variable and `$?`, and Tab, each as on the
+  development build.
+
+**Measurements:**
+
+| What | Estimate | Measured |
+|---|---|---|
+| RAM, development / release (link map) | +32 KB of pipe buffer | 410,004 B / 406,260 B (M3: 290,628 B / 286,496 B); pipes 32 KB, the levels' parsed lines and words 21 KB, open files 13 KB, TinyUSB 15 KB |
+| Deepest stack | — | about 5.7 KB (vi's `:s` three `sh` levels down), of 8 KB |
+| Reset to prompt, with a profile and a 23-line history (Plus 2 W, from SRAM) | — | 550 ms development, 494 ms release; the LCD was up at 440 ms |
+| `usbdisk` write, Mac to card (the owner, Pico 2 W, release build) | — | a 30 MB PDF in about 3 minutes, about 170 KB/s, by eye |
+
+**Not checked:**
+
+- `usbdisk`: the rate measured rather than by eye, reading from the card
+  at all, and a computer other than a Mac. Making it faster is M6
+  (design.md §10).
+- How long a spilled pipe takes, and the history's write on leaving.
+- The line editor in the host shell: it assumes the panel's 40 or 64
+  columns and its wrap at once, where the macOS terminal is wider and
+  wraps late, so a long line there is drawn wrongly. The board is right
+  (the owner's run).
+- Carried from M3: the release build from the card on the Plus 2 W; a
+  CR LF file near 64 KB; the stack's depth on the board.
+- Carried from M2: the owner's timings; a power cut that leaves the
+  first sector's last page half programmed; a key pressed between Enter
+  and the reboot; long programs; an RP2040 or oversized UF2 on the card;
+  the read-back catching a flash fault; the emulators themselves after
+  the shell flashed them; the southbridge's version read failing (-2)
+  from the card.
+- Carried from M1: time taken by `ls` of a large directory, `df` with
+  FSINFO not trusted, and a large `cp`.
+- Carried from M0: the start time from power-on through stage3, 75 MHz by
+  eye, the cursor's blink by eye, every key code.
+
 ## M3 — vi (branch `m3-vi`, 2026-10-13)
 
 **Done.** vi edited `/atom/pico-atom.cfg` on the Plus 2 W's test card,

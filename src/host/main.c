@@ -100,13 +100,13 @@ int main(int argc, char **argv) {
 
     static shell_t sh;
     const out_t out = { con_write, NULL, false };
-    const shell_hooks_t hooks = { now_us, interrupted, getkey, NULL };
+    const shell_hooks_t hooks = { now_us, interrupted, getkey, NULL, NULL };
     shell_init(&sh, &out, &hooks, "host");
     shell_start(&sh);
 
     int c;
     while ((c = getkey(NULL)) >= 0) {
-        if (c == 0x04 && sh.len == 0) break;     /* Ctrl-D */
+        if (c == 0x04 && sh.line.len == 0) break;     /* Ctrl-D */
         shell_input(&sh, c);
     }
     restore();

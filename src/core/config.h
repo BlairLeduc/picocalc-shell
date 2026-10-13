@@ -26,6 +26,35 @@
 #define SHELL_WORDS_MAX    32u
 #define SHELL_CMDS_MAX     8u
 
+/* A line's commands after expansion (expand.h): the words one command
+ * may have once variables and globs are expanded, and their text. */
+#define SHELL_ARGS_MAX     128u
+#define SHELL_ARGS_TEXT    4096u
+
+/* How deep `sh` scripts nest: the typed line is level 0. Each level has
+ * its own parsed line, expanded words and redirections. */
+#define SHELL_DEPTH        4u
+
+/* Variables (vars.h), packed as NAME=value: all of them together. */
+#define SHELL_VARS_BYTES   1024u
+
+/* Pipes (pipe.h): two RAM buffers, shared; a pipe with none, or whose
+ * output outgrows its buffer, goes through a file in /.shell. The pool
+ * holds two pipes for each level. */
+#define SHELL_PIPE_BUF     16384u
+#define SHELL_PIPE_RAM     2u
+#define SHELL_PIPES        (2u * SHELL_DEPTH)
+
+/* History (history.h): the lines kept, packed, oldest dropped first. */
+#define SHELL_HISTORY_BYTES 2048u
+
+/* Tab completion (line.c): the names offered, packed, and how many. */
+#define SHELL_COMPLETE_NAMES 2048u
+#define SHELL_COMPLETE_MAX   128u
+
+/* A line as grep and more read it; a longer one is taken in pieces. */
+#define SHELL_TEXT_LINE    512u
+
 /* A path on the card, as the shell resolves it (path.h): FAT's own limit
  * on a name, and room for a few levels above it. */
 #define SHELL_PATH_MAX     255u

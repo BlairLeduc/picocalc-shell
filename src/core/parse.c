@@ -17,39 +17,37 @@ static bool is_meta(char c) {
     return c == ';' || c == '&' || c == '|' || c == '<' || c == '>';
 }
 
-/* One word from *sp into p->text at *tp, quotes and escapes removed and
- * NUL-ended. *sp is at its first character, which is neither blank nor
- * a metacharacter. */
+/* One word from *sp into p->text at *tp, as typed: its quotes and
+ * escapes are checked here and removed when it is expanded (expand.h).
+ * *sp is at its first character, which is neither blank nor a
+ * metacharacter. */
 static bool word(parse_t *p, const char **sp, char **tp) {
     const char *s = *sp;
-    char *t = *tp;
+    const char *start = s;
     while (*s && !is_blank(*s) && !is_meta(*s)) {
         if (*s == '\'') {
             const char *e = strchr(s + 1, '\'');
             if (!e) return fail(p, "unterminated '");
-            memcpy(t, s + 1, (size_t)(e - s - 1));
-            t += e - s - 1;
             s = e + 1;
         } else if (*s == '"') {
             s++;
             while (*s != '"') {
                 if (!*s) return fail(p, "unterminated \"");
-                /* In double quotes \ escapes only what is special there. */
-                if (*s == '\\' && (s[1] == '"' || s[1] == '\\' || s[1] == '$')) s++;
-                *t++ = *s++;
+                if (*s == '\\' && s[1]) s++;
+                s++;
             }
             s++;
         } else if (*s == '\\') {
             if (!s[1]) return fail(p, "\\ at the end of the line");
-            *t++ = s[1];
             s += 2;
         } else {
-            *t++ = *s++;
+            s++;
         }
     }
-    *t++ = '\0';
+    memcpy(*tp, start, (size_t)(s - start));
+    *tp += s - start;
+    *(*tp)++ = '\0';
     *sp = s;
-    *tp = t;
     return true;
 }
 
@@ -74,9 +72,10 @@ bool parse_line(parse_t *p, const char *line) {
             if (s[0] == '&' && s[1] == '&') next = SEP_AND, s += 2;
             else if (s[0] == '|' && s[1] == '|') next = SEP_OR, s += 2;
             else if (s[0] == ';') next = SEP_SEMI, s += 1;
-            else if (s[0] == '|') return fail(p, "pipes are not supported yet");
+            else if (s[0] == '|') next = SEP_PIPE, s += 1;
             else return fail(p, "& is not supported");
             if (!c || c->argc == 0) return fail(p, "a separator with no command before it");
+            if (next == SEP_PIPE && c->out) return fail(p, "output both redirected and piped");
             p->words[nwords++] = NULL;
             c = NULL;
             sep = next;
@@ -89,6 +88,8 @@ bool parse_line(parse_t *p, const char *line) {
             c->sep = sep;
             c->argv = &p->words[nwords];
         }
+
+        if (*s == '<' && c->sep == SEP_PIPE) return fail(p, "input both piped and redirected");
 
         if (*s == '<' || *s == '>') {
             bool out = *s == '>';

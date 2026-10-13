@@ -1,9 +1,10 @@
 /* parse.h — one typed line into commands (design.md §4.4).
  *
- * M1's part of the language: words with '…' and "…" quoting and \
- * escapes, `#` comments, the separators `;`, `&&` and `||`, and the
- * redirections `>`, `>>` and `<`. Variables, globs and pipes come later
- * (§10, M4); `|` is refused for now rather than taken as a word.
+ * Words with '…' and "…" quoting and \ escapes, `#` comments, the
+ * separators `;`, `&&`, `||` and `|`, and the redirections `>`, `>>` and
+ * `<`. Words are kept as typed, quotes and all: variables and globs are
+ * expanded, and quotes removed, as each command runs (expand.h), so
+ * `cd x; ls *` and `false; echo $?` see what the command before did.
  *
  * The whole line is parsed before anything runs, so a mistake at its end
  * stops all of it, as in sh. */
@@ -19,14 +20,15 @@ typedef enum {
     SEP_SEMI,       /* ;  */
     SEP_AND,        /* && */
     SEP_OR,         /* || */
+    SEP_PIPE,       /* |: its input is the command before's output */
 } sep_t;
 
 typedef struct {
     sep_t  sep;                 /* what joins it to the command before */
     int    argc;
-    char **argv;                /* into parse_t.words */
-    char  *in;                  /* < file, or NULL */
-    char  *out;                 /* > or >> file, or NULL */
+    char **argv;                /* into parse_t.words, as typed */
+    char  *in;                  /* < file, as typed, or NULL */
+    char  *out;                 /* > or >> file, as typed, or NULL */
     bool   append;              /* >> */
 } parse_cmd_t;
 
@@ -34,7 +36,7 @@ typedef struct {
     int         ncmds;
     parse_cmd_t cmds[SHELL_CMDS_MAX];
     char       *words[SHELL_WORDS_MAX + SHELL_CMDS_MAX];   /* argv arrays, NULL-ended */
-    char        text[SHELL_LINE_MAX + 1];                  /* the words' characters */
+    char        text[SHELL_LINE_MAX + 1];                  /* the words, NUL-ended */
     const char *error;          /* what was wrong, when parse_line fails */
 } parse_t;
 

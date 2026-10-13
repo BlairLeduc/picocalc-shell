@@ -31,6 +31,7 @@
 #include "shell_version.h"
 #include "southbridge.h"
 #include "term.h"
+#include "usbdisk.h"
 
 #define KBD_POLL_US 33333u   /* about 30 Hz (hardware-notes.md §6.1) */
 
@@ -91,6 +92,15 @@ static bool interrupted(void *ctx) {
     }
 #endif
     return hit;
+}
+
+static bool usb_stop(void *ctx) {
+    return interrupted(ctx);
+}
+
+/* usbdisk: until the computer ejects the card, or Break, Esc or Ctrl-C. */
+static const char *usbdisk(void *ctx) {
+    return usbdisk_run(usb_stop, ctx);
 }
 
 #if PICO_SHELL_UART
@@ -205,7 +215,7 @@ int main(void) {
     term_init(&g_term);
     keys_init(&g_keys);
     const out_t out = { con_write, NULL, false };
-    const shell_hooks_t hooks = { now_us, interrupted, getkey, NULL };
+    const shell_hooks_t hooks = { now_us, interrupted, getkey, usbdisk, NULL };
     shell_init(&g_shell, &out, &hooks, SHELL_VERSION);
     shell_set_loader(&g_shell, &g_loader);
     shell_start(&g_shell);

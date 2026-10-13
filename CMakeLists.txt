@@ -18,17 +18,24 @@ set(SHELL_CORE_SOURCES
     src/core/editor_pattern.c
     src/core/editor_undo.c
     src/core/editor_vi.c
+    src/core/expand.c
     src/core/files.c
     src/core/font-5x10.c
     src/core/font-8x10.c
+    src/core/history.c
+    src/core/input.c
     src/core/keys.c
+    src/core/line.c
     src/core/out.c
     src/core/parse.c
     src/core/path.c
+    src/core/pipe.c
     src/core/run.c
     src/core/shell.c
     src/core/term.c
+    src/core/text.c
     src/core/uf2.c
+    src/core/vars.c
     src/core/vi.c
 )
 
@@ -147,6 +154,8 @@ else()
         src/port/screen.c
         src/port/sd.c
         src/port/southbridge.c
+        src/port/usb_descriptors.c
+        src/port/usbdisk.c
     )
     # The loader's stage3 loads /BOOT2350.UF2 into SRAM and runs it
     # (design.md §3.2), as it does the loader's own menu.
@@ -156,7 +165,8 @@ else()
     pico_set_program_description(shell "UNIX-like command line for the PicoCalc")
 
     # include/: the header programs use to return to the shell, which
-    # loader.c checks against its own idea of the protocol.
+    # loader.c checks against its own idea of the protocol. src/port has
+    # tusb_config.h, which TinyUSB looks for on the include path.
     target_include_directories(shell PRIVATE src/port include ${SHELL_GENERATED})
     target_compile_options(shell PRIVATE ${SHELL_WARNINGS})
     add_dependencies(shell shell_version)
@@ -180,6 +190,7 @@ else()
         hardware_i2c
         hardware_spi
         hardware_vreg
+        tinyusb_device
     )
     pico_enable_stdio_uart(shell ${PICO_SHELL_UART_ON})
     pico_enable_stdio_usb(shell 0)

@@ -1,7 +1,7 @@
 # PicoCalc Shell — design
 
-Status: **Draft 5, 2026-10-13.** Feasibility study and first design. M0
-(the skeleton), M1 (files), M2 (run) and M3 (vi) are done
+Status: **Draft 6, 2026-10-13.** Feasibility study and first design. M0
+(the skeleton), M1 (files), M2 (run), M3 (vi) and M4 (comfort) are done
 ([milestones.md](milestones.md)).
 
 The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
@@ -26,6 +26,7 @@ questions are open; the design is ready for M0.
 | 2026-10-12 | `ls` hides names FAT marks hidden or system, as it hides names starting with `.`. | 4.2 |
 | 2026-10-12 | Variables come with M4. | 4.4, 10 |
 | 2026-10-12 | `include/picocalc_shell.h` is offered under the MIT licence as well as the GPL-3.0. | 9 |
+| 2026-10-13 | A patched stage3 that starts the shell at power-on, and the last program with Up/F1/F5 held, is an optional milestone (M7). Until it is installed, the stock loader's behaviour above stands. | 3.4, 10 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -234,6 +235,8 @@ back:
 - **Hold Up/F1/F5 at power-on.** This is the loader's existing gesture,
   and it works for every program. Power-on with no key held starts the last
   program. *Settled 2026-10-12:* that stays as it is, with no stage3 change.
+  *Decided 2026-10-13:* the optional M7 swaps this with a patched stage3
+  (§10), for an owner who installs it.
 - **An exit command in the program.** The shell publishes one small
   header, `include/picocalc_shell.h`:
 
@@ -415,6 +418,25 @@ runs at 115,200 baud; measure display speed in the release build.
 - **USB disk.** `usbdisk` unmounts FatFs and offers the card over USB MSC,
   as the loader's menu does. Ejecting on the host returns to the shell.
 
+  *As built at M4* (`src/port/usbdisk.c`): TinyUSB's MSC device, from the
+  SDK, with the loader's descriptors, so the computer sees the same disk
+  from either. Each SCSI read or write is one `sd.c` block; the card's
+  size comes from its CSD (`sd_sectors`). The run ends when the computer
+  ejects the card (START STOP UNIT with LoEj), when Break, Esc or Ctrl-C
+  is pressed, or when the card is taken out; the keyboard is polled
+  between USB tasks, which keeps the southbridge's I²C alive. macOS
+  sends that command on eject, so ejecting there brings the shell back
+  (the owner, 2026-10-13). After an eject the unit reports no medium
+  until the shell disconnects. Writing to the card runs at about
+  170 KB/s (a 30 MB file from the Mac in about 3 minutes, by eye): each
+  SCSI transfer is one 512-byte block, as in the loader. M6 is to speed
+  it up. Esc
+  before an eject may lose what the computer was writing, and the shell
+  says so when it starts. The history is saved first, and FatFs mounts
+  afresh after; a current directory no longer on the card becomes `/`.
+  `usbdisk` is refused with a redirection or in a pipe, which would hold
+  a file open across it.
+
 ### 4.3 The card
 
 ```
@@ -423,7 +445,7 @@ runs at 115,200 baud; measure display speed in the release build.
 /pico2-apps/*.uf2     programs, run by name; the loader's menu lists the same files
 /etc/profile          run at startup
 /home/                $HOME, the starting directory
-/.shell/              history
+/.shell/              history, and pipes too large for RAM while they run
 /atom/ /ace/ /oric/   the emulators' own directories, untouched
 ```
 
@@ -457,15 +479,101 @@ This is deliberately small: UNIX spelling with a 1980s micro's ambitions.
 *As built at M1* (`src/core/parse.c`): words, quoting and escapes, `#`
 comments, `;`, `&&`, `||` and the three redirections. The whole line is
 parsed before any of it runs, so a mistake at its end stops all of it, as
-in sh. `|` is refused with a message until M4. Errors go to the terminal,
-never to a redirection. Break, Esc or Ctrl-C stops a long command and drops
-the rest of the line. Variables come with M4 (*settled 2026-10-12*);
-until then `$` is an ordinary character.
+in sh. Errors go to the terminal, never to a redirection. Break, Esc or
+Ctrl-C stops a long command and drops the rest of the line.
+
+*As built at M4:*
+
+- **Expansion as each command runs** (`src/core/expand.c`). The parser
+  keeps each word as typed, quotes and all; variables, quotes and globs
+  are dealt with as the command runs, so `false; echo $?` and
+  `cd x; ls *` see what the command before did. Up to `SHELL_ARGS_MAX`
+  (128) words in `SHELL_ARGS_TEXT` (4 KB); more is refused, not cut.
+- **Variables** (`src/core/vars.c`): `$NAME`, `${NAME}` and `$?`, outside
+  single quotes; a `$` before anything else is itself, and an unset
+  variable is empty. `NAME=value` as a whole command sets one (several
+  may be given); `NAME=value cmd` is refused, since there is no
+  environment to pass, and so is `NAME=value > f`, rather than ignoring
+  the redirection. `set` lists them, `unset` removes, and `export`
+  sets or lists, and is otherwise the same as setting one. A value is
+  never split into words or globbed. A word left empty with no quotes is
+  dropped, as in sh. All of them share 1 KB (`SHELL_VARS_BYTES`). `HOME`
+  (`/home`) is `cd`'s default and the starting directory, and `PATH`
+  (`/pico2-apps`) is where programs are found: each directory in turn,
+  `:` between them, a relative one from the current directory, and an
+  empty one (`a::b`, a `:` at either end) the current directory, as in sh.
+- **Globs** in a word's last name only: `*/x` stays as typed. The matches
+  are sorted as `ls` sorts them, letters match without regard to case as
+  FAT's do, and a pattern that matches nothing stays as typed. Hidden
+  names (§4.2) match only a pattern that starts with `.`; `.` and `..`
+  never do. Redirections expand variables but not globs.
+- **Pipes** (`src/core/pipe.c`). Each command of `a | b | c` runs to
+  completion into a pipe, and the next then reads it. A pipe takes one
+  of two 16 KB RAM buffers (the 32 KB of §7) if one is free; beyond 16 KB,
+  or with none free, it goes through `/.shell/pipeNN`, written in place
+  (it is the shell's own file, not a user's) and removed when the pipe
+  closes. If output is lost on the way (the card full or failing), the
+  shell says so and stops the pipeline with status 1, rather than run
+  the next command on part of it. Otherwise a pipeline's status is its
+  last command's, and `&&` and `||`
+  take the whole pipeline. `a > f | b` and `a | b < f` are refused by the
+  parser. A program, `menu` or `usbdisk` is refused in a pipe, and with
+  any redirection here or at a level above, since leaving the shell would
+  leave its file behind. `cat`, `more` and `grep` read a file, `<` or a
+  pipe the same way (`src/core/input.c`); the keyboard is never a
+  command's input.
+- **Scripts.** `sh file` runs a file a line at a time; `/etc/profile`
+  runs when the shell starts, before the history is shown and the first
+  prompt. A script's output and redirections are those of the `sh`
+  command. A mistake is reported with the file and line, and the script
+  goes on; a stop ends the script and the line. Scripts nest
+  `SHELL_DEPTH - 1` (3) deep, each level with its own parsed line,
+  expanded words and redirections. Lines of up to `SHELL_LINE_MAX` (255);
+  CR LF is accepted. There are no script arguments (`$1`), as programs
+  have none (§3.5).
+- **The line editor** (`src/core/line.c`): Left, Right, Home, End (and
+  Ctrl-B, F, A, E), Backspace, Del, Ctrl-U and Ctrl-K, Ctrl-C, Up and
+  Down (and Ctrl-P, N) for the history, and Tab. A line over several
+  rows is redrawn with relative cursor moves, worked out from the
+  prompt's width; the terminal wraps as soon as a row fills (§4.1). The
+  prompt starts its own row when the output before it did not end one.
+- **Tab** completes a command name (a builtin, or a program in `$PATH`
+  without `.uf2`) as a command's first word, and a path anywhere else.
+  One match goes in whole, with `/` after a directory and a space after
+  anything else; several put in what they share, and a second Tab with
+  nothing to add lists them in columns. Names are put in as the card
+  spells them, with `\` before characters the shell would take as
+  special. Up to `SHELL_COMPLETE_MAX` (128) names are offered.
+- **History** (`src/core/history.c`): 2 KB of lines, the oldest dropped;
+  a blank line, and one the same as the one before, are not kept. It is
+  read from `/.shell/history` at startup (falling back to a whole
+  `.new`, §4.2) and written through `name.new` when the shell is left for
+  a program, the menu or `usbdisk`, and only if it changed: one card
+  write a session rather than one a command. Lines typed since are lost
+  if the power goes. `history` lists it.
 
 ### 4.5 Builtins
 
 Everything that touches files is a builtin, because running anything else
 costs a flash and a reboot.
+
+*As built at M4:* `cat cd cp df displaytest echo export font grep history
+ls menu mkdir more mv pwd rm rmdir set sh touch unset usbdisk vi view`.
+Of the v1 column, `head tail wc help clear phosphor battery backlight
+poweroff info reboot bootsel` are not built yet. `more` and `grep` are in
+`src/core/text.c`:
+
+- `more` shows `TERM_ROWS - 1` rows, a long line counting as the rows it
+  wraps to, then `--More--` in reverse: Space for a page, Enter or Down
+  for a row, q, Esc, Brk or Ctrl-C to stop. Writing to a file or a pipe
+  it copies, as `cat` does.
+- `grep [-v] [-n] [-c] [-i] pattern [file...]` uses vi's pattern matcher
+  (`editor_pattern.c`, §4.6), so its patterns are vi's and it matches
+  without regard to case, as `/` in vi does; `-i` is accepted and changes
+  nothing. With several files each line starts with its file's name.
+  Lines are read in pieces of `SHELL_TEXT_LINE - 1` (511) bytes, and a
+  longer line is matched a piece at a time. The status is 0 if a line
+  was found, 1 if none, 2 on an error.
 
 | v1 | Later, if wanted |
 |---|---|
@@ -599,6 +707,7 @@ decide (§4.1).
 | | `editor.c` | its `editor_vi_apply`, adapted into `vi.c` (§4.6) |
 | | `tests/test_editor_*.c` | as is, through `test/host/unity.h` |
 | UF2 Loader | `ui/uf2.c`, `proginfo.c` | §3.3 |
+| | `ui/lib/usb_msc/` (`usb_msc.c`, `usb_descriptors.c`, `tusb_config.h`) | `usbdisk` (§4.2), *as built at M4* |
 
 ## 6. Build and test
 
@@ -648,7 +757,7 @@ decide (§4.1).
 | The renderer's shadow of frame memory, 64 × 48 × 6 B (§4.1) | 18 KB |
 | Fonts, 2 × 128 glyphs × 10 rows | 2.5 KB |
 | vi buffer and undo journal (*and, as built at M3, an 8 KB register*) | 64 + 16 KB |
-| Pipe buffer | 32 KB |
+| Pipe buffer (*as built at M4: two of 16 KB*) | 32 KB |
 | FatFs (`FATFS`, 2 × `FIL`, LFN buffer) | ~3 KB |
 | Flash sector buffer (16 UF2 blocks) | 8 KB |
 | Stacks and slack | the rest, ~230 KB |
@@ -673,6 +782,15 @@ pattern matcher 3.6 KB, undo 1.8 KB, the front end 8.2 KB) and 94 KB of
 `.bss`: the 64 KB buffer, the 16 KB journal, the 8 KB register, and 4 KB
 for the copy of the screen.
 
+**Measured at M4** (the same tools, 2026-10-13): development 410,004 B,
+release 406,260 B. Of the 119 KB of growth (link map): the two pipe
+buffers, 32 KB; four levels of parsed line and expanded words
+(`s_frames`), 21 KB; the files each level and each pipe may hold open,
+13 KB, as FatFs keeps a sector in each `FIL`; TinyUSB with its MSC class,
+15 KB; `more` and `grep`'s buffers, 6 KB; history, completion and
+variables, about 8 KB; and the rest of the new code. About 100 KB of the
+504 KB is left for the stack and slack.
+
 **The stack** (*corrected at M3*). Core 0's stack starts at the top of
 scratch Y and may run down to `__StackLimit` at the bottom of scratch X:
 8 KB, because core 1 never starts and nothing is linked into scratch X.
@@ -682,7 +800,10 @@ with a 32-byte pattern: the pattern matcher recurses once per atom, at
 above it, 5.0 KB in all (`-fstack-usage`, worked by hand). Starting core 1
 would take scratch X for its own stack and leave 4 KB, which this chain
 would overrun: the pattern limit (`LOGO_VI_TEXT_MAX`) would have to come
-down first.
+down first. *At M4* each level of `sh` adds about 232 B (`run_line`,
+with the pipeline and command inlined, 144 B; `cmd_sh` 8 B; `script`
+80 B), so vi's `:s` in a script three levels down is about 5.7 KB of the
+8 KB. Tab completion is about 0.5 KB below the prompt.
 
 ## 8. Risks
 
@@ -733,3 +854,33 @@ in [milestones.md](milestones.md).
 - **M4 — Comfort.** History, Tab completion, globs, pipes, variables
   (§4.4), `more`, `grep`, `/etc/profile` and `usbdisk`.
 - **M5 — Exit everywhere.** *Exit to shell* in the emulators' shared menu.
+- **M6 — USB speed.** Make `usbdisk` faster than M4's 512 bytes per
+  transfer (about 170 KB/s writing, by eye): a larger MSC buffer, and
+  multi-block reads and writes in `sd.c` (CMD18, CMD25), each wait still
+  bounded below the southbridge's 2.5 s (§4.2). Done when the rate each
+  way is measured on the board, before and after, with a large file
+  copied each way and compared byte for byte.
+- **M7 — Shell at power-on (optional).** A patched UF2 Loader, so that
+  power-on with no key held loads the shell, and Up/F1/F5 start the last
+  program; Down/F3 still give BOOTSEL. pelrun's loader is a submodule
+  pinned at v2.5 (`5c44a4b`) in `third_party/uf2loader`, with
+  `references/` left alone; `patches/uf2loader-boot-shell.patch` changes
+  only `stage3/stage3.c`, and `tools/build-loader.sh` applies it to a copy
+  and builds `bootloader_pico2.uf2`. The patch:
+  - swaps the no-key and Up/F1/F5 modes in `read_bootmode()`;
+  - starts the program in flash, not BOOTSEL, when there is no card or
+    `/BOOT2350.UF2` cannot be loaded, so a power-on without a card still
+    does something;
+  - names its version `2.5-shell`.
+
+  The shell sends `BOOT_DEFAULT` as an explicit command when it starts a
+  program, instead of no command, which stock stage3 also accepts; and
+  `loader.c` accepts `2.5-shell`. The owner installs the loader in
+  BOOTSEL; the shell never writes stage3's partition, and reinstalling
+  the stock loader undoes M7. Check first whether the emulators reboot
+  themselves with no command: with the patch, that would land in the
+  shell. Done when, on the board with the patched loader, power-on
+  gives the shell, Up held gives the last program, power-on with no card
+  starts the program, and a program still runs, and comes back by its
+  exit command, under both the patched and the stock loader. Offer the
+  change to pelrun as an option.

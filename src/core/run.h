@@ -11,7 +11,7 @@
 #include "shell.h"
 #include "uf2.h"
 
-/* Where programs are looked for, until $PATH comes with variables (M4). */
+/* $PATH's default: where programs are looked for (design.md §4.3). */
 #define SHELL_PROGRAM_DIR "/pico2-apps"
 #define SHELL_PROGRAM_EXT ".uf2"
 /* The loader's own menu, kept beside the shell (design.md §3.2). */

@@ -12,15 +12,18 @@
 #include <string.h>
 
 #include "path.h"
+#include "vars.h"
 
-_Static_assert(FF_FS_LOCK >= SHELL_TREE_DEPTH + 4,
-               "FatFs's lock table must hold a full walk and four files");
+/* At once: cp -r's walk and its two files, and at each level a script,
+ * its < and its > (shell.c), and every pipe's file (pipe.c). */
+_Static_assert(FF_FS_LOCK >= SHELL_TREE_DEPTH + 2u + 3u * SHELL_DEPTH + SHELL_PIPES,
+               "FatFs's lock table must hold everything that can be open at once");
 
 static FATFS   s_fs;
 static FILINFO s_fno;
 static FIL     s_src;      /* the file cat or cp reads */
-static FIL     s_in;       /* < */
-static files_safe_t s_redir;    /* > and >> */
+static FIL     s_in[SHELL_DEPTH];          /* <, at each level */
+static files_safe_t s_redir[SHELL_DEPTH];   /* > and >>, at each level */
 static files_safe_t s_copy;     /* cp's destination */
 static uint8_t s_buf[SHELL_COPY_BUF];
 
@@ -58,6 +61,10 @@ void files_mount(void) {
     f_mount(&s_fs, "", 0);
 }
 
+void files_unmount(void) {
+    f_mount(NULL, "", 0);
+}
+
 FRESULT files_stat(const char *path, FILINFO *fno) {
     if (strcmp(path, "/") == 0) {
         DIR d;
@@ -80,10 +87,7 @@ static bool resolve(shell_t *sh, const char *cmd, const char *arg, char *out) {
     return false;
 }
 
-/* Leading options, such as -l -a or -la, up to "--" or the first
- * operand: each letter of `allowed` found sets its bit in *flags. The
- * index of the first operand, or -1 after printing the usage. */
-static int options(shell_t *sh, int argc, char **argv, const char *allowed, unsigned *flags,
+int files_options(shell_t *sh, int argc, char **argv, const char *allowed, unsigned *flags,
                    const char *usage) {
     *flags = 0;
     int i = 1;
@@ -163,9 +167,19 @@ static void redir_write(void *ctx, const char *buf, size_t n) {
     files_safe_write(ctx, buf, n);
 }
 
+FRESULT files_open_startup(FIL *f, const char *path) {
+    FRESULT r = f_open(f, path, FA_READ);
+    if (r != FR_NO_FILE || strlen(path) + 4u > SHELL_PATH_MAX) return r;
+    strcpy(s_c, path);
+    strcat(s_c, ".new");
+    FRESULT r2 = f_open(f, s_c, FA_READ);
+    return r2 == FR_OK ? FR_OK : r;
+}
+
 bool files_redirect(shell_t *sh, const char *arg, bool append) {
+    files_safe_t *w = &s_redir[sh->depth];
     if (!resolve(sh, "shell", arg, s_a)) return false;
-    const char *err = files_safe_open(&s_redir, s_a);
+    const char *err = files_safe_open(w, s_a);
     if (!err && append) {
         /* >> copies what is there first, so the old file stays whole
          * until the new one is. */
@@ -173,44 +187,44 @@ bool files_redirect(shell_t *sh, const char *arg, bool append) {
         if (r == FR_OK) {
             UINT n;
             while ((r = f_read(&s_src, s_buf, sizeof s_buf, &n)) == FR_OK && n > 0)
-                files_safe_write(&s_redir, s_buf, n);
+                files_safe_write(w, s_buf, n);
             f_close(&s_src);
         }
-        if (r != FR_OK && r != FR_NO_FILE) s_redir.why = files_why(r);
-        err = s_redir.why;
-        if (err) files_safe_abort(&s_redir);
+        if (r != FR_OK && r != FR_NO_FILE) w->why = files_why(r);
+        err = w->why;
+        if (err) files_safe_abort(w);
     }
     if (err) {
         shell_error(sh, "shell: %s: %s\n", arg, err);
         return false;
     }
-    sh->out = (out_t){ redir_write, &s_redir, true };
+    sh->out = (out_t){ redir_write, w, true };
     sh->out_is_con = false;
     return true;
 }
 
 bool files_redirect_end(shell_t *sh) {
-    sh->out = sh->con;
-    sh->out_is_con = true;
-    const char *err = files_safe_commit(&s_redir);
-    if (err) shell_error(sh, "shell: %s: %s\n", s_redir.path, err);
+    files_safe_t *w = &s_redir[sh->depth];
+    const char *err = files_safe_commit(w);
+    if (err) shell_error(sh, "shell: %s: %s\n", w->path, err);
     return err == NULL;
 }
 
 bool files_input(shell_t *sh, const char *arg) {
     if (!resolve(sh, "shell", arg, s_a)) return false;
-    FRESULT r = f_open(&s_in, s_a, FA_READ);
+    FIL *f = &s_in[sh->depth];
+    FRESULT r = f_open(f, s_a, FA_READ);
     if (r != FR_OK) {
-        shell_error(sh, "shell: %s: %s\n", arg, files_why(r));
+        bool dir = r == FR_NO_FILE && files_is_dir(s_a);
+        shell_error(sh, "shell: %s: %s\n", arg, dir ? "is a directory" : files_why(r));
         return false;
     }
-    sh->in = &s_in;
+    sh->in = (input_t){ f, NULL };
     return true;
 }
 
 void files_input_end(shell_t *sh) {
-    if (sh->in) f_close(sh->in);
-    sh->in = NULL;
+    f_close(&s_in[sh->depth]);
 }
 
 /* ---- pwd, cd ---------------------------------------------------------- */
@@ -224,7 +238,11 @@ int cmd_pwd(shell_t *sh, int argc, char **argv) {
 
 int cmd_cd(shell_t *sh, int argc, char **argv) {
     if (argc > 2) return usage(sh, "cd [dir]");
-    const char *arg = argc == 2 ? argv[1] : SHELL_HOME;
+    const char *arg = argc == 2 ? argv[1] : vars_get("HOME", 4);
+    if (!arg) {
+        shell_error(sh, "cd: HOME is not set\n");
+        return 1;
+    }
     if (!resolve(sh, "cd", arg, s_a)) return 1;
     FRESULT r = files_stat(s_a, &s_fno);
     if (r != FR_OK) {
@@ -295,10 +313,7 @@ static int ent_cmp(const void *a, const void *b) {
     }
 }
 
-/* `.name`, macOS's `._name` (hardware-notes.md §7.1), and anything FAT
- * marks hidden or system, such as Windows's `System Volume Information`,
- * are hidden (design.md §4.2). */
-static bool hidden(const FILINFO *fno) {
+bool files_hidden(const FILINFO *fno) {
     return fno->fname[0] == '.' || (fno->fattrib & (AM_HID | AM_SYS));
 }
 
@@ -347,7 +362,7 @@ static int ls_dir(shell_t *sh, const char *shown, const char *path, unsigned fla
     size_t used = 0;
     bool full = false;
     while (r == FR_OK && (r = f_readdir(&d, &s_fno)) == FR_OK && s_fno.fname[0]) {
-        if (!(flags & LS_A) && hidden(&s_fno)) continue;
+        if (!(flags & LS_A) && files_hidden(&s_fno)) continue;
         size_t len = strlen(s_fno.fname) + 1u;
         if (n == SHELL_LS_MAX || used + len > sizeof s_names) {
             full = true;
@@ -368,7 +383,7 @@ static int ls_dir(shell_t *sh, const char *shown, const char *path, unsigned fla
         shell_error(sh, "ls: %s: more than %u names, not sorted\n", shown, SHELL_LS_MAX);
         r = f_opendir(&d, path);
         while (r == FR_OK && (r = f_readdir(&d, &s_fno)) == FR_OK && s_fno.fname[0]) {
-            if (!(flags & LS_A) && hidden(&s_fno)) continue;
+            if (!(flags & LS_A) && files_hidden(&s_fno)) continue;
             if (flags & LS_L) ls_long(sh, s_fno.fname, s_fno.fattrib, (uint32_t)s_fno.fsize);
             else out_printf(&sh->out, "%s\n", s_fno.fname);
             if (shell_interrupted(sh)) break;
@@ -389,7 +404,7 @@ static int ls_dir(shell_t *sh, const char *shown, const char *path, unsigned fla
 
 int cmd_ls(shell_t *sh, int argc, char **argv) {
     unsigned flags;
-    int first = options(sh, argc, argv, "la", &flags, "ls [-l] [-a] [path...]");
+    int first = files_options(sh, argc, argv, "la", &flags, "ls [-l] [-a] [path...]");
     if (first < 0) return 1;
     if (first == argc) return ls_dir(sh, ".", sh->cwd, flags);
 
@@ -417,10 +432,10 @@ int cmd_ls(shell_t *sh, int argc, char **argv) {
 
 /* ---- cat -------------------------------------------------------------- */
 
-static int cat_file(shell_t *sh, FIL *f, const char *shown) {
+static int cat_in(shell_t *sh, const input_t *in, const char *shown) {
     for (;;) {
         UINT n;
-        FRESULT r = f_read(f, s_buf, sizeof s_buf, &n);
+        FRESULT r = input_read(in, s_buf, sizeof s_buf, &n);
         if (r != FR_OK) {
             shell_error(sh, "cat: %s: %s\n", shown, files_why(r));
             return 1;
@@ -431,26 +446,29 @@ static int cat_file(shell_t *sh, FIL *f, const char *shown) {
     }
 }
 
+FRESULT files_open_read(shell_t *sh, const char *cmd, const char *arg, FIL *f) {
+    if (!resolve(sh, cmd, arg, s_a)) return FR_INVALID_NAME;
+    FRESULT r = f_open(f, s_a, FA_READ);
+    if (r != FR_OK) {
+        /* FatFs opens a directory as no file at all. */
+        bool dir = r == FR_NO_FILE && files_is_dir(s_a);
+        shell_error(sh, "%s: %s: %s\n", cmd, arg, dir ? "is a directory" : files_why(r));
+    }
+    return r;
+}
+
 int cmd_cat(shell_t *sh, int argc, char **argv) {
     if (argc == 1) {
-        if (!sh->in) return usage(sh, "cat file... (or cat < file)");
-        return cat_file(sh, sh->in, "input");
+        if (!input_any(&sh->in)) return usage(sh, "cat file... (or cat < file)");
+        return cat_in(sh, &sh->in, "input");
     }
     int status = 0;
     for (int i = 1; i < argc && !sh->stop; i++) {
-        if (!resolve(sh, "cat", argv[i], s_a)) {
+        if (files_open_read(sh, "cat", argv[i], &s_src) != FR_OK) {
             status = 1;
             continue;
         }
-        FRESULT r = f_open(&s_src, s_a, FA_READ);
-        if (r != FR_OK) {
-            /* FatFs opens a directory as no file at all. */
-            bool dir = r == FR_NO_FILE && files_is_dir(s_a);
-            shell_error(sh, "cat: %s: %s\n", argv[i], dir ? "is a directory" : files_why(r));
-            status = 1;
-            continue;
-        }
-        status |= cat_file(sh, &s_src, argv[i]);
+        status |= cat_in(sh, &(input_t){ &s_src, NULL }, argv[i]);
         f_close(&s_src);
     }
     return status;
@@ -596,7 +614,7 @@ static int copy_tree(shell_t *sh, const char *src, const char *dst) {
 int cmd_cp(shell_t *sh, int argc, char **argv) {
     static const char use[] = "cp [-r] from... to";
     unsigned flags;
-    int first = options(sh, argc, argv, "r", &flags, use);
+    int first = files_options(sh, argc, argv, "r", &flags, use);
     if (first < 0) return 1;
     if (argc - first < 2) return usage(sh, use);
 
@@ -795,7 +813,7 @@ static int remove_tree(shell_t *sh, const char *path) {
 int cmd_rm(shell_t *sh, int argc, char **argv) {
     static const char use[] = "rm [-r] path...";
     unsigned flags;
-    int first = options(sh, argc, argv, "r", &flags, use);
+    int first = files_options(sh, argc, argv, "r", &flags, use);
     if (first < 0) return 1;
     if (first == argc) return usage(sh, use);
     int status = 0;
@@ -866,7 +884,7 @@ int cmd_rmdir(shell_t *sh, int argc, char **argv) {
 int cmd_mkdir(shell_t *sh, int argc, char **argv) {
     static const char use[] = "mkdir [-p] dir...";
     unsigned flags;
-    int first = options(sh, argc, argv, "p", &flags, use);
+    int first = files_options(sh, argc, argv, "p", &flags, use);
     if (first < 0) return 1;
     if (first == argc) return usage(sh, use);
     int status = 0;

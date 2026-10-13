@@ -16,19 +16,27 @@
 
 #include "shell.h"
 
-/* cd with no operand, and the starting directory when the card has it
- * (design.md §4.3). */
+/* $HOME's default: cd with no operand, and the starting directory when
+ * the card has it (design.md §4.3). */
 #define SHELL_HOME "/home"
 
 /* Register the volume; FatFs mounts it on first use, and again after
  * the port's disk layer reports the card changed. */
 void files_mount(void);
 
+/* Let the volume go, for usbdisk: nothing may be open. */
+void files_unmount(void);
+
 /* FatFs's result in words: "no card", "no such file or directory". */
 const char *files_why(FRESULT r);
 
 /* f_stat, with the root, which FatFs cannot stat, as a directory. */
 FRESULT files_stat(const char *path, FILINFO *fno);
+
+/* Whether ls and globs leave the name out: `.name`, macOS's `._name`
+ * (hardware-notes.md §7.1), and anything FAT marks hidden or system,
+ * such as Windows's `System Volume Information` (design.md §4.2). */
+bool files_hidden(const FILINFO *fno);
 
 /* Whether `path` (absolute) is a directory on the card. */
 bool files_is_dir(const char *path);
@@ -52,16 +60,33 @@ void files_safe_abort(files_safe_t *w);
 /* Close name.new and put it in place: NULL, or why the old file stays. */
 const char *files_safe_commit(files_safe_t *w);
 
-/* `> arg` or `>> arg` for the next command: sh->out becomes the file.
- * False, with the error printed, if it cannot be opened. */
+/* Open a file the shell reads at startup (/etc/profile, the history):
+ * if it is missing but name.new is there, the power went between the
+ * unlink and the rename of a safe write, and name.new is whole. */
+FRESULT files_open_startup(FIL *f, const char *path);
+
+/* `> arg` or `>> arg` for the next command: sh->out becomes the file,
+ * one for each level of sh->depth. False, with the error printed, if it
+ * cannot be opened. */
 bool files_redirect(shell_t *sh, const char *arg, bool append);
 /* After the command: put the file in place, or keep the old one and say
- * why. False if the output was lost. sh->out is the terminal again. */
+ * why. False if the output was lost. The caller puts sh->out back. */
 bool files_redirect_end(shell_t *sh);
 
 /* `< arg` for the next command: sh->in. */
 bool files_input(shell_t *sh, const char *arg);
+/* After it: close the file. The caller puts sh->in back. */
 void files_input_end(shell_t *sh);
+
+/* Open `arg` to read, for a command that takes files: FR_OK, or the
+ * failure with the error printed as "cmd: arg: why". */
+FRESULT files_open_read(shell_t *sh, const char *cmd, const char *arg, FIL *f);
+
+/* Leading options, such as -l -a or -la, up to "--" or the first
+ * operand: each letter of `allowed` found sets its bit in *flags. The
+ * index of the first operand, or -1 after printing the usage. */
+int files_options(shell_t *sh, int argc, char **argv, const char *allowed, unsigned *flags,
+                  const char *usage);
 
 int cmd_cat(shell_t *sh, int argc, char **argv);
 int cmd_cd(shell_t *sh, int argc, char **argv);

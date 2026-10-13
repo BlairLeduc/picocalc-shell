@@ -46,7 +46,7 @@ static bool has_row(const char *text) {
 
 int main(void) {
     const out_t out = { sink, NULL, false };
-    const shell_hooks_t hooks = { now, interrupted, NULL, NULL };
+    const shell_hooks_t hooks = { now, interrupted, NULL, NULL, NULL };
 
     term_init(&t);
     term_write(&t, "junk from before", 16);
@@ -88,7 +88,7 @@ int main(void) {
 
     /* The line holds SHELL_LINE_MAX characters and drops the rest. */
     for (unsigned i = 0; i < SHELL_LINE_MAX + 10; i++) shell_input(&sh, 'x');
-    CHECK(sh.len == SHELL_LINE_MAX, "line length %zu", sh.len);
+    CHECK(sh.line.len == SHELL_LINE_MAX, "line length %zu", sh.line.len);
     type("\003");
 
     /* displaytest stops when interrupted, and reports. */
