@@ -26,6 +26,7 @@
 #include "editor_pattern.h"
 #include "keycodes.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
