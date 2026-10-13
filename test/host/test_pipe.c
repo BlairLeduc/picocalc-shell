@@ -129,10 +129,13 @@ static int pipe_tests(bool fat32) {
           "big a|b|c|d: '%s'", con);
     CHECK(run("ls -a /.shell") == 0 && con_len == 0, "no pipe files left: '%s'", con);
 
-    /* A card that fails as the pipe spills: the loss is said, and the
-     * shell carries on once the card is back. */
+    /* A card that fails as the pipe spills: the loss is said, the next
+     * stage does not run on part of the output, and the shell carries on
+     * once the card is back. */
     host_disk_fail_writes_after(0);
-    CHECK(run("cat big.txt | grep -c line") != 0 && strstr(con, "shell: pipe: card I/O error"),
+    static const char lost[] = "shell: pipe: card I/O error\n";
+    CHECK(run("cat big.txt | grep -c line") == 1 && con_len >= sizeof lost - 1 &&
+              strcmp(con + con_len - (sizeof lost - 1), lost) == 0,
           "a pipe that cannot spill: '%s'", con);
     host_disk_fail_writes_after(-1);
     files_mount();

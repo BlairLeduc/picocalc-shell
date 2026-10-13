@@ -698,13 +698,19 @@ static int test_shell(void) {
     CHECK(run("echo x | prog > out") == 2 && boots == 0, "pipe, redirection: '%s'", con);
 
     /* $PATH: each directory in turn, ':' between them, relative ones
-     * from the current directory; empty, nothing is found. */
+     * from the current directory; an empty entry is the current
+     * directory, as in sh. */
     CHECK(f_mkdir("/bin2") == FR_OK && put("/bin2/other2.uf2", ubuf, ulen), "bin2");
     CHECK(run("other2") == 127, "not in $PATH: '%s'", con);
     CHECK(run("PATH=/nope:/bin2:/pico2-apps; other2") == 0 && boots == 1, "second: '%s'", con);
     CHECK(run("prog") == 0 && boots == 1, "third: '%s'", con);
     CHECK(run("cd /; PATH=bin2; other2") == 0 && boots == 1, "relative: '%s'", con);
     CHECK(run("PATH=; prog") == 127 && boots == 0, "empty: '%s'", con);
+    CHECK(run("cd /bin2; PATH=; other2") == 0 && boots == 1, "empty is here: '%s'", con);
+    CHECK(run("cd /bin2; PATH=/nope:; other2") == 0 && boots == 1, "trailing ':': '%s'", con);
+    CHECK(run("cd /bin2; PATH=/nope::/pico2-apps; other2") == 0 && boots == 1, "'::': '%s'",
+          con);
+    CHECK(run("cd /; PATH=/nope:; other2") == 127 && boots == 0, "not here: '%s'", con);
     CHECK(run("unset PATH; prog") == 127 && boots == 0, "unset: '%s'", con);
     CHECK(run("PATH=/pico2-apps; prog") == 0 && boots == 1, "back: '%s'", con);
 

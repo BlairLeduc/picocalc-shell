@@ -493,13 +493,15 @@ Ctrl-C stops a long command and drops the rest of the line.
   single quotes; a `$` before anything else is itself, and an unset
   variable is empty. `NAME=value` as a whole command sets one (several
   may be given); `NAME=value cmd` is refused, since there is no
-  environment to pass. `set` lists them, `unset` removes, and `export`
+  environment to pass, and so is `NAME=value > f`, rather than ignoring
+  the redirection. `set` lists them, `unset` removes, and `export`
   sets or lists, and is otherwise the same as setting one. A value is
   never split into words or globbed. A word left empty with no quotes is
   dropped, as in sh. All of them share 1 KB (`SHELL_VARS_BYTES`). `HOME`
   (`/home`) is `cd`'s default and the starting directory, and `PATH`
   (`/pico2-apps`) is where programs are found: each directory in turn,
-  `:` between them, a relative one from the current directory.
+  `:` between them, a relative one from the current directory, and an
+  empty one (`a::b`, a `:` at either end) the current directory, as in sh.
 - **Globs** in a word's last name only: `*/x` stays as typed. The matches
   are sorted as `ls` sorts them, letters match without regard to case as
   FAT's do, and a pattern that matches nothing stays as typed. Hidden
@@ -510,7 +512,10 @@ Ctrl-C stops a long command and drops the rest of the line.
   of two 16 KB RAM buffers (the 32 KB of §7) if one is free; beyond 16 KB,
   or with none free, it goes through `/.shell/pipeNN`, written in place
   (it is the shell's own file, not a user's) and removed when the pipe
-  closes. A pipeline's status is its last command's, and `&&` and `||`
+  closes. If output is lost on the way (the card full or failing), the
+  shell says so and stops the pipeline with status 1, rather than run
+  the next command on part of it. Otherwise a pipeline's status is its
+  last command's, and `&&` and `||`
   take the whole pipeline. `a > f | b` and `a | b < f` are refused by the
   parser. A program, `menu` or `usbdisk` is refused in a pipe, and with
   any redirection here or at a level above, since leaving the shell would

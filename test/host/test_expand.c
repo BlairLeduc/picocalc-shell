@@ -185,6 +185,10 @@ int main(void) {
     CHECK(run("unset 1x") == 1 && strstr(con, "not a name"), "unset 1x: '%s'", con);
     CHECK(run("A=1 echo hi") == 1 && strstr(con, "not supported") && !vars_get("A", 1),
           "A=1 cmd: '%s'", con);
+    CHECK(run("A=1 > f") == 1 && strstr(con, "with a redirection is not supported") &&
+              !vars_get("A", 1),
+          "A=1 > f: '%s'", con);
+    CHECK(run("A=1 < f") == 1 && !vars_get("A", 1), "A=1 < f: '%s'", con);
     CHECK(run("X=1=2; echo $X") == 0 && strcmp(con, "1=2\n") == 0, "X=1=2: '%s'", con);
     CHECK(run("'A'=1") == 127, "a quoted name is not an assignment: '%s'", con);
     /* The table fills, and a set that does not fit keeps the old value. */

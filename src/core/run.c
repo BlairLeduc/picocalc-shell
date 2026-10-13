@@ -144,12 +144,14 @@ static bool find(shell_t *sh, const char *name) {
     if (n + sizeof SHELL_PROGRAM_EXT <= sizeof file) {
         memcpy(file, name, n);
         memcpy(file + n, SHELL_PROGRAM_EXT, sizeof SHELL_PROGRAM_EXT);
-        for (const char *p = vars_get("PATH", 4); p && *p;) {
+        /* An empty entry is the current directory, as in sh. */
+        for (const char *p = vars_get("PATH", 4); p;) {
             const char *colon = strchr(p, ':');
             size_t len = colon ? (size_t)(colon - p) : strlen(p);
-            if (len > 0 && len < sizeof dir) {
+            if (len < sizeof dir) {
                 memcpy(dir, p, len);
                 dir[len] = '\0';
+                if (len == 0) strcpy(dir, ".");
                 if (path_resolve(abs, sh->cwd, dir) && path_join(s_path, abs, file) &&
                     f_stat(s_path, &s_fno) == FR_OK && !(s_fno.fattrib & AM_DIR))
                     return true;

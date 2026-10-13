@@ -351,6 +351,11 @@ static int run_cmd(shell_t *sh, const parse_cmd_t *c, pipe_t *from, pipe_t *to) 
     expand_t *e = &s_frames[sh->depth].exp;
     const char *eq;
     if (expand_is_assignment(c->argv[0], &eq)) {
+        if (c->in || c->out) {
+            shell_error(sh, "shell: %s: NAME=value with a redirection is not supported\n",
+                        c->argv[0]);
+            return 1;
+        }
         for (int i = 0; i < c->argc; i++) {
             if (!expand_is_assignment(c->argv[i], &eq)) {
                 shell_error(sh, "shell: %s: NAME=value before a command is not supported\n",
@@ -423,7 +428,12 @@ static int run_pipeline(shell_t *sh, const parse_t *p, int first, int end) {
         status = run_cmd(sh, &p->cmds[k], from, to);
         if (from) pipe_close(from);
         from = to;
-        if (to && (why = pipe_written(to)) != NULL) shell_error(sh, "shell: pipe: %s\n", why);
+        /* Output lost on the way: the next stage would read part of it. */
+        if (to && (why = pipe_written(to)) != NULL) {
+            shell_error(sh, "shell: pipe: %s\n", why);
+            status = 1;
+            break;
+        }
         if (sh->stop) break;
     }
     if (from) pipe_close(from);
