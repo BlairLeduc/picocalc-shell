@@ -421,8 +421,12 @@ runs at 115,200 baud; measure display speed in the release build.
   size comes from its CSD (`sd_sectors`). The run ends when the computer
   ejects the card (START STOP UNIT with LoEj), when Break, Esc or Ctrl-C
   is pressed, or when the card is taken out; the keyboard is polled
-  between USB tasks, which keeps the southbridge's I²C alive. After an
-  eject the unit reports no medium until the shell disconnects. Esc
+  between USB tasks, which keeps the southbridge's I²C alive. macOS
+  sends that command on eject, so ejecting there brings the shell back
+  (the owner, 2026-10-13). After an eject the unit reports no medium
+  until the shell disconnects. The rate is about 170 KB/s (a 30 MB file
+  in about 3 minutes, by eye): each SCSI transfer is one 512-byte block,
+  as in the loader. Esc
   before an eject may lose what the computer was writing, and the shell
   says so when it starts. The history is saved first, and FatFs mounts
   afresh after; a current directory no longer on the card becomes `/`.

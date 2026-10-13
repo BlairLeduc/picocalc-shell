@@ -115,7 +115,11 @@ over the UART, on the test card in a scratch directory since removed,
   before the first prompt (its `cd` and its message), and Up recalled the
   last line of the session before, read from `/.shell/history`.
 - **The owner, on a Pico 2 W, release build, 2026-10-13:** `usbdisk`
-  offered the card to a computer, and files were copied to and from it.
+  offered the card to a Mac, and files were copied to and from it.
+  Ejecting on the Mac brought the shell back by itself, so macOS sends
+  START STOP UNIT on eject. Taking the card out during it gave
+  `usbdisk: the card was taken out`, and the disk went from the Mac. A
+  30 MB PDF took about 3 minutes to copy (by eye; which way not noted).
   `more` and the history worked, and a line piped through four commands,
   `ls | grep txt | grep ls | grep g`.
 - The release build, started over SWD and driven by `tools/swd-drive.py`:
@@ -129,13 +133,12 @@ over the UART, on the test card in a scratch directory since removed,
 | RAM, development / release (link map) | +32 KB of pipe buffer | 410,004 B / 406,260 B (M3: 290,628 B / 286,496 B); pipes 32 KB, the levels' parsed lines and words 21 KB, open files 13 KB, TinyUSB 15 KB |
 | Deepest stack | — | about 5.7 KB (vi's `:s` three `sh` levels down), of 8 KB |
 | Reset to prompt, with a profile and a 23-line history (Plus 2 W, from SRAM) | — | 550 ms development, 494 ms release; the LCD was up at 440 ms |
+| `usbdisk` copy (the owner, Pico 2 W, release build, a Mac) | — | a 30 MB PDF in about 3 minutes, about 170 KB/s, by eye |
 
 **Not checked:**
 
-- `usbdisk`: whether the computer's eject brings the shell back (that
-  is, whether it sends START STOP UNIT; if not, Esc after ejecting is the
-  way back), the card taken out during it, and the transfer rate. The
-  owner's run copied files each way but did not report these.
+- `usbdisk`: the rate each way measured rather than by eye, and a
+  computer other than a Mac.
 - How long a spilled pipe takes, and the history's write on leaving.
 - The line editor in the host shell: it assumes the panel's 40 or 64
   columns and its wrap at once, where the macOS terminal is wider and
