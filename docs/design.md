@@ -424,9 +424,10 @@ runs at 115,200 baud; measure display speed in the release build.
   between USB tasks, which keeps the southbridge's I²C alive. macOS
   sends that command on eject, so ejecting there brings the shell back
   (the owner, 2026-10-13). After an eject the unit reports no medium
-  until the shell disconnects. The rate is about 170 KB/s (a 30 MB file
-  in about 3 minutes, by eye): each SCSI transfer is one 512-byte block,
-  as in the loader. Esc
+  until the shell disconnects. Writing to the card runs at about
+  170 KB/s (a 30 MB file from the Mac in about 3 minutes, by eye): each
+  SCSI transfer is one 512-byte block, as in the loader. M6 is to speed
+  it up. Esc
   before an eject may lose what the computer was writing, and the shell
   says so when it starts. The history is saved first, and FatFs mounts
   afresh after; a current directory no longer on the card becomes `/`.
@@ -845,3 +846,9 @@ in [milestones.md](milestones.md).
 - **M4 — Comfort.** History, Tab completion, globs, pipes, variables
   (§4.4), `more`, `grep`, `/etc/profile` and `usbdisk`.
 - **M5 — Exit everywhere.** *Exit to shell* in the emulators' shared menu.
+- **M6 — USB speed.** Make `usbdisk` faster than M4's 512 bytes per
+  transfer (about 170 KB/s writing, by eye): a larger MSC buffer, and
+  multi-block reads and writes in `sd.c` (CMD18, CMD25), each wait still
+  bounded below the southbridge's 2.5 s (§4.2). Done when the rate each
+  way is measured on the board, before and after, with a large file
+  copied each way and compared byte for byte.
