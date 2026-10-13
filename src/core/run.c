@@ -79,7 +79,7 @@ static int run_path(shell_t *sh, const char *name, const char *path, bool ram_on
     }
     if (r == UF2_FLASH && info.differ) {
         out_printf(&sh->con, "%s: writing %lu of %lu sectors\n", name,
-                   (unsigned long)info.differ, (unsigned long)info.sectors);
+                   (unsigned long)info.to_write, (unsigned long)info.sectors);
         t0 = sh->hooks.now_us(sh->hooks.ctx);
         r = uf2_write(&s_prog, &ld->flash, &info, tick, sh);
         info.write_us = since(sh, t0);
@@ -115,7 +115,7 @@ static int run_path(shell_t *sh, const char *name, const char *path, bool ram_on
     case UF2_WRITE_FAILED:
         break;
     }
-    shell_error(sh, "%s: writing flash failed (%s); flash holds no whole program\n", name,
+    shell_error(sh, "%s: writing flash failed (%s); flash may not hold a whole program\n", name,
                 info.fr != FR_OK ? files_why(info.fr) : "flash error");
     return 1;
 }
@@ -162,8 +162,9 @@ int run_program(shell_t *sh, int argc, char **argv, bool redirected) {
 }
 
 int cmd_menu(shell_t *sh, int argc, char **argv) {
-    if (argc > 1) {
-        shell_error(sh, "usage: menu\n");
+    /* A redirection would be left as name.new by the reboot. */
+    if (argc > 1 || !sh->out_is_con || sh->in) {
+        shell_error(sh, "usage: menu, with no operand or redirection\n");
         return 1;
     }
     (void)argv;

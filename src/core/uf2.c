@@ -170,7 +170,7 @@ uf2_result_t uf2_check(FIL *f, const uf2_flash_t *flash, uf2_info_t *info,
                        bool (*stop)(void *ctx), void *ctx) {
     memset(info, 0, sizeof *info);
     memset(s_differ, 0, sizeof s_differ);
-    if (f_lseek(f, 0) != FR_OK) return UF2_CARD;
+    if ((info->fr = f_lseek(f, 0)) != FR_OK) return UF2_CARD;
     scan_t sc;
     scan_start(&sc, f, flash);
     bool open = false;      /* a sector is being built */
@@ -200,6 +200,9 @@ uf2_result_t uf2_check(FIL *f, const uf2_flash_t *flash, uf2_info_t *info,
         s_differ[cur / 8] |= (uint8_t)(1u << (cur % 8));
         info->differ++;
     }
+    /* uf2_write rewrites the first sector whenever it writes at all. */
+    info->to_write = info->differ;
+    if (info->differ && !differs(sector_of(flash, info->lo))) info->to_write++;
     return UF2_FLASH;
 }
 
@@ -216,11 +219,14 @@ static bool has_block_start(const uint8_t *page) {
 }
 
 /* Program the sector built, already erased, and read it back. In the
- * program's first sector, a page holding a block's first word goes
- * last, so the image is bootable only once every page is in place. */
+ * program's first sector, the pages holding a block's first word go
+ * last, highest first, so the lowest block, where the bootrom's search
+ * starts and the block loop's head, is the very last page written: the
+ * image is bootable only once every page is in place. */
 static bool program_sector(const uf2_flash_t *fl, uint32_t sec, bool first, uf2_info_t *info) {
     for (int late = 0; late < (first ? 2 : 1); late++) {
-        for (uint32_t p = 0; p < PAGES_PER_SECTOR; p++) {
+        for (uint32_t i = 0; i < PAGES_PER_SECTOR; i++) {
+            uint32_t p = late ? PAGES_PER_SECTOR - 1 - i : i;
             const uint8_t *page = s_sector + p * UF2_PAGE;
             if (first && has_block_start(page) != (late == 1)) continue;
             bool blank = true;
@@ -254,7 +260,10 @@ uf2_result_t uf2_write(FIL *f, const uf2_flash_t *flash, uf2_info_t *info,
         uf2_result_t r;
         for (;;) {
             r = scan_next(&sc, &info->fr);
-            bool end = r != UF2_FLASH;
+            /* The card failed, or the file is not what uf2_check read:
+             * stop before the sector being built is written, half filled. */
+            if (r != UF2_FLASH && r != SCAN_END) return UF2_WRITE_FAILED;
+            bool end = r == SCAN_END;
             uint32_t sec = end ? 0 : sector_of(flash, sc.addr);
             if (open && (end || sec != cur)) {
                 if (round == 1) {
@@ -278,8 +287,6 @@ uf2_result_t uf2_write(FIL *f, const uf2_flash_t *flash, uf2_info_t *info,
             }
             place(&sc);
         }
-        /* The file is not what uf2_check read. */
-        if (r != SCAN_END) return UF2_WRITE_FAILED;
     }
     return UF2_WRITE_FAILED;
 }

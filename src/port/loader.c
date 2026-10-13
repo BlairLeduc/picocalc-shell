@@ -43,7 +43,10 @@ static uint8_t __attribute__((aligned(4))) s_workarea[4096];   /* the bootrom's,
 static char s_version[16];
 /* The path stage3 loads after BOOT_RAM. It must be in SRAM that the
  * reboot and stage3 leave alone until stage3 has opened the file, as
- * the loader's menu keeps its own (get_short_path in ui/uf2.c). */
+ * the loader's menu keeps its own (get_short_path in ui/uf2.c): below
+ * stage3's own 8 KB of RAM (stage3/memmap_2350.ld), which loader_init
+ * checks, since where .bss puts it moves with the shell's layout. */
+#define STAGE3_RAM_BASE (0x20080000u - 0x2000u)
 static char s_ram_path[SHELL_PATH_MAX + 1];
 static char s_problem[64];
 
@@ -184,6 +187,10 @@ void loader_init(shell_loader_t *ld, loader_status_t *st) {
 
     if (!st->flash_end) {
         ld->problem = "the shell was not started by UF2 Loader";
+        return;
+    }
+    if ((uintptr_t)s_ram_path + sizeof s_ram_path > STAGE3_RAM_BASE) {
+        ld->problem = "the shell's BOOT_RAM path lies in stage3's RAM";
         return;
     }
     bool known = false;

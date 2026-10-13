@@ -116,10 +116,14 @@ All four figures were **estimates**. *Measured at M2* (Plus 2 W, UF2 Loader
 | Exit back to the shell | 1.35 s from `picocalc_shell_exit()` to the prompt | stage3's 0.5 s wait for a key, loading the 158 KB UF2, and the panel's start-up (0.43 s) |
 | Reboot to a program's `main` | 0.53 s | stage3's 0.5 s wait for a key |
 
-The first-run estimate held. The repeat run and the exit both missed
-stage3's half-second wait for a key, which every reboot pays and the shell
-cannot shorten (§3.4: no stage3 change). The first run was not far over the
-estimate, so 64 KB block erase was not added (§10).
+The estimates included the boot, so they compare with the totals: a first
+run about 3.5 s to the program's `main` against ~3 s, about 15 % over; a
+repeat about 0.9 s against ~0.5 s; the exit 1.35 s against ~0.5 s. The
+repeat and the exit both pay stage3's half-second wait for a key, which
+the estimates left out and the shell cannot shorten (§3.4: no stage3
+change); the exit's other 0.35 s over is loading the shell and the panel's
+start-up. The first run was not far over its estimate, so 64 KB block
+erase was not added (§10).
 
 ## 3. Where the shell sits in the boot chain
 
@@ -202,8 +206,9 @@ and non-contiguous UF2s, comes with it.
   skipped. Blocks for other chips are skipped, so a UF2 for several chips
   works.
 - **No bootable image while writing.** The program's first sector is
-  erased before any other and written last, and in it the page holding
-  the IMAGE_DEF's first word last of all. stage3 cannot start a
+  erased before any other and written last; in it the pages holding a
+  picobin block's first word go last, highest first, so the IMAGE_DEF,
+  the block loop's head, is the very last page written. stage3 cannot start a
   half-written program: `rom_chain_image` finds no image and stage3 loads
   `/BOOT2350.UF2` instead, so a write cut short comes back to the shell.
   This costs one erase and program of the first sector on any run that
@@ -215,7 +220,7 @@ and non-contiguous UF2s, comes with it.
   drops whatever follows it. Arguments and redirections are refused
   (§3.5).
 - **The loader.** `loader.c` reads stage3's version from its binary info
-  and runs programs only under 2.3 to 2.5, the versions with this
+  and runs programs only under 2.3, 2.4, 2.4.1 and 2.5, the versions with this
   scratch-command protocol (2.2 had none). Under anything else, or with no
   partition table, or when stage3 did not start the shell (as over SWD),
   a program is refused before flash is touched, with the reason.
@@ -597,7 +602,7 @@ and read-only data, 33,284 B of `.bss`), the release build 69,308 B.
 137,388 B. Of the growth, FatFs and the builtins are about 35 KB of code,
 and `ls`'s sorting buffers (16 KB of names, 4 KB for 512 entries) and the 4 KB copy
 buffer most of the `.bss`. **Measured at M2** (the same tools,
-2026-10-13): development 158,064 B, release 154,140 B; the UF2 code and
+2026-10-13, after the review): development 158,224 B, release 154,284 B; the UF2 code and
 its buffers (a 4 KB sector, a block, a page and the 512-byte bitmap of
 sectors that differ) and the bootrom's 4 KB work area for the partition
 table are most of the growth. The deepest call chain, `cp` down into FatFs's
@@ -607,7 +612,7 @@ table are most of the growth. The deepest call chain, `cp` down into FatFs's
 
 | Risk | Mitigation |
 |---|---|
-| A loader release changes the scratch commands, the partition layout or the flash end | Everything depends on one file, `loader.c`. The shell reads stage3's binary info at startup and refuses to flash on a version it does not know: 2.3 to 2.5 are known (*as built at M2*). Tell pelrun about the shell early. |
+| A loader release changes the scratch commands, the partition layout or the flash end | Everything depends on one file, `loader.c`. The shell reads stage3's binary info at startup and refuses to flash on a version it does not know: 2.3, 2.4, 2.4.1 and 2.5 (*as built at M2*). Tell pelrun about the shell early. |
 | Exit with no card: stage3 drops to BOOTSEL | `picocalc_shell_exit()` checks card detect first (§3.4). If the card is removed between the check and the reboot, power-cycling recovers. |
 | A half-written program after a power loss mid-flash | stage3 cannot be touched: it is in its own partition. *As built at M2:* the program's first sector is written last (§3.3), so stage3 finds no image and loads the shell; run the program again. A reset mid-write was checked on the Plus 2 W, and the owner cut the power mid-write on a Pico 2 W: both came back to the shell. |
 | Programs that keep data in flash | §3.6 |

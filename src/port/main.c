@@ -159,6 +159,11 @@ int main(void) {
      * that stays. */
     bool clocks_ok = board_init_clocks();
     stdio_init_all();
+#if PICO_SHELL_UART
+    /* Bytes on UART1 are keys: with nothing on GP5, as on a PicoCalc with
+     * no probe attached, a floating line could type them. */
+    gpio_pull_up(PICO_DEFAULT_UART_RX_PIN);
+#endif
     board_identify(&g_board);
     loader_init(&g_loader, &g_loader_st);
 

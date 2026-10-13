@@ -127,6 +127,42 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
   expected. Power cut during a write: at the next power-on the PicoCalc
   showed the shell.
 
+**Review of the PR** (Muse, then Sonnet, 2026-10-13). Both found no
+blocking bug; these were fixed:
+
+- **A card failure while writing programmed the sector being built,
+  half filled** (Muse). In the first sector, whose IMAGE_DEF page comes
+  early in the file, that could have left a bootable image most of whose
+  first sector was erased. `uf2_write` now stops before writing on any
+  read error. `test_card_loss` fails the card's reads after every number
+  of sectors of a write and checks that no sector is half written and
+  nothing bootable is left that is not whole; the host disk can now fail
+  reads as it fails writes.
+- **Two blocks in the first sector** (Sonnet): their pages went in
+  ascending order, so the loop's head could be in place before the rest.
+  They now go highest first, the head last. The synthetic programs carry
+  a second block, and the power-loss test checks for the head.
+- `menu > f` would have left `f.new` behind across the reboot (Muse):
+  `menu` now refuses a redirection.
+- A repeated block address is now tested (Muse).
+- The `BOOT_RAM` path's buffer is checked at start-up to lie below
+  stage3's RAM (Sonnet); it is at `0x2002082c`.
+- The development build pulls GP5 up, as `exit-test` does (Sonnet).
+- "writing N of M" counts the first sector, which every write rewrites;
+  a write failure says flash *may* not hold a whole program, since a
+  failed first erase may leave the old one; a seek failure reported "ok"
+  (all Sonnet).
+- The timing gate's text compared Enter-to-reboot with estimates that
+  included the boot (Sonnet); design.md §2.2 now compares the totals.
+
+Each fix's planted opposite (writing on a read error, lowest page first,
+a repeated address allowed, the first sector not counted, `menu`
+redirected) fails `test_uf2`. Not taken: accepting `name.uf2` as a name
+(lookup stays as sh's). Left to the owner: telling pelrun that the
+header, offered under MIT as well, carries the loader's `BOOT_SD` values.
+The fixes were checked on the host only; the card's shell on both boards
+is the build before them.
+
 **Measurements** (Plus 2 W, development build, UF2 Loader 2.5,
 2026-10-13). Times from Enter are host timestamps on the UART lines
 (a script in the session's scratchpad, not committed); the passes are the
@@ -139,7 +175,7 @@ shell's own clock.
 | Reboot to the program's first line | — | 0.53 s, three runs within 2 ms (`exit-test`) |
 | Exit to the shell's prompt | ~0.5 s | 1.35 s: banner 1.26 s after `exit-test` started, prompt 0.09 s later; three runs within 3 ms |
 | A sector written (erase, 16 pages, read back) | ~56 ms (datasheet) | about 61 ms |
-| RAM, development / release (link map) | ~504 KB available | 158,064 B / 154,140 B |
+| RAM, development / release (link map) | ~504 KB available | 158,064 B / 154,140 B; after the review's fixes 158,224 B / 154,284 B |
 
 So a first run is about 3.5 s to the program and a repeat about 0.9 s.
 Both reboot figures are stage3's: its 0.5 s wait for a key at every

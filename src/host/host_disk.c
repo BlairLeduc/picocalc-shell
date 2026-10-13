@@ -13,6 +13,7 @@
 static FILE         *s_img;
 static LBA_t         s_sectors;
 static long          s_writes_left = -1;
+static long          s_reads_left = -1;
 static unsigned long s_writes;
 /* A new image reads as a card just inserted: not initialised, so FatFs
  * mounts it afresh, as it does after the port's card detect changes. */
@@ -26,6 +27,7 @@ static bool attach(FILE *f) {
     s_sectors = (LBA_t)((unsigned long)size / SECTOR);
     s_writes = 0;
     s_writes_left = -1;
+    s_reads_left = -1;
     s_changed = true;
     return true;
 }
@@ -74,6 +76,10 @@ void host_disk_fail_writes_after(long n) {
     s_writes_left = n;
 }
 
+void host_disk_fail_reads_after(long n) {
+    s_reads_left = n;
+}
+
 unsigned long host_disk_writes(void) {
     return s_writes;
 }
@@ -92,6 +98,14 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
     if (pdrv != 0 || count == 0) return RES_PARERR;
     if (!s_img) return RES_NOTRDY;
     if (sector + count > s_sectors) return RES_PARERR;
+    if (s_reads_left >= 0) {
+        if (s_reads_left < (long)count) {
+            s_reads_left = 0;
+            s_changed = true;
+            return RES_ERROR;
+        }
+        s_reads_left -= (long)count;
+    }
     if (fseek(s_img, (long)(sector * SECTOR), SEEK_SET) != 0) return RES_ERROR;
     return fread(buff, SECTOR, count, s_img) == count ? RES_OK : RES_ERROR;
 }

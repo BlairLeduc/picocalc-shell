@@ -118,11 +118,13 @@ static void block(uint32_t flags, uint32_t addr, uint32_t no, uint32_t num, uint
 
 /* The page a synthetic program puts at `addr`: varied, never all 0xFF,
  * and with a picobin block's first word at 0x13c in the image's second
- * page, where the SDK puts its IMAGE_DEF. */
+ * page, where the SDK puts its IMAGE_DEF, the head of the block loop,
+ * and a second block's at 0x510. */
 static const uint8_t *page_for(uint32_t base, uint32_t addr, uint32_t seed) {
     static uint8_t page[UF2_PAGE];
     for (uint32_t i = 0; i < UF2_PAGE; i++) page[i] = (uint8_t)((addr + i) * 7u + seed * 31u + i / 3u);
     if (addr == base + 0x100u) put32(page + 0x3c, 0xffffded3u);
+    if (addr == base + 0x500u) put32(page + 0x10, 0xffffded3u);
     return page;
 }
 
@@ -207,11 +209,10 @@ static bool flash_holds(uint32_t base, uint32_t pages, int gap, uint32_t seed) {
     return true;
 }
 
-/* Whether a picobin block starts in the first 4 KB at base. */
+/* Whether the block loop's head is in place at base: the bootrom's
+ * search of the first 4 KB starts from it. */
 static bool bootable(uint32_t base) {
-    for (uint32_t i = 0; i < UF2_SECTOR; i += 4)
-        if (get32(flash_mem + (base - FLASH_BASE) + i) == 0xffffded3u) return true;
-    return false;
+    return get32(flash_mem + (base - FLASH_BASE) + 0x13c) == 0xffffded3u;
 }
 
 static int test_rules(void) {
@@ -285,6 +286,9 @@ static int test_rules(void) {
     put32(field(5, 3), FLASH_BASE + 2 * UF2_PAGE);
     CHECK(check_ubuf(&info) == UF2_BAD, "out of order");
     memcpy(ubuf, good, glen);
+    put32(field(6, 3), FLASH_BASE + 5 * UF2_PAGE);
+    CHECK(check_ubuf(&info) == UF2_BAD, "an address repeated");
+    memcpy(ubuf, good, glen);
     put32(field(0, 5), 1);
     CHECK(check_ubuf(&info) == UF2_BAD, "first block misnumbered");
     memcpy(ubuf, good, glen);
@@ -349,8 +353,9 @@ static int test_flashing(void) {
     ubuf[UF2_BLOCK * (k + 1) + 32 + 5] ^= 0x5A;   /* +1 for the E10 block */
     CHECK(put("/a2.uf2", ubuf, ulen), "a2.uf2");
     flash_count_reset();
-    CHECK(flash_file("/a2.uf2", &info) == UF2_FLASH && info.differ == 1 && info.written == 2,
-          "a2: differ %u written %u", info.differ, info.written);
+    CHECK(flash_file("/a2.uf2", &info) == UF2_FLASH && info.differ == 1 && info.to_write == 2 &&
+              info.written == 2,
+          "a2: differ %u to write %u written %u", info.differ, info.to_write, info.written);
     CHECK(flash_erases == 2, "a2: erases %ld", flash_erases);
     flash_count_reset();
     CHECK(flash_file("/a2.uf2", &info) == UF2_FLASH && info.differ == 0, "a2 again");
@@ -410,6 +415,56 @@ static int test_power_loss(void) {
         CHECK(old || !bootable(FLASH_BASE), "cut after %ld: bootable and not the old program", n);
         CHECK(!flash_holds(FLASH_BASE, 150, 60, 6) || n == total, "cut after %ld: whole?", n);
     }
+    return 0;
+}
+
+/* The card failing at every point of the write's reads: no sector is
+ * written half built, and nothing bootable is left that is not whole. */
+static int test_card_loss(void) {
+    static uint8_t before[FLASH_SIZE / 4];
+    uf2_info_t info;
+    flash_junk(11);
+    make(FLASH_BASE, 120, -1, 7, 1, FAM_ARM_S);
+    CHECK(put("/old2.uf2", ubuf, ulen) && flash_file("/old2.uf2", &info) == UF2_FLASH, "old2");
+    make(FLASH_BASE, 120, 50, 8, 1, FAM_ARM_S);
+    CHECK(put("/new2.uf2", ubuf, ulen), "new2.uf2");
+    memcpy(before, flash_mem, sizeof before);
+    uint32_t nsec = (120 * UF2_PAGE + UF2_SECTOR - 1) / UF2_SECTOR;
+    bool completed = false;
+    for (long n = 0; !completed && n < 1000; n++) {
+        memcpy(flash_mem, before, sizeof before);
+        CHECK(f_open(&f, "/new2.uf2", FA_READ) == FR_OK, "open %ld", n);
+        uf2_result_t r = uf2_check(&f, &flash, &info, NULL, NULL);
+        CHECK(r == UF2_FLASH, "check %ld: %d", n, r);
+        host_disk_fail_reads_after(n);
+        r = uf2_write(&f, &flash, &info, NULL, NULL);
+        host_disk_fail_reads_after(-1);
+        f_close(&f);
+        completed = r == UF2_FLASH;
+        if (completed) {
+            CHECK(flash_holds(FLASH_BASE, 120, 50, 8), "whole after %ld reads", n);
+            break;
+        }
+        CHECK(r == UF2_WRITE_FAILED, "reads %ld: r %d", n, r);
+        CHECK(!bootable(FLASH_BASE), "reads %ld: bootable and not whole", n);
+        /* Every sector but the first is the old program's or the new one's. */
+        for (uint32_t sec = 1; sec < nsec; sec++) {
+            const uint8_t *now = flash_mem + sec * UF2_SECTOR, *old = before + sec * UF2_SECTOR;
+            if (memcmp(now, old, UF2_SECTOR) == 0) continue;
+            /* Compare with the new program's sector, built as flash_holds would. */
+            bool whole = true;
+            for (uint32_t pg = 0; pg < UF2_SECTOR / UF2_PAGE && whole; pg++) {
+                uint32_t p = sec * (UF2_SECTOR / UF2_PAGE) + pg, a = FLASH_BASE + p * UF2_PAGE;
+                const uint8_t *want = page_for(FLASH_BASE, a, 8);
+                for (uint32_t i = 0; i < UF2_PAGE; i++) {
+                    uint8_t w = (p == 50 || p >= 120) ? 0xFF : want[i];
+                    if (now[pg * UF2_PAGE + i] != w) { whole = false; break; }
+                }
+            }
+            CHECK(whole, "reads %ld: sector %u half written", n, sec);
+        }
+    }
+    CHECK(completed, "the write never completed");
     return 0;
 }
 
@@ -673,7 +728,7 @@ static int test_shell(void) {
     /* A flash failure says so. */
     flash_power = 1;
     CHECK(run("other") == 1 && boots == 0 &&
-              strstr(con, "other: writing flash failed (flash error); flash holds no whole program\n"),
+              strstr(con, "other: writing flash failed (flash error); flash may not hold a whole program\n"),
           "failed: '%s'", con);
     flash_power = -1;
     CHECK(run("other") == 0 && boots == 1 && flash_holds(FLASH_BASE, 50, -1, 12), "other: '%s'", con);
@@ -693,7 +748,8 @@ static int test_shell(void) {
     CHECK(run("menu") == 1 && boots == 0 &&
               strcmp(con, "menu: /BOOT2350.ORG: no such file or directory\n") == 0,
           "no menu: '%s'", con);
-    CHECK(run("menu x") == 1 && strcmp(con, "usage: menu\n") == 0, "'%s'", con);
+    CHECK(run("menu x") == 1 && strcmp(con, "usage: menu, with no operand or redirection\n") == 0,
+          "'%s'", con);
     make(FLASH_BASE, 50, -1, 13, 1, FAM_ARM_S);
     CHECK(put("/BOOT2350.ORG", ubuf, ulen), "flash menu");
     flash_count_reset();
@@ -702,6 +758,9 @@ static int test_shell(void) {
           "flash menu refused: '%s'", con);
     make(UF2_SRAM_BASE, 64, -1, 1, 0, FAM_ARM_S);
     CHECK(put("/BOOT2350.ORG", ubuf, ulen), "menu");
+    FILINFO fno;
+    CHECK(run("menu > /m.txt") == 1 && boots == 0 && f_stat("/m.txt.new", &fno) == FR_NO_FILE,
+          "menu > f: '%s'", con);
     CHECK(run("menu") == 0 && boots == 1 && strcmp(boot_ram, "/BOOT2350.ORG") == 0,
           "menu: '%s'", boot_ram);
 
@@ -731,7 +790,8 @@ int main(void) {
     if (test_bininfo()) return 1;
     CHECK(host_disk_create(NULL, 32u << 20, false), "image");
     files_mount();
-    if (test_rules() || test_flashing() || test_power_loss() || test_real()) return 1;
+    if (test_rules() || test_flashing() || test_power_loss() || test_card_loss() || test_real())
+        return 1;
 
     const out_t out = { sink, NULL, false };
     const shell_hooks_t hooks = { now, interrupted, NULL };

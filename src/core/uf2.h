@@ -60,6 +60,8 @@ typedef struct {
     uint32_t lo, hi;    /* its first address, and the end of its last block */
     uint32_t sectors;   /* flash sectors it covers */
     uint32_t differ;    /* of those, the ones flash does not already hold */
+    uint32_t to_write;  /* the sectors uf2_write will write: those, and the
+                         * first whenever there are any */
     uint32_t written;   /* sectors uf2_write erased and programmed */
     uint32_t pages;     /* pages it programmed */
     FRESULT  fr;        /* for UF2_CARD, and a card failure in UF2_WRITE_FAILED */

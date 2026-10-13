@@ -23,6 +23,10 @@ void host_disk_close(void);
  * pulled would; -1 for never. */
 void host_disk_fail_writes_after(long n);
 
+/* Fail every read after the next `n` sectors, as a card pulled while a
+ * file is read; -1 for never. */
+void host_disk_fail_reads_after(long n);
+
 /* Sectors written since the image was opened. */
 unsigned long host_disk_writes(void);
 
