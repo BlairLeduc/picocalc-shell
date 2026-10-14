@@ -104,8 +104,8 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
   designed. `backlight` changed the backlights on the panel, and
   `battery` showed `charging` while the PicoCalc was charging.
   `backlight lcd 33` read back as `lcd 33`, not the 32 the MCU's source
-  would make it. `wc` and `tail` on a 40 KB file finished at once, by
-  eye.
+  would make it. `wc` and `tail` on a 40 KB file finished at once, and
+  `wc` on a 534 KB file took about a second (by eye, about 500 KB/s).
   `poweroff` switched it off, on battery and on USB power. `bootsel` entered BOOTSEL, and the RP2350's
   drive showed on the computer. The other checks were not reported in
   detail. The phosphors did not look as designed: amber showed as pure
@@ -127,8 +127,7 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
 
 - Whether the MCU's reply to a backlight write already holds the new
   level; the port reads it back instead.
-- `tail` and `wc` timed, rather than by eye, and on a file far larger
-  than 40 KB.
+- `tail` and `wc` timed with a clock rather than by eye.
 - Everything carried forward from M6 and M4.
 
 ## M6 — USB speed (branch `m6-usb-speed`, 2026-10-13)
