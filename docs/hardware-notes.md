@@ -1215,6 +1215,17 @@ reads at about 0.85–0.93 MB/s and writes at about 0.23–0.38 MB/s, on top
 of the ~10 ms an open costs (above): a quarter-second write is ordinary,
 and holds up everything that waits for the card.
 
+**Measured** on a Plus 2 W, 2026-10-13, the same driver with multi-block
+transfers added (`CMD18` stopped by `CMD12`, `CMD25` stopped by its stop
+token), SPI at 25 MHz requested, on a 32 GB SDHC card: copying a 20 MB
+file on the card through FatFs, in 4 KB pieces, took 37.2 s, where one
+command per 512-byte block took 93.2 s. Over USB mass storage at full
+speed, in 16 KB pieces that alternate with the USB transfers, a Mac
+wrote 32 MB at 603–615 KB/s and read it at 696–697 KB/s, where 512-byte
+pieces gave 219 and 432 KB/s. After `CMD12`, skip one byte before
+looking for R1: the card may still be shifting out the data it was
+stopped in, and a data byte can look like an R1.
+
 Three more things from the same driver on the same board:
 
 - **Bound every wait below the southbridge's 2.5 s watchdog** (§6.1) when one
