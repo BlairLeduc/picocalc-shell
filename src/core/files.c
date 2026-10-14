@@ -961,21 +961,30 @@ static void human(char *buf, size_t size, uint64_t bytes) {
         snprintf(buf, size, "%lu%c", (unsigned long)((tenths + 5u) / 10u), units[u]);
 }
 
-int cmd_df(shell_t *sh, int argc, char **argv) {
-    (void)argv;
-    if (argc != 1) return usage(sh, "df");
+/* The volume's type, size and free space, as df and info show them. */
+static FRESULT space(const char **type, uint64_t *total, uint64_t *avail) {
     DWORD free_clusters;
     FATFS *fs;
     FRESULT r = f_getfree("", &free_clusters, &fs);
+    if (r != FR_OK) return r;
+    uint64_t cluster = (uint64_t)fs->csize * FF_MAX_SS;
+    *total = (uint64_t)(fs->n_fatent - 2u) * cluster;
+    *avail = (uint64_t)free_clusters * cluster;
+    *type = fs->fs_type == FS_FAT12 ? "FAT12" : fs->fs_type == FS_FAT16 ? "FAT16" : "FAT32";
+    return FR_OK;
+}
+
+int cmd_df(shell_t *sh, int argc, char **argv) {
+    (void)argv;
+    if (argc != 1) return usage(sh, "df");
+    const char *type;
+    uint64_t total, avail;
+    FRESULT r = space(&type, &total, &avail);
     if (r != FR_OK) {
         shell_error(sh, "df: %s\n", files_why(r));
         return 1;
     }
-    uint64_t cluster = (uint64_t)fs->csize * FF_MAX_SS;
-    uint64_t total = (uint64_t)(fs->n_fatent - 2u) * cluster;
-    uint64_t avail = (uint64_t)free_clusters * cluster;
     uint64_t used = total - avail;
-    const char *type = fs->fs_type == FS_FAT12 ? "FAT12" : fs->fs_type == FS_FAT16 ? "FAT16" : "FAT32";
     char a[16], b[16], c[16];
     human(a, sizeof a, total);
     human(b, sizeof b, used);
@@ -984,4 +993,16 @@ int cmd_df(shell_t *sh, int argc, char **argv) {
     out_printf(&sh->out, "Type    Size  Used Avail Use%%\n");
     out_printf(&sh->out, "%-5s %6s %5s %5s %3u%%\n", type, a, b, c, pct);
     return 0;
+}
+
+FRESULT files_card(char *buf, size_t size) {
+    const char *type;
+    uint64_t total, avail;
+    FRESULT r = space(&type, &total, &avail);
+    if (r != FR_OK) return r;
+    char a[16], c[16];
+    human(a, sizeof a, total);
+    human(c, sizeof c, avail);
+    snprintf(buf, size, "%s, %s, %s free", type, a, c);
+    return FR_OK;
 }

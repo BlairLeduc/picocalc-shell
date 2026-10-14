@@ -1,4 +1,4 @@
-/* text.c — `more` and `grep` (text.h). */
+/* text.c — `more`, `grep`, `head`, `tail` and `wc` (text.h). */
 
 #include "text.h"
 
@@ -218,4 +218,244 @@ int cmd_grep(shell_t *sh, int argc, char **argv) {
         if (n > 0) any = true;
     }
     return failed ? 2 : any ? 0 : 1;
+}
+
+/* ---- head, tail ------------------------------------------------------- */
+
+/* "N" as a count of lines: false if it is not a number. */
+static bool count(const char *s, unsigned long *n) {
+    if (!*s) return false;
+    unsigned long v = 0;
+    for (; *s; s++) {
+        if (*s < '0' || *s > '9') return false;
+        v = v * 10u + (unsigned long)(*s - '0');
+        if (v > 999999999ul) v = 999999999ul;
+    }
+    *n = v;
+    return true;
+}
+
+/* -n N, -nN or -N before the operands, as many as given, the last
+ * winning, and "--" to end them: the index of the first operand, or -1
+ * after the usage. */
+static int lines_option(shell_t *sh, int argc, char **argv, const char *use, unsigned long *n) {
+    *n = 10;
+    int i = 1;
+    for (; i < argc && argv[i][0] == '-' && argv[i][1]; i++) {
+        const char *a = argv[i];
+        if (strcmp(a, "--") == 0) return i + 1;
+        bool ok;
+        if (strcmp(a, "-n") == 0) {
+            ok = i + 1 < argc && count(argv[i + 1], n);
+            i++;
+        } else if (a[1] == 'n') {
+            ok = count(a + 2, n);
+        } else {
+            ok = count(a + 1, n);
+        }
+        if (!ok) {
+            shell_error(sh, "usage: %s\n", use);
+            return -1;
+        }
+    }
+    return i;
+}
+
+/* The first `n` lines of `in`: 0, or 1 on an error. */
+static int head_in(shell_t *sh, const input_t *in, const char *name, unsigned long n) {
+    while (n > 0) {
+        UINT got;
+        FRESULT r = input_read(in, s_line, sizeof s_line, &got);
+        if (r != FR_OK) {
+            shell_error(sh, "head: %s: %s\n", name, files_why(r));
+            return 1;
+        }
+        if (got == 0) break;
+        UINT end = 0;
+        while (end < got && n > 0)
+            if (s_line[end++] == '\n') n--;
+        out_write(&sh->out, s_line, end);
+        if (shell_interrupted(sh)) return 1;
+    }
+    return 0;
+}
+
+/* tail keeps the end of its input in s_buf, as a ring: `total` bytes
+ * have gone in, and the last sizeof s_buf of them are kept. */
+static unsigned long s_total;
+
+static void ring_put(const char *p, size_t n) {
+    for (size_t i = 0; i < n; i++) s_buf[(s_total++) % sizeof s_buf] = (uint8_t)p[i];
+}
+
+/* The i-th byte of those kept, oldest first. */
+static uint8_t ring_at(size_t i) {
+    size_t oldest = s_total > sizeof s_buf ? s_total % sizeof s_buf : 0;
+    return s_buf[(oldest + i) % sizeof s_buf];
+}
+
+static int tail_in(shell_t *sh, const input_t *in, const char *name, unsigned long n) {
+    s_total = 0;
+    for (;;) {
+        UINT got;
+        FRESULT r = input_read(in, s_line, sizeof s_line, &got);
+        if (r != FR_OK) {
+            shell_error(sh, "tail: %s: %s\n", name, files_why(r));
+            return 1;
+        }
+        if (got == 0) break;
+        ring_put(s_line, got);
+        if (shell_interrupted(sh)) return 1;
+    }
+    size_t kept = s_total < sizeof s_buf ? (size_t)s_total : sizeof s_buf;
+    if (n == 0 || kept == 0) return 0;
+    /* Back from the end, past a last line break, to the n-th before it. */
+    size_t end = kept;
+    if (ring_at(end - 1) == '\n') end--;
+    size_t start = end;
+    unsigned long seen = 0;
+    bool found = false;
+    while (start > 0) {
+        if (ring_at(start - 1) == '\n' && ++seen == n) {
+            found = true;
+            break;
+        }
+        start--;
+    }
+    if (!found && s_total > sizeof s_buf) {
+        /* The lines asked for began before what was kept: from the first
+         * whole line kept, if there is one. */
+        size_t i = 0;
+        while (i < end && ring_at(i) != '\n') i++;
+        start = i < end ? i + 1 : 0;
+        shell_error(sh, "tail: %s: only the last %u bytes are kept\n", name,
+                    (unsigned)sizeof s_buf);
+    }
+    for (size_t i = start; i < kept;) {
+        char chunk[64];
+        size_t k = 0;
+        while (i < kept && k < sizeof chunk) chunk[k++] = (char)ring_at(i++);
+        out_write(&sh->out, chunk, k);
+    }
+    return 0;
+}
+
+typedef int (*lines_fn)(shell_t *sh, const input_t *in, const char *name, unsigned long n);
+
+/* head and tail: the files named, each under a header if there are
+ * several, or else the input. */
+static int lines_cmd(shell_t *sh, int argc, char **argv, const char *use, lines_fn fn) {
+    unsigned long n;
+    int first = lines_option(sh, argc, argv, use, &n);
+    if (first < 0) return 1;
+    if (first == argc) {
+        if (!input_any(&sh->in)) {
+            shell_error(sh, "usage: %s (or < file, or ... | %s)\n", use, argv[0]);
+            return 1;
+        }
+        return fn(sh, &sh->in, "input", n);
+    }
+    int status = 0;
+    for (int i = first; i < argc && !sh->stop; i++) {
+        if (files_open_read(sh, argv[0], argv[i], &s_file) != FR_OK) {
+            status = 1;
+            continue;
+        }
+        if (argc - first > 1) out_printf(&sh->out, "%s==> %s <==\n", i > first ? "\n" : "", argv[i]);
+        status |= fn(sh, &(input_t){ &s_file, NULL }, argv[i], n);
+        f_close(&s_file);
+    }
+    return status;
+}
+
+int cmd_head(shell_t *sh, int argc, char **argv) {
+    return lines_cmd(sh, argc, argv, "head [-n N] [file...]", head_in);
+}
+
+int cmd_tail(shell_t *sh, int argc, char **argv) {
+    return lines_cmd(sh, argc, argv, "tail [-n N] [file...]", tail_in);
+}
+
+/* ---- wc --------------------------------------------------------------- */
+
+enum { WC_L = 1u << 0, WC_W = 1u << 1, WC_C = 1u << 2 };
+
+typedef struct {
+    unsigned long lines, words, bytes;
+} wc_t;
+
+static int wc_in(shell_t *sh, const input_t *in, const char *name, wc_t *c) {
+    bool word = false;
+    for (;;) {
+        UINT got;
+        FRESULT r = input_read(in, s_line, sizeof s_line, &got);
+        if (r != FR_OK) {
+            shell_error(sh, "wc: %s: %s\n", name, files_why(r));
+            return 1;
+        }
+        if (got == 0) return 0;
+        c->bytes += got;
+        for (UINT i = 0; i < got; i++) {
+            char ch = s_line[i];
+            bool space = ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\v' ||
+                         ch == '\f';
+            if (ch == '\n') c->lines++;
+            if (!space && !word) c->words++;
+            word = !space;
+        }
+        if (shell_interrupted(sh)) return 1;
+    }
+}
+
+/* The counts asked for; padded unless there is only one and no name. */
+static void wc_print(shell_t *sh, const wc_t *c, unsigned flags, const char *name) {
+    const unsigned long v[3] = { c->lines, c->words, c->bytes };
+    bool pad = name || (flags != WC_L && flags != WC_W && flags != WC_C);
+    bool first = true;
+    for (unsigned k = 0; k < 3; k++) {
+        if (!(flags & (1u << k))) continue;
+        out_printf(&sh->out, pad ? "%s%7lu" : "%s%lu", first ? "" : " ", v[k]);
+        first = false;
+    }
+    if (name) out_printf(&sh->out, " %s", name);
+    out_puts(&sh->out, "\n");
+}
+
+int cmd_wc(shell_t *sh, int argc, char **argv) {
+    static const char use[] = "wc [-l] [-w] [-c] [file...]";
+    unsigned flags;
+    int first = files_options(sh, argc, argv, "lwc", &flags, use);
+    if (first < 0) return 1;
+    if (!flags) flags = WC_L | WC_W | WC_C;
+    if (first == argc) {
+        if (!input_any(&sh->in)) {
+            shell_error(sh, "usage: %s (or < file, or ... | wc)\n", use);
+            return 1;
+        }
+        wc_t c = { 0, 0, 0 };
+        if (wc_in(sh, &sh->in, "input", &c)) return 1;
+        wc_print(sh, &c, flags, NULL);
+        return 0;
+    }
+    int status = 0;
+    wc_t total = { 0, 0, 0 };
+    for (int i = first; i < argc && !sh->stop; i++) {
+        if (files_open_read(sh, "wc", argv[i], &s_file) != FR_OK) {
+            status = 1;
+            continue;
+        }
+        wc_t c = { 0, 0, 0 };
+        int r = wc_in(sh, &(input_t){ &s_file, NULL }, argv[i], &c);
+        f_close(&s_file);
+        if (r) {
+            status = 1;
+            continue;
+        }
+        wc_print(sh, &c, flags, argv[i]);
+        total.lines += c.lines;
+        total.words += c.words;
+        total.bytes += c.bytes;
+    }
+    if (argc - first > 1) wc_print(sh, &total, flags, "total");
+    return status;
 }

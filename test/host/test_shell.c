@@ -58,9 +58,9 @@ int main(void) {
           t.row, t.col);
 
     /* Typing, Backspace, Enter. */
-    type("helo\bp\r");
-    CHECK(strcmp(row(2), "/>help") == 0, "echo: '%s'", row(2));
-    CHECK(strcmp(row(3), "help: not found") == 0, "'%s'", row(3));
+    type("halo\bp\r");
+    CHECK(strcmp(row(2), "/>halp") == 0, "echo: '%s'", row(2));
+    CHECK(strcmp(row(3), "halp: not found") == 0, "'%s'", row(3));
     CHECK(strcmp(row(4), "/>") == 0, "next prompt '%s'", row(4));
     type("\b\b\r");
     CHECK(strcmp(row(5), "/>") == 0, "Backspace stops at the line's start, '%s'", row(4));

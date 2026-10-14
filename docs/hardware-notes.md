@@ -777,8 +777,15 @@ save wire time. Restrict the transmitted window to gain that benefit.
 ### 4.11 Backlight
 
 The LCD backlight is **not** a PWM pin on the processor — it is register `0x05`
-on the southbridge (§6). Levels are stepped to multiples of 16 and clamped to
-16–240 by the keyboard MCU, so a smooth fade is 15 steps, not 256. Dimming on
+on the southbridge (§6). The keyboard MCU's source steps levels to multiples of 16 and
+clamps them to 16–240, so a smooth fade would be 15 steps, not 256. The
+installed firmware does not report that: on a Plus 2 W's PicoCalc with
+keyboard firmware `0x00` (2026-10-14, the shell's `backlight` over SWD),
+register `0x05` read back exactly what was written, 100, 0 and 240, and
+`0x0A` 255, 100 and 0, with no stepping or clamping; on a Pico 2 W's
+PicoCalc (the owner, the same day) `0x05` kept 33, which the source would
+make 32, and the light followed the levels set. Read the register back
+rather than assume either behaviour: other firmware may step. Dimming on
 pause is a cheap piece of polish and costs one I²C transaction. Read register
 `0x05` before dimming and write that level back on resume: the level may be
 one the user set with the MCU's own Alt chords (§6.3), not one your software
@@ -1001,7 +1008,7 @@ bus must not hang the machine.
 |---|---|---|---|
 | `0x01` | `VER` | firmware version | |
 | `0x04` | `KEY` | FIFO depth (low 5 bits), caps bit 5, num bit 6 | |
-| `0x05` | `BKL` | LCD backlight | writable; stepped to multiples of 16, clamped 16–240 |
+| `0x05` | `BKL` | LCD backlight | writable; the source steps to multiples of 16, clamped 16–240, but firmware `0x00` reads back the value written (§4.11) |
 | `0x08` | `RST` | — | **a read resets the MCU** after 1 s; a write resets after *value* seconds |
 | `0x09` | `FIF` | `[state, key]`, one event per read | `[0,0]` when empty |
 | `0x0A` | `BK2` | keyboard backlight | writable, steps of 32 |
