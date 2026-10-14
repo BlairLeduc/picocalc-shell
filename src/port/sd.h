@@ -30,9 +30,16 @@ bool sd_present(void);
 sd_status_t sd_init(uint32_t *hz, bool *high_capacity);
 
 sd_status_t sd_read(uint32_t block, uint8_t *buf);
+sd_status_t sd_write(uint32_t block, const uint8_t *buf);
+
+/* count blocks from block on, in one command (CMD18, CMD25) when there
+ * is more than one. A transfer is given 1 s before it is stopped, so a
+ * caller keeps each to tens of KB; a write is on the card when it
+ * returns. */
+sd_status_t sd_read_blocks(uint32_t block, uint8_t *buf, uint32_t count);
+sd_status_t sd_write_blocks(uint32_t block, const uint8_t *buf, uint32_t count);
 
 /* The card's size in blocks of SD_BLOCK, from its CSD (CMD9). */
 sd_status_t sd_sectors(uint32_t *count);
-sd_status_t sd_write(uint32_t block, const uint8_t *buf);
 
 #endif /* SHELL_SD_H */

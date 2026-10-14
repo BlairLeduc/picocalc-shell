@@ -420,19 +420,37 @@ runs at 115,200 baud; measure display speed in the release build.
 
   *As built at M4* (`src/port/usbdisk.c`): TinyUSB's MSC device, from the
   SDK, with the loader's descriptors, so the computer sees the same disk
-  from either. Each SCSI read or write is one `sd.c` block; the card's
-  size comes from its CSD (`sd_sectors`). The run ends when the computer
+  from either. The card's size comes from its CSD (`sd_sectors`). The
+  run ends when the computer
   ejects the card (START STOP UNIT with LoEj), when Break, Esc or Ctrl-C
   is pressed, or when the card is taken out; the keyboard is polled
   between USB tasks, which keeps the southbridge's I²C alive. macOS
   sends that command on eject, so ejecting there brings the shell back
   (the owner, 2026-10-13). After an eject the unit reports no medium
-  until the shell disconnects. Writing to the card runs at about
-  170 KB/s (a 30 MB file from the Mac in about 3 minutes, by eye): each
-  SCSI transfer is one 512-byte block, as in the loader. M6 is to speed
-  it up. Esc
+  until the shell disconnects. At M4 each SCSI transfer moved one
+  512-byte block at a time, as in the loader, and writing to the card ran
+  at about 170 KB/s (a 30 MB file from the Mac in about 3 minutes, by
+  eye).
+
+  *As built at M6:* TinyUSB's MSC buffer is 16 KB (`SHELL_USB_BUF`), and
+  each piece of a SCSI read or write, up to that size, is one
+  multi-block transfer on the card: CMD18, stopped by CMD12, and CMD25,
+  stopped by its stop token (`sd_read_blocks`, `sd_write_blocks`).
+  FatFs's runs of sectors use the same calls (`diskio.c`). Each wait
+  inside a transfer keeps its own bound, and the transfer as a whole,
+  its command's ready wait included, is given 1 s from the call; past
+  that it is stopped, and with the card's last busy and the stop the
+  call returns within 2 s, below the southbridge's 2.5 s.
+  The stop is sent after an error too, so a card that answers is never
+  left mid-transfer. `test_sd` checks all of this against a model of a
+  card in SPI mode. The USB pieces and the card's transfers still take
+  turns: nothing overlaps them. On the Plus 2 W to a Mac, release build,
+  writing runs at about 610 KB/s and reading at about 700 KB/s (M4: 219
+  and 432 KB/s; milestones.md). Esc
   before an eject may lose what the computer was writing, and the shell
-  says so when it starts. The history is saved first, and FatFs mounts
+  says so when it starts. An iPad has no eject (the owner, 2026-10-14),
+  so there Esc is the only way back: once the iPad has finished its
+  copies. The history is saved first, and FatFs mounts
   afresh after; a current directory no longer on the card becomes `/`.
   `usbdisk` is refused with a redirection or in a pipe, which would hold
   a file open across it.
@@ -790,6 +808,11 @@ buffers, 32 KB; four levels of parsed line and expanded words
 15 KB; `more` and `grep`'s buffers, 6 KB; history, completion and
 variables, about 8 KB; and the rest of the new code. About 100 KB of the
 504 KB is left for the stack and slack.
+
+**Measured at M6** (the same tools, 2026-10-13): development 427,004 B,
+release 423,260 B, 17,000 B more than M4: TinyUSB's MSC buffer grew from
+512 B to 16 KB, and the multi-block transfers are about 1 KB of code.
+About 83 KB is left.
 
 **The stack** (*corrected at M3*). Core 0's stack starts at the top of
 scratch Y and may run down to `__StackLimit` at the bottom of scratch X:

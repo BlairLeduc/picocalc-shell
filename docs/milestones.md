@@ -16,6 +16,96 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M6 — USB speed (branch `m6-usb-speed`, 2026-10-13)
+
+**Done.** Multi-block reads and writes in `sd.c`, a 16 KB MSC buffer,
+and FatFs's runs of sectors through the same calls. On the Plus 2 W,
+release build, `usbdisk` writes at about 610 KB/s (M4: 219 KB/s) and
+reads at about 700 KB/s (M4: 432 KB/s), a 32 MB file each way compared
+byte for byte; a 20 MB `cp` on the card takes 37 s (M4: 93 s).
+
+**Checked on the host** (macOS, Apple clang 21, `-Wall -Wextra -Werror`,
+C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1, TinyUSB 0.18):
+
+- Both builds compile clean, development and release; 20 host test
+  binaries pass.
+- **`test_sd`**, new: `src/port/sd.c` itself, against a model of a card
+  in SPI mode byte by byte (`fake_sd.c`) behind a fake of the SDK calls
+  it makes (`fake_sdk/`), with time counted in bus bytes. One block goes
+  by CMD17 and CMD24; 2 and 32 blocks by one CMD18 and its CMD12, and one
+  CMD25 and its stop token, on SDHC's block addresses and SDSC's byte
+  addresses, neighbours untouched; CMD12's stuff byte skipped. An error
+  token mid-read and a write error mid-write: the transfer still stopped,
+  the blocks before the error written and none after, and the next
+  command working. A card busy 20 ms a block finishes; at 100 ms and
+  400 ms a block, and with reads as slow, the transfer stops and returns
+  within 2 s; a card that stops answering returns within 2 s; and a
+  card busy when called, then slow to the transfer's bound, then busy
+  past the stop, returns within 2 s each way (added after Muse's review:
+  the transfer's bound had started after its command's ready wait, so
+  the four waits stacked to 2.5 s; the bound now starts at the call). After
+  every call the card is between commands and not busy, and the model
+  saw no command, token or deselect out of turn.
+- **Planted bugs**, 14, one at a time; every one failed `test_sd`: the
+  stuff byte not skipped; no total bound on writes, and on reads; no wait
+  for busy before the stop token; the raw block number as SDSC's address
+  for CMD25, and for CMD18; no CMD12 after a read error; no stop token
+  after a write error; one block short; no wait for busy after the stop
+  token, and after CMD12; the data response not checked; no wait for
+  busy between blocks; and a 2 s total bound, which goes past 2 s.
+- From M4, after Muse's review: Tab completion now offers programs from
+  an empty `$PATH` entry (`PATH=`, a trailing `:`) as the current
+  directory, as the search that runs them does (`test_line`).
+- `tools/usb-rate.py`, the measurement, run against a FAT disk image on
+  the Mac: written, read back without the cache, compared, removed.
+
+**Checked on the board:** Claude, on the Plus 2 W (RP2350B rev 2, id
+`7458DC82A89AAC12`), each build run from SRAM over SWD, on its test card
+(32 GB SDHC, FAT32), USB to a MacBook Pro (macOS) through a USB-C hub,
+2026-10-13 (`out/m6-board-m4dev.log`, `out/m6-board-m6dev.log`,
+`out/m6-board-m4cp.log`). "Before" is M4's build of `main` (`1f07eb9`),
+"after" this branch:
+
+- `usbdisk` on each of the four builds; `tools/usb-rate.py` wrote 32 MB
+  of random bytes to the card through the Mac's volume, read them back
+  past the Mac's cache, and found them byte for byte as written, every
+  run (six runs). Ejecting on the Mac brought the shell back each time,
+  with `$?` 0 and no message of a failed read or write.
+- FatFs's multi-block path: `cp /umac0.img` (20,971,520 B) into a
+  scratch directory, twice, on the M6 development build; both copies,
+  read back on the Mac past its cache, were identical to the original.
+  The same copy on M4's build, for the time. The directory was removed
+  with `rm -r` after.
+- **The owner, on a Pico 2 W, with a different SD card, 2026-10-14:**
+  `usbdisk` to an iPad mini. Directories created, and files uploaded
+  and downloaded, from the iPad; transfers noticeably faster than M4's,
+  and solid (by use, not timed). The iPad has no eject, so Esc was the
+  way back to the shell.
+
+**Measurements** (rates in KB of 1,024 B; the copy timed from Enter to
+the prompt on the UART mirror, to about 0.2 s):
+
+| What | Estimate | Measured |
+|---|---|---|
+| RAM, development / release (link map) | +16 KB of MSC buffer | 427,004 B / 423,260 B (M4: 410,004 B / 406,260 B); the buffer 15,872 B more, the code about 1 KB |
+| `usbdisk` write, Mac to card, 32 MB, release | faster than M4's ~170 KB/s by eye | M4 219 KB/s; M6 603 and 615 KB/s |
+| `usbdisk` read, card to Mac, 32 MB, release | — | M4 432 KB/s; M6 696 and 697 KB/s |
+| the same, development build | — | M4 213 / 404 KB/s; M6 597 and 552 / 695 and 619 KB/s |
+| `cp` of 20 MB on the card, development build | — | M4 93.2 s; M6 37.2 s (about 550 KB/s, reading and writing) |
+
+The USB transfers and the card's take turns (design.md §4.2), so neither
+rate is the bus's or the card's alone.
+
+**Not checked:**
+
+- Windows and Linux; the rates on the iPad, and on the owner's card.
+- vi's save through the multi-block path (it goes through the same
+  `disk_write` as `cp`).
+- The transfer's 1 s bound on a real card that slows down: only the
+  model's (`test_sd`).
+- Other buffer sizes than 16 KB, and overlapping the USB and card
+  transfers.
+
 ## M4 — comfort (branch `m4-comfort`, 2026-10-13)
 
 **Done.** History, Tab completion, globs, pipes, variables, `more`,

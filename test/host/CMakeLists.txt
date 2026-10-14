@@ -43,3 +43,11 @@ set_tests_properties(test_screen PROPERTIES SKIP_RETURN_CODE 77)
 
 # The real UF2s test_uf2 reads, if tools/fetch-suites.sh has fetched them.
 target_compile_definitions(test_uf2 PRIVATE SHELL_SUITES_DIR="${CMAKE_SOURCE_DIR}/test/suites")
+
+# The port's card driver, against a model of a card in SPI mode, through
+# a fake of the few SDK calls it makes (fake_sdk/).
+add_executable(test_sd test_sd.c fake_sd.c ${CMAKE_SOURCE_DIR}/src/port/sd.c)
+target_include_directories(test_sd PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/fake_sdk ${CMAKE_SOURCE_DIR}/src/port)
+target_compile_options(test_sd PRIVATE ${SHELL_WARNINGS})
+add_test(NAME test_sd COMMAND test_sd)

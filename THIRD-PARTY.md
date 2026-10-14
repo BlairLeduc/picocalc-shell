@@ -15,8 +15,8 @@ The same licence as this project, and the same owner.
 | `src/port/kbd.c`, `.h` | the same | one core's ring in place of the cross-core rings |
 | `src/port/board.c`, `.h` | the same | trimmed: no die temperature |
 | `cmake/version.cmake` | the same | the header's name |
-| `src/port/sd.c`, `sd.h` | the same | `sd_sectors()`, the card's size from its CSD, for `usbdisk` |
-| `src/port/diskio.c` | the same | `card_poll()`, for one mount held while the card stays in |
+| `src/port/sd.c`, `sd.h` | the same | `sd_sectors()`, the card's size from its CSD, for `usbdisk`; multi-block reads and writes (CMD18, CMD25) |
+| `src/port/diskio.c` | the same | `card_poll()`, for one mount held while the card stays in; runs of sectors in one transfer |
 | `src/fatfs/ffconf.h` | `src/port/fatfs/ffconf.h` | the values its header lists |
 | `test/host/test_util.h` | the same | the include guard |
 | `tools/build.sh`, `uart-log.sh`, `uart-type.sh`, `uart-screen.sh` | `tools/` | names, keys and pacing |

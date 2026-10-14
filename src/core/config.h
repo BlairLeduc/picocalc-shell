@@ -75,6 +75,12 @@
 #define SHELL_OUT_CHUNK    128u
 #define SHELL_PRINTF_MAX   256u
 
+/* usbdisk (design.md §4.2): TinyUSB's mass-storage buffer, the most of
+ * one SCSI read or write moved to or from the card in one multi-block
+ * transfer. A multiple of the 512-byte block, at most 32 KB (TinyUSB
+ * counts a write's piece in 16 bits). */
+#define SHELL_USB_BUF      16384u
+
 /* Southbridge key events held between polls: more than its FIFO's 31
  * (hardware-notes.md §6.1), a power of two. */
 #define SHELL_KEY_RING     64u
