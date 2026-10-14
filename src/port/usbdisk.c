@@ -82,15 +82,16 @@ bool tud_msc_start_stop_cb(uint8_t lun, uint8_t power_condition, bool start, boo
     return true;
 }
 
+/* TinyUSB hands over the transfer in pieces of up to its buffer, each a
+ * whole number of blocks, so offset is always 0; each piece is one
+ * multi-block transfer on the card. */
 int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void *buffer,
                           uint32_t bufsize) {
     (void)lun;
-    (void)offset;   /* bufsize is one block, so offset is always 0 */
-    for (uint32_t i = 0; i < bufsize / SD_BLOCK; i++) {
-        if (sd_read(lba + i, (uint8_t *)buffer + i * SD_BLOCK) != SD_OK) {
-            s_failed = true;
-            return -1;
-        }
+    (void)offset;
+    if (sd_read_blocks(lba, buffer, bufsize / SD_BLOCK) != SD_OK) {
+        s_failed = true;
+        return -1;
     }
     return (int32_t)bufsize;
 }
@@ -104,11 +105,9 @@ int32_t tud_msc_write10_cb(uint8_t lun, uint32_t lba, uint32_t offset, uint8_t *
                            uint32_t bufsize) {
     (void)lun;
     (void)offset;
-    for (uint32_t i = 0; i < bufsize / SD_BLOCK; i++) {
-        if (sd_write(lba + i, buffer + i * SD_BLOCK) != SD_OK) {
-            s_failed = true;
-            return -1;
-        }
+    if (sd_write_blocks(lba, buffer, bufsize / SD_BLOCK) != SD_OK) {
+        s_failed = true;
+        return -1;
     }
     return (int32_t)bufsize;
 }

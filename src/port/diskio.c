@@ -2,7 +2,7 @@
  *
  * Copied from pico-oric's src/port/diskio.c (THIRD-PARTY.md); card.h's
  * poll is added, since the shell keeps one mount for as long as the card
- * stays in.
+ * stays in, and FatFs's runs of sectors go to the card as one transfer.
  */
 
 #include <stddef.h>
@@ -47,18 +47,14 @@ DSTATUS disk_initialize(BYTE pdrv) {
 DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
     if (pdrv != 0 || count == 0) return RES_PARERR;
     if (s_status & STA_NOINIT) return RES_NOTRDY;
-    for (UINT i = 0; i < count; i++) {
-        if (sd_read((uint32_t)sector + i, buff + i * SD_BLOCK) != SD_OK) return failed();
-    }
+    if (sd_read_blocks((uint32_t)sector, buff, count) != SD_OK) return failed();
     return RES_OK;
 }
 
 DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
     if (pdrv != 0 || count == 0) return RES_PARERR;
     if (s_status & STA_NOINIT) return RES_NOTRDY;
-    for (UINT i = 0; i < count; i++) {
-        if (sd_write((uint32_t)sector + i, buff + i * SD_BLOCK) != SD_OK) return failed();
-    }
+    if (sd_write_blocks((uint32_t)sector, buff, count) != SD_OK) return failed();
     return RES_OK;
 }
 
@@ -66,7 +62,7 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
     (void)buff;
     if (pdrv != 0) return RES_PARERR;
     if (s_status & STA_NOINIT) return RES_NOTRDY;
-    /* Single-block writes complete before sd_write returns, so there is
+    /* Writes are on the card before sd_write_blocks returns, so there is
      * nothing to flush; mkfs and trim, which want the rest, are off. */
     return cmd == CTRL_SYNC ? RES_OK : RES_PARERR;
 }

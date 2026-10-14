@@ -43,7 +43,9 @@
 #define CFG_TUD_MIDI          0
 #define CFG_TUD_VENDOR        0
 
-/* One card block at a time, as sd.c reads and writes them. */
-#define CFG_TUD_MSC_EP_BUFSIZE 512
+/* The piece of a SCSI transfer usbdisk moves to or from the card at
+ * once (config.h). */
+#include "config.h"
+#define CFG_TUD_MSC_EP_BUFSIZE SHELL_USB_BUF
 
 #endif /* SHELL_TUSB_CONFIG_H */
