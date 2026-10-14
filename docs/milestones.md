@@ -39,7 +39,11 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1, TinyUSB 0.18):
   the blocks before the error written and none after, and the next
   command working. A card busy 20 ms a block finishes; at 100 ms and
   400 ms a block, and with reads as slow, the transfer stops and returns
-  within 2 s; a card that stops answering returns within 2 s. After
+  within 2 s; a card that stops answering returns within 2 s; and a
+  card busy when called, then slow to the transfer's bound, then busy
+  past the stop, returns within 2 s each way (added after Muse's review:
+  the transfer's bound had started after its command's ready wait, so
+  the four waits stacked to 2.5 s; the bound now starts at the call). After
   every call the card is between commands and not busy, and the model
   saw no command, token or deselect out of turn.
 - **Planted bugs**, 14, one at a time; every one failed `test_sd`: the
@@ -49,6 +53,9 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1, TinyUSB 0.18):
   after a write error; one block short; no wait for busy after the stop
   token, and after CMD12; the data response not checked; no wait for
   busy between blocks; and a 2 s total bound, which goes past 2 s.
+- From M4, after Muse's review: Tab completion now offers programs from
+  an empty `$PATH` entry (`PATH=`, a trailing `:`) as the current
+  directory, as the search that runs them does (`test_line`).
 - `tools/usb-rate.py`, the measurement, run against a FAT disk image on
   the Mac: written, read back without the cache, compared, removed.
 

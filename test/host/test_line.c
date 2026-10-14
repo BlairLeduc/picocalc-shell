@@ -11,9 +11,11 @@
 #include "history.h"
 #include "host_disk.h"
 #include "keycodes.h"
+#include "path.h"
 #include "shell.h"
 #include "term.h"
 #include "test_util.h"
+#include "vars.h"
 
 static term_t  t;
 static shell_t sh;
@@ -231,6 +233,17 @@ int main(void) {
     fresh();
     type("readme\t");
     CHECK(strcmp(row(0), "/home>readme") == 0, "only programs, not every file: '%s'", row(0));
+    /* An empty $PATH entry is the current directory, as when it runs. */
+    CHECK(path_resolve(sh.cwd, "/", "/pico2-apps") && vars_set("PATH", 4, "/nope:"),
+          "PATH=/nope: in /pico2-apps");
+    fresh();
+    type("pico-o\t");
+    CHECK(strcmp(sh.line.text, "pico-oric ") == 0, "trailing ':': '%s'", sh.line.text);
+    CHECK(vars_set("PATH", 4, ""), "PATH=");
+    fresh();
+    type("pico-a\t");
+    CHECK(strcmp(sh.line.text, "pico-atom ") == 0, "empty: '%s'", sh.line.text);
+    CHECK(path_resolve(sh.cwd, "/", "/home") && vars_set("PATH", 4, "/pico2-apps"), "put back");
     fresh();
     type("PICO-A\t");
     CHECK(strcmp(sh.line.text, "pico-atom ") == 0 && sh.line.pos == sh.line.len,

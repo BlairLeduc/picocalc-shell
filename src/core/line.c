@@ -193,14 +193,15 @@ static void offer_commands(shell_t *sh, const char *prefix, size_t n) {
     const char *name;
     for (unsigned i = 0; (name = shell_builtin_at(i)) != NULL; i++)
         if (has_prefix(name, prefix, n)) offer(name, strlen(name), false);
-    const char *path = vars_get("PATH", 4);
-    while (path && *path) {
+    /* An empty entry is the current directory, as in run.c's search. */
+    for (const char *path = vars_get("PATH", 4); path;) {
         const char *colon = strchr(path, ':');
         size_t len = colon ? (size_t)(colon - path) : strlen(path);
         char entry[SHELL_PATH_MAX + 1];
-        if (len > 0 && len <= SHELL_PATH_MAX) {
+        if (len <= SHELL_PATH_MAX) {
             memcpy(entry, path, len);
             entry[len] = '\0';
+            if (len == 0) strcpy(entry, ".");
             if (path_resolve(s_dir, sh->cwd, entry)) offer_dir(s_dir, prefix, n, true);
         }
         path = colon ? colon + 1 : NULL;
