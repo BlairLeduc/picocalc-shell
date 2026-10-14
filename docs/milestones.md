@@ -96,7 +96,7 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
 - **The owner, on a Pico 2 W, 2026-10-14:** every command worked as
   designed. `backlight` changed the backlights on the panel, and
   `battery` showed `charging` while the PicoCalc was charging.
-  `poweroff` switched it off. `bootsel` entered BOOTSEL, and the RP2350's
+  `poweroff` switched it off, on battery and on USB power. `bootsel` entered BOOTSEL, and the RP2350's
   drive showed on the computer. The other checks were not reported in
   detail. The phosphors did not look as designed: amber showed as pure
   yellow, green as pure green, white as pure white. Amber's value,
@@ -115,8 +115,6 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
 
 **Not checked:**
 
-- `poweroff` on USB power, where the board may stay up and the shell
-  should say so after 10 s.
 - `reboot` into this build from the card: the card still holds an M2
   shell. The release build, and a Pico 2 W.
 - Whether the light changes in steps, as the MCU's source would have

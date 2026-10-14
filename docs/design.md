@@ -627,7 +627,8 @@ shell, with none, says `not on this machine`:
 - `poweroff`, `reboot` and `bootsel` save the history, say what is
   happening, and call the port, which returns only on failure.
   `poweroff` writes 6 to `OFF` (HW §6), then waits 10 s for the power to
-  go: on USB power the board stays up, and the shell says so. `reboot`
+  go, and says so if it has not. The PicoCalc switches off on USB power
+  too (the owner, 2026-10-14). `reboot`
   sends `BOOT_SD` from `loader.c` (`loader_reboot_shell`), as
   `picocalc_shell_exit()` does, so it comes back to the shell, not the
   last program (§3.1); it is refused with no card or no loader in flash,

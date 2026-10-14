@@ -384,7 +384,7 @@ Each of these saves the history first. None can be used with a
 redirection or in a pipe.
 
 - **poweroff**: the keyboard's controller switches the power off about
-  6 seconds later. On USB power the board may stay on. After 10 seconds
+  6 seconds later, on USB power too. If it is still on after 10 seconds,
   the shell says so and carries on.
 - **reboot**: comes back to the shell, not to the last program. It needs
   the card in and UF2 Loader in flash, and says so if either is missing.

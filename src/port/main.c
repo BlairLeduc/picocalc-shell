@@ -160,7 +160,8 @@ static void info(void *ctx, const out_t *o) {
 }
 
 /* The power-off delay (hardware-notes.md §6), and how long to wait past
- * it before saying it did not happen: on USB power the Pico stays up. */
+ * it before saying it did not happen. The PicoCalc switches off on USB
+ * power too (the owner, 2026-10-14). */
 #define POWEROFF_S      6u
 #define POWEROFF_WAIT_S 10u
 
@@ -172,7 +173,7 @@ static const char *power(void *ctx, shell_power_t what) {
         if (st != SB_OK) return sb_why(st);
         uint64_t end = time_us_64() + POWEROFF_WAIT_S * 1000000u;
         while (time_us_64() < end) screen_tick(&g_term, time_us_64());
-        return "still on after 10 s; on USB power, perhaps";
+        return "still on after 10 s";
     }
     case SHELL_POWER_REBOOT:
         /* Without either, stage3 would drop to BOOTSEL (design.md §3.1). */
