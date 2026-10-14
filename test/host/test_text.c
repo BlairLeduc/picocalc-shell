@@ -1,4 +1,5 @@
-/* test_text.c — `more` and `grep` (text.h, design.md §4.5).
+/* test_text.c — `more`, `grep`, `head`, `tail` and `wc` (text.h,
+ * design.md §4.5).
  *
  * more is read on the terminal's grid, with keys typed from a script;
  * grep through the text the terminal was sent. */
@@ -79,6 +80,15 @@ static const char *numbered(unsigned lines) {
     static char buf[1 << 16];
     size_t n = 0;
     for (unsigned i = 1; i <= lines; i++) n += (size_t)snprintf(buf + n, sizeof buf - n, "line %u\n", i);
+    return buf;
+}
+
+/* "line a\n" to "line b\n". */
+static const char *span(unsigned a, unsigned b) {
+    static char buf[1 << 16];
+    size_t n = 0;
+    buf[0] = '\0';
+    for (unsigned i = a; i <= b; i++) n += (size_t)snprintf(buf + n, sizeof buf - n, "line %u\n", i);
     return buf;
 }
 
@@ -185,6 +195,86 @@ int main(void) {
     char want[16];
     snprintf(want, sizeof want, "%zu\n", (sizeof longline - 2 + SHELL_TEXT_LINE - 2) / (SHELL_TEXT_LINE - 1));
     CHECK(run("grep -c a long") == 0 && strcmp(con, want) == 0, "pieces: '%s'", con);
+
+    /* ---- head ---- */
+    CHECK(run("head n100") == 0 && strcmp(con, span(1, 10)) == 0, "head: '%s'", con);
+    CHECK(run("head -n 3 n100") == 0 && strcmp(con, span(1, 3)) == 0, "-n 3: '%s'", con);
+    CHECK(run("head -n3 n100") == 0 && strcmp(con, span(1, 3)) == 0, "-n3");
+    CHECK(run("head -3 n100") == 0 && strcmp(con, span(1, 3)) == 0, "-3");
+    CHECK(run("head -n 0 n100") == 0 && con_len == 0, "-n 0");
+    CHECK(run("head -n 500 n10") == 0 && strcmp(con, span(1, 10)) == 0, "more than there are");
+    CHECK(run("head -2 g2") == 0 && strcmp(con, "apple\nfig") == 0, "no final LF: '%s'", con);
+    CHECK(run("head -1 n10 g2") == 0 && strcmp(con, "==> n10 <==\nline 1\n\n==> g2 <==\napple\n") == 0,
+          "headers: '%s'", con);
+    CHECK(run("head -2 < n100") == 0 && strcmp(con, span(1, 2)) == 0, "head <");
+    CHECK(run("cat n100 | head -2") == 0 && strcmp(con, span(1, 2)) == 0, "| head");
+    CHECK(run("head -2 n100 | wc -l") == 0 && strcmp(con, "2\n") == 0, "head |: '%s'", con);
+    CHECK(run("head") == 1 && strstr(con, "usage: head"), "head alone");
+    CHECK(run("head -n") == 1 && strstr(con, "usage: head"), "-n alone");
+    CHECK(run("head -n x n10") == 1 && strstr(con, "usage: head"), "-n x");
+    CHECK(run("head -x n10") == 1 && strstr(con, "usage: head"), "-x");
+    CHECK(run("head nope n10") == 1 && strstr(con, "head: nope: no such file") && strstr(con, "line 10"),
+          "nope, and a file: '%s'", con);
+    CHECK(run("head -- n10") == 0 && strcmp(con, span(1, 10)) == 0, "--");
+
+    /* ---- tail ---- */
+    CHECK(run("tail n100") == 0 && strcmp(con, span(91, 100)) == 0, "tail: '%s'", con);
+    CHECK(run("tail -n 1 n100") == 0 && strcmp(con, "line 100\n") == 0, "-n 1: '%s'", con);
+    CHECK(run("tail -3 n10") == 0 && strcmp(con, span(8, 10)) == 0, "-3");
+    CHECK(run("tail -n 0 n10") == 0 && con_len == 0, "-n 0");
+    CHECK(run("tail -n 500 n10") == 0 && strcmp(con, span(1, 10)) == 0, "more than there are");
+    CHECK(run("tail -1 g2") == 0 && strcmp(con, "fig") == 0, "no final LF: '%s'", con);
+    CHECK(run("tail -2 g2") == 0 && strcmp(con, "apple\nfig") == 0, "no final LF, 2: '%s'", con);
+    CHECK(run("tail -1 n10 g2") == 0 && strcmp(con, "==> n10 <==\nline 10\n\n==> g2 <==\nfig") == 0,
+          "headers: '%s'", con);
+    CHECK(run("cat n100 | tail -2") == 0 && strcmp(con, span(99, 100)) == 0, "| tail");
+    CHECK(run("tail -2 < n100") == 0 && strcmp(con, span(99, 100)) == 0, "tail <");
+    CHECK(put("/empty", ""), "empty");
+    CHECK(run("tail empty") == 0 && con_len == 0, "empty");
+    CHECK(put("/blank", "\n\n\n"), "blank");
+    CHECK(run("tail -2 blank") == 0 && strcmp(con, "\n\n") == 0, "blank lines");
+    /* Larger than the ring: the last lines all fit, and a page of
+     * 6000 lines (some 60 KB) gives the same end. */
+    CHECK(put("/n6000", numbered(6000)), "n6000");
+    CHECK(run("tail -n 3 n6000") == 0 && strcmp(con, span(5998, 6000)) == 0, "big: '%s'", con);
+    /* More lines asked for than the ring holds: the whole ones kept, and
+     * a note. Each is 10 bytes, so 4096 bytes keep 409 whole lines. */
+    CHECK(run("tail -n 1000 n6000 > t.out") == 0 && strstr(con, "only the last 4096 bytes"),
+          "cut: '%s'", con);
+    CHECK(run("head -1 t.out") == 0 && strcmp(con, "line 5592\n") == 0, "first kept: '%s'", con);
+    CHECK(run("wc -l t.out") == 0 && strcmp(con, "    409 t.out\n") == 0, "kept: '%s'", con);
+    /* One line longer than the ring: its last 4096 bytes, and a note. */
+    static char huge[5002];
+    memset(huge, 'b', 5000);
+    huge[5000] = '\n';
+    CHECK(put("/huge", huge), "huge");
+    CHECK(run("tail -1 huge | wc -c") == 0 &&
+              strcmp(con, "tail: huge: only the last 4096 bytes are kept\n4096\n") == 0,
+          "huge line: '%s'", con);
+    CHECK(run("tail -1 long | wc -c") == 0 && strcmp(con, "1535\n") == 0, "long line: '%s'", con);
+    CHECK(run("tail") == 1 && strstr(con, "usage: tail"), "tail alone");
+
+    /* ---- wc ---- */
+    CHECK(run("wc g1") == 0 && strcmp(con, "      4       6      37 g1\n") == 0, "wc: '%s'", con);
+    CHECK(run("wc -l g1") == 0 && strcmp(con, "      4 g1\n") == 0, "-l: '%s'", con);
+    CHECK(run("wc -w g1") == 0 && strcmp(con, "      6 g1\n") == 0, "-w: '%s'", con);
+    CHECK(run("wc -c g1") == 0 && strcmp(con, "     37 g1\n") == 0, "-c: '%s'", con);
+    CHECK(run("wc -lc g1") == 0 && strcmp(con, "      4      37 g1\n") == 0, "-lc: '%s'", con);
+    CHECK(run("wc g1 g2") == 0 &&
+              strcmp(con, "      4       6      37 g1\n      1       2       9 g2\n"
+                          "      5       8      46 total\n") == 0,
+          "total: '%s'", con);
+    CHECK(run("wc -l < n100") == 0 && strcmp(con, "100\n") == 0, "-l <: '%s'", con);
+    CHECK(run("cat g1 | wc") == 0 && strcmp(con, "      4       6      37\n") == 0, "| wc: '%s'", con);
+    CHECK(run("wc empty") == 0 && strcmp(con, "      0       0       0 empty\n") == 0, "empty");
+    CHECK(run("wc -c long") == 0 && strstr(con, "   1535 long\n"), "long: '%s'", con);
+    /* A word across the reads of SHELL_TEXT_LINE bytes is one word. */
+    CHECK(run("wc -w long") == 0 && strcmp(con, "      1 long\n") == 0, "one word: '%s'", con);
+    CHECK(run("wc nope g1") == 1 && strstr(con, "wc: nope: no such file") && strstr(con, " g1\n") &&
+              strstr(con, "37 total\n"),
+          "nope: '%s'", con);
+    CHECK(run("wc") == 1 && strstr(con, "usage: wc"), "wc alone");
+    CHECK(run("wc -x g1") == 1 && strstr(con, "-x: unknown option"), "-x");
 
     host_disk_close();
     TEST_DONE();

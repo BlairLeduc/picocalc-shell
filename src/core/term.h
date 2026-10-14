@@ -28,11 +28,13 @@
 #define TERM_RGB(r, g, b) \
     ((uint16_t)((((r) >> 3) << 11) | (((g) >> 2) << 5) | ((b) >> 3)))
 
-/* The starter's colours (display.h). FOREGROUND is the default ink until
- * a phosphor is chosen. */
+/* The starter's colours (display.h), but for the phosphors, which are
+ * the owner's of 2026-10-14: the starter's green and amber were never
+ * drawn there, and its amber, RGB(255, 255, 51), is a yellow.
+ * FOREGROUND is the default ink until a phosphor is chosen. */
 #define TERM_WHITE_PHOSPHOR TERM_RGB(216, 240, 255)
-#define TERM_GREEN_PHOSPHOR TERM_RGB(51, 255, 102)
-#define TERM_AMBER_PHOSPHOR TERM_RGB(255, 255, 51)
+#define TERM_GREEN_PHOSPHOR TERM_RGB(51, 255, 51)
+#define TERM_AMBER_PHOSPHOR TERM_RGB(255, 183, 0)
 #define TERM_FOREGROUND     TERM_RGB(255, 255, 255)
 #define TERM_BACKGROUND     TERM_RGB(0, 0, 0)
 #define TERM_DIM            TERM_RGB(128, 128, 128)

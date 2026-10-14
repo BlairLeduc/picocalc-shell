@@ -76,9 +76,12 @@ A program meant to be run from the shell keeps its data on the card.
 
 ## Using it
 
-**Commands:** `cat cd cp df echo export font grep history ls menu mkdir
-more mv pwd rm rmdir set sh touch unset usbdisk vi view`. Everything that
-touches files is built in, so it runs at once.
+**Commands:** `backlight battery bootsel cat cd clear cp df echo export
+font grep head help history info ls menu mkdir more mv phosphor poweroff
+pwd reboot rm rmdir set sh tail touch unset usbdisk vi view wc`.
+Everything is built in, so it runs at once. `help` lists them and
+`help name` explains one; [docs/user-guide.md](docs/user-guide.md)
+explains them all.
 
 **The command line:** quoting with `'…'`, `"…"` and `\`; globs `*`, `?`
 and `[…]`; variables (`$NAME`, `$?`, `NAME=value`); redirection with `>`,
@@ -145,6 +148,8 @@ build/host/shell card.img        # the shell in your terminal; a new 64 MB FAT32
 
 ## Documents
 
+- [docs/user-guide.md](docs/user-guide.md): every command, the command
+  line, vi and the card, for users.
 - [docs/design.md](docs/design.md): the design, its settled decisions and
   the milestones.
 - [docs/hardware-notes.md](docs/hardware-notes.md): the PicoCalc's

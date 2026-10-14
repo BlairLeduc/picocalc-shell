@@ -16,6 +16,7 @@ set(SHELL_HOST_TESTS
     test_pipe
     test_shell
     test_skeleton
+    test_system
     test_term
     test_text
     test_uf2

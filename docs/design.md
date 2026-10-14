@@ -1,8 +1,9 @@
 # PicoCalc Shell — design
 
-Status: **Draft 6, 2026-10-13.** Feasibility study and first design. M0
-(the skeleton), M1 (files), M2 (run), M3 (vi) and M4 (comfort) are done
-([milestones.md](milestones.md)).
+Status: **Draft 7, 2026-10-14.** Feasibility study and first design. M0
+(the skeleton), M1 (files), M2 (run), M3 (vi), M4 (comfort), M6 (USB
+speed) and M8 (the rest of v1) are done ([milestones.md](milestones.md)). The commands are explained for users
+in [user-guide.md](user-guide.md).
 
 The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
 and pico-oric). Pico Logo is a special case, because it keeps a filesystem
@@ -324,7 +325,11 @@ VT100/ANSI state machine that already handles:
 - device status reports, and BEL through a callback.
 
 A phosphor preset (white, green or amber, from `display.h`) sets the default
-foreground; `/etc/profile` chooses one. An unknown escape sequence and a
+foreground; `/etc/profile` chooses one. *Changed 2026-10-14:* the owner's
+phosphors, white `RGB(216, 240, 255)`, green `RGB(51, 255, 51)` and amber
+`RGB(255, 183, 0)`. The starter's `display.h` defines green and amber but
+never draws with them, and its amber, `RGB(255, 255, 51)`, showed as the
+yellow it is. An unknown escape sequence and a
 cancelled one draw glyph `0x02`, the checkerboard, as the starter does. A
 byte of `0x80` or above has no glyph. Files from a computer may hold UTF-8
 or Latin-1, so such a byte draws the same checkerboard, never a glyph from
@@ -577,9 +582,9 @@ costs a flash and a reboot.
 
 *As built at M4:* `cat cd cp df displaytest echo export font grep history
 ls menu mkdir more mv pwd rm rmdir set sh touch unset usbdisk vi view`.
-Of the v1 column, `head tail wc help clear phosphor battery backlight
-poweroff info reboot bootsel` are not built yet. `more` and `grep` are in
-`src/core/text.c`:
+*As built at M8:* the rest of the v1 column, `head tail wc help clear
+phosphor battery backlight poweroff info reboot bootsel`. `more`, `grep`,
+`head`, `tail` and `wc` are in `src/core/text.c`:
 
 - `more` shows `TERM_ROWS - 1` rows, a long line counting as the rows it
   wraps to, then `--More--` in reverse: Space for a page, Enter or Down
@@ -592,6 +597,43 @@ poweroff info reboot bootsel` are not built yet. `more` and `grep` are in
   Lines are read in pieces of `SHELL_TEXT_LINE - 1` (511) bytes, and a
   longer line is matched a piece at a time. The status is 0 if a line
   was found, 1 if none, 2 on an error.
+- `head` and `tail` take `-n N`, `-nN` or `-N` (10 by default), and head
+  each of several files with `==> name <==`. `tail` keeps the last
+  `SHELL_COPY_BUF` (4 KB) of its input in `more`'s buffer, as a ring, so
+  it costs no RAM; lines asked for that began before that are left out,
+  from the first whole line kept, and it says so.
+- `wc [-l -w -c]` counts line breaks, words and bytes, padded to seven
+  columns, with a total for several files; a single count of the input is
+  printed alone, as `ls | wc -l` wants.
+
+The PicoCalc's own commands are in `src/core/system.c`, and reach the
+port through `shell_system_t` (`shell_set_system`), a second set of
+hooks beside `shell_hooks_t`, so the host tests fake them and the host
+shell, with none, says `not on this machine`:
+
+- `help` lists the builtins in columns as wide as the longest name, to
+  the screen's width; `help name` prints its usage and one line on what
+  it does, both from the builtin table in `shell.c`.
+- `clear` writes `ESC [ H ESC [ 2 J` to the output. `phosphor` calls the
+  port's `term_set_phosphor`, then sends SGR 39 so the new ink applies
+  at once; the shell remembers which was chosen, for `phosphor` alone.
+- `battery` reads `BAT` (HW §6). `backlight` reads `BKL` or `BK2`, or
+  writes then reads it back, since the MCU's source steps and clamps the
+  level, though firmware `0x00` was seen to keep it as written (HW §4.11).
+- `info` prints the shell's version, then the port's lines (chip and
+  clock, unique id, static SRAM, UF2 Loader and its partition, whether
+  programs can run, the keyboard's firmware version as read at bring-up),
+  then the card (`df`'s figures) and the battery.
+- `poweroff`, `reboot` and `bootsel` save the history, say what is
+  happening, and call the port, which returns only on failure.
+  `poweroff` writes 6 to `OFF` (HW §6), then waits 10 s for the power to
+  go: on USB power the board stays up, and the shell says so. `reboot`
+  sends `BOOT_SD` from `loader.c` (`loader_reboot_shell`), as
+  `picocalc_shell_exit()` does, so it comes back to the shell, not the
+  last program (§3.1); it is refused with no card or no loader in flash,
+  where stage3 would drop to BOOTSEL. `bootsel` calls the boot ROM's
+  `reset_usb_boot`. All three are refused with a redirection or in a
+  pipe, as `menu` is.
 
 | v1 | Later, if wanted |
 |---|---|
@@ -907,3 +949,30 @@ in [milestones.md](milestones.md).
   starts the program, and a program still runs, and comes back by its
   exit command, under both the patched and the stock loader. Offer the
   change to pelrun as an option.
+- **M8 — The rest of v1.** The twelve v1 builtins not built at M4 (§4.5):
+  - `head [-n N]`, `tail [-n N]` and `wc [-l -w -c]`, in
+    `src/core/text.c` beside `more` and `grep`, reading files, `<` and
+    pipes; `tail` keeps its last N lines in a fixed buffer from
+    `config.h`, so a long input costs no more RAM.
+  - `help`: the builtins, one line each; `help name` for one.
+  - `clear`; `phosphor [white|green|amber]`, which sets the default
+    foreground (§4.1), the current one with no operand.
+  - `battery` (percent, and charging when bit 7 says so; HW §6, whose
+    reading is refreshed only every 20 s) and `backlight [lcd|kbd] [N]`,
+    reading the level first and showing it with no operand (HW §4.11).
+  - `poweroff`: the history saved first, as before a program, then the
+    southbridge's `OFF` register, which waits at least 6 s (HW §6).
+  - `info`: shell version, board, chip, flash, loader version (from
+    `loader.c`), card and battery.
+  - `reboot`, back to the shell, with the loader's command sent from
+    `loader.c` as `picocalc_shell_exit()` does, since a reboot with no
+    command would start the last program (§3.1); `bootsel`, through the
+    boot ROM. Both save the history first.
+
+  The southbridge calls go through `src/port/` behind a hook, so that
+  the host tests can fake them, as `usbdisk` is (M4). Done when the host
+  tests cover each command, its errors and its usage; on the board,
+  `battery` and both backlights agree with what the hardware shows,
+  `poweroff` switches the PicoCalc off, `reboot` comes back to the
+  shell with the history kept, and `bootsel` shows the RP2350's drive on
+  a computer. Measure the RAM `help`'s text costs.

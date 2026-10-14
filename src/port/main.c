@@ -17,6 +17,7 @@
 #include <stdio.h>
 
 #include "hardware/uart.h"
+#include "pico/bootrom.h"
 #include "pico/stdlib.h"
 
 #include "board.h"
@@ -27,6 +28,7 @@
 #include "lcd.h"
 #include "loader.h"
 #include "screen.h"
+#include "sd.h"
 #include "shell.h"
 #include "shell_version.h"
 #include "southbridge.h"
@@ -44,6 +46,8 @@ static keys_t       g_keys;
 static board_info_t g_board;
 static shell_loader_t  g_loader;
 static loader_status_t g_loader_st;
+static sb_status_t     g_sb;           /* the version's read at bring-up */
+static uint8_t         g_sb_ver[2];
 
 static uint64_t s_next_poll;
 /* volatile, so the release build keeps them for a read over SWD. */
@@ -101,6 +105,89 @@ static bool usb_stop(void *ctx) {
 /* usbdisk: until the computer ejects the card, or Break, Esc or Ctrl-C. */
 static const char *usbdisk(void *ctx) {
     return usbdisk_run(usb_stop, ctx);
+}
+
+/* ---- the PicoCalc, for system.h ---------------------------------------- */
+
+static const char *sb_why(sb_status_t st) {
+    return st == SB_TIMEOUT ? "the southbridge timed out" : "the southbridge did not answer";
+}
+
+static const char *battery(void *ctx, unsigned *percent, bool *charging) {
+    (void)ctx;
+    uint8_t r[2];
+    sb_status_t st = sb_read(SB_REG_BAT, r);
+    if (st != SB_OK) return sb_why(st);
+    *percent = r[1] & 0x7Fu;
+    *charging = (r[1] & 0x80u) != 0;   /* clear proves nothing (hardware-notes.md §6) */
+    return NULL;
+}
+
+static const char *backlight(void *ctx, shell_light_t which, int level, unsigned *now) {
+    (void)ctx;
+    uint8_t reg = which == SHELL_LIGHT_LCD ? SB_REG_BKL : SB_REG_BK2;
+    uint8_t r[2];
+    sb_status_t st = level >= 0 ? sb_write(reg, (uint8_t)level, NULL) : SB_OK;
+    /* The MCU may step and clamp the level (§4.11): read back what it kept. */
+    if (st == SB_OK) st = sb_read(reg, r);
+    if (st != SB_OK) return sb_why(st);
+    *now = r[1];
+    return NULL;
+}
+
+static void phosphor(void *ctx, uint16_t rgb565) {
+    (void)ctx;
+    term_set_phosphor(&g_term, rgb565);
+}
+
+static void info(void *ctx, const out_t *o) {
+    (void)ctx;
+    out_printf(o, "chip      %s rev %u, %lu MHz\n", g_board.chip, g_board.chip_version,
+               (unsigned long)(g_board.clk_sys_hz / 1000000u));
+    out_printf(o, "id        %s\n", g_board.unique_id);
+    out_printf(o, "memory    %lu KB of %lu KB SRAM\n",
+               (unsigned long)(((uintptr_t)&__end__ - SRAM_BASE) >> 10),
+               (unsigned long)((SRAM_END - SRAM_BASE) >> 10));
+    if (g_loader_st.part_size)
+        out_printf(o, "loader    UF2 Loader %s, %lu KB for programs\n",
+                   g_loader_st.version ? g_loader_st.version : "(no version)",
+                   (unsigned long)(g_loader_st.part_size >> 10));
+    else
+        out_puts(o, "loader    none in flash\n");
+    out_printf(o, "programs  %s\n", g_loader.problem ? g_loader.problem : "can be run");
+    if (g_sb == SB_OK) out_printf(o, "keyboard  firmware 0x%02x\n", g_sb_ver[1]);
+    else out_printf(o, "keyboard  %s\n", sb_why(g_sb));
+}
+
+/* The power-off delay (hardware-notes.md §6), and how long to wait past
+ * it before saying it did not happen: on USB power the Pico stays up. */
+#define POWEROFF_S      6u
+#define POWEROFF_WAIT_S 10u
+
+static const char *power(void *ctx, shell_power_t what) {
+    (void)ctx;
+    switch (what) {
+    case SHELL_POWER_OFF: {
+        sb_status_t st = sb_write(SB_REG_OFF, POWEROFF_S, NULL);
+        if (st != SB_OK) return sb_why(st);
+        uint64_t end = time_us_64() + POWEROFF_WAIT_S * 1000000u;
+        while (time_us_64() < end) screen_tick(&g_term, time_us_64());
+        return "still on after 10 s; on USB power, perhaps";
+    }
+    case SHELL_POWER_REBOOT:
+        /* Without either, stage3 would drop to BOOTSEL (design.md §3.1). */
+        if (!g_loader_st.part_size) return "no UF2 Loader in flash";
+        if (!sd_present()) return "no card to load the shell from";
+        loader_reboot_shell();
+        break;
+    case SHELL_POWER_BOOTSEL:
+#if PICO_SHELL_UART
+        uart_tx_wait_blocking(uart_default);
+#endif
+        reset_usb_boot(0, 0);
+        break;
+    }
+    return NULL;
 }
 
 #if PICO_SHELL_UART
@@ -203,14 +290,13 @@ int main(void) {
     loader_init(&g_loader, &g_loader_st);
 
     uint32_t i2c_hz = sb_init();
-    uint8_t ver[2] = { 0, 0 };
-    sb_status_t sb = sb_read(SB_REG_VER, ver);
+    g_sb = sb_read(SB_REG_VER, g_sb_ver);
 
     uint32_t spi_hz = lcd_init();
     screen_init();
     s_lcd_us = time_us_64();
 
-    log_banner(clocks_ok, i2c_hz, sb, ver, spi_hz);
+    log_banner(clocks_ok, i2c_hz, g_sb, g_sb_ver, spi_hz);
 
     term_init(&g_term);
     keys_init(&g_keys);
@@ -218,6 +304,8 @@ int main(void) {
     const shell_hooks_t hooks = { now_us, interrupted, getkey, usbdisk, NULL };
     shell_init(&g_shell, &out, &hooks, SHELL_VERSION);
     shell_set_loader(&g_shell, &g_loader);
+    const shell_system_t sys = { battery, backlight, phosphor, info, power, NULL };
+    shell_set_system(&g_shell, &sys);
     shell_start(&g_shell);
     s_prompt_us = time_us_64();
 

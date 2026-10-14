@@ -26,6 +26,7 @@
 #define SB_REG_FIF  0x09u   /* [state, key], [0,0] when empty                */
 #define SB_REG_BK2  0x0Au   /* [reg, keyboard backlight]                     */
 #define SB_REG_BAT  0x0Bu   /* [reg, percent | bit 7 charging]               */
+#define SB_REG_OFF  0x0Eu   /* write: power off after value s, at least 6    */
 
 #define SB_WRITE    0x80u   /* OR into the register number to write it       */
 

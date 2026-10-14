@@ -144,6 +144,15 @@ static void boot(void *ctx, const char *ram, const uf2_info_t *info) {
     for (;;) tight_loop_contents();
 }
 
+void loader_reboot_shell(void) {
+#if PICO_SHELL_UART
+    uart_tx_wait_blocking(uart_default);
+#endif
+    command(BOOT_SD, 0);
+    watchdog_reboot(0, 0, 0);
+    for (;;) tight_loop_contents();
+}
+
 /* ---- finding the loader ---------------------------------------------------- */
 
 void loader_init(shell_loader_t *ld, loader_status_t *st) {

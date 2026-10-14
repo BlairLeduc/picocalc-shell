@@ -24,4 +24,10 @@ typedef struct {
  * reads flash. */
 void loader_init(shell_loader_t *ld, loader_status_t *st);
 
+/* Reboot, telling stage3 to load the shell from the card (BOOT_SD), as
+ * picocalc_shell_exit() does. The caller checks there is a card and a
+ * loader in flash: without them stage3 would drop to BOOTSEL. Does not
+ * return. */
+void loader_reboot_shell(void);
+
 #endif /* SHELL_LOADER_H */

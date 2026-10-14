@@ -32,6 +32,7 @@ set(SHELL_CORE_SOURCES
     src/core/pipe.c
     src/core/run.c
     src/core/shell.c
+    src/core/system.c
     src/core/term.c
     src/core/text.c
     src/core/uf2.c

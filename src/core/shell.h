@@ -2,10 +2,11 @@
  *
  * The banner, /etc/profile, the prompt and its line editor (line.h), the
  * parser (parse.h), expansion (expand.h), pipes (pipe.h), and the
- * builtins: the file commands (files.h), `more` and `grep` (text.h),
- * `echo`, `font`, `set`, `unset`, `export`, `sh`, `history`, `menu`,
- * `usbdisk`, `vi` and `view` (vi.h), and the development command
- * `displaytest`. Any other command is a program (run.h). */
+ * builtins: the file commands (files.h), `more`, `grep`, `head`, `tail`
+ * and `wc` (text.h), the PicoCalc's own (system.h), `echo`, `font`,
+ * `set`, `unset`, `export`, `sh`, `history`, `menu`, `usbdisk`, `vi`
+ * and `view` (vi.h), and the development command `displaytest`. Any
+ * other command is a program (run.h). */
 #ifndef SHELL_SHELL_H
 #define SHELL_SHELL_H
 
@@ -35,6 +36,29 @@ typedef struct {
     void *ctx;
 } shell_hooks_t;
 
+/* The PicoCalc itself, for M8's commands (system.h): its southbridge,
+ * the terminal's ink, and leaving the shell. Any hook may be NULL, and
+ * the command that needs it says it cannot be done here. */
+typedef enum { SHELL_LIGHT_LCD, SHELL_LIGHT_KBD } shell_light_t;
+typedef enum { SHELL_POWER_OFF, SHELL_POWER_REBOOT, SHELL_POWER_BOOTSEL } shell_power_t;
+
+typedef struct {
+    /* The charge in percent, and whether the charger says it is
+     * charging: NULL, or why it cannot be read. */
+    const char *(*battery)(void *ctx, unsigned *percent, bool *charging);
+    /* A backlight's level, 0-255: set it to `level` unless that is
+     * negative, then read it into *now. NULL, or why not. */
+    const char *(*backlight)(void *ctx, shell_light_t which, int level, unsigned *now);
+    /* The terminal's default ink, RGB565 (term_set_phosphor). */
+    void (*phosphor)(void *ctx, uint16_t rgb565);
+    /* The port's lines for `info`, "name     value\n" each, to `o`. */
+    void (*info)(void *ctx, const out_t *o);
+    /* Switch off, reboot into the shell, or reboot into BOOTSEL. Does
+     * not return if it worked; otherwise why not. */
+    const char *(*power)(void *ctx, shell_power_t what);
+    void *ctx;
+} shell_system_t;
+
 /* The line being edited at the prompt (line.c). */
 typedef struct {
     char   text[SHELL_LINE_MAX + 1];
@@ -58,10 +82,12 @@ typedef struct shell {
     bool          at_bol;           /* the terminal's cursor is at a line's start */
     out_t         term;             /* the port's sink, under con */
     shell_hooks_t hooks;
+    shell_system_t sys;
     const struct shell_loader *loader;   /* run.h; NULL: programs cannot run */
     const char   *version;
     char          cwd[SHELL_PATH_MAX + 1];   /* absolute and normal (path.h) */
     bool          wide;             /* font_5x10, 64 columns */
+    uint8_t       phosphor;         /* system.h: the ink chosen, 0 for the default */
     line_t        line;
 } shell_t;
 
@@ -72,6 +98,9 @@ void shell_init(shell_t *sh, const out_t *out, const shell_hooks_t *hooks, const
 
 /* How programs are run (run.h): the port's link to UF2 Loader. */
 void shell_set_loader(shell_t *sh, const struct shell_loader *loader);
+
+/* The port's link to the PicoCalc's southbridge, ink and power. */
+void shell_set_system(shell_t *sh, const shell_system_t *sys);
 
 /* Mount the card, reset the terminal, print the banner, run
  * /etc/profile, read the history, and show the first prompt. The
@@ -100,9 +129,12 @@ bool shell_interrupted(shell_t *sh);
 unsigned shell_cols(const shell_t *sh);
 
 /* Whether `name` is a builtin; and the i-th builtin's name, NULL past
- * the last, for Tab completion. */
+ * the last, for Tab completion and `help`. */
 bool shell_is_builtin(const char *name);
 const char *shell_builtin_at(unsigned i);
+/* The i-th builtin's usage and what it does, for `help`. */
+const char *shell_builtin_usage(unsigned i);
+const char *shell_builtin_about(unsigned i);
 
 /* Show the prompt: on a line of its own if the cursor is not at the
  * start of one. */

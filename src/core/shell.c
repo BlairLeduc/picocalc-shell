@@ -14,6 +14,7 @@
 #include "parse.h"
 #include "pipe.h"
 #include "run.h"
+#include "system.h"
 #include "text.h"
 #include "vars.h"
 #include "vi.h"
@@ -76,6 +77,10 @@ void shell_init(shell_t *sh, const out_t *out, const shell_hooks_t *hooks, const
 
 void shell_set_loader(shell_t *sh, const struct shell_loader *loader) {
     sh->loader = loader;
+}
+
+void shell_set_system(shell_t *sh, const shell_system_t *sys) {
+    sh->sys = *sys;
 }
 
 /* The current directory followed by '>' (design.md §4.4). */
@@ -289,35 +294,51 @@ static int cmd_usbdisk(shell_t *sh, int argc, char **argv) {
     return 0;
 }
 
+/* Each builtin, with its usage and a line on what it does for `help`;
+ * in order, as `help` and Tab list them. */
 static const struct {
     const char  *name;
     shell_cmd_fn fn;
+    const char  *usage;
+    const char  *about;
 } k_builtins[] = {
-    { "cat",         cmd_cat },
-    { "cd",          cmd_cd },
-    { "cp",          cmd_cp },
-    { "df",          cmd_df },
-    { "displaytest", cmd_displaytest },
-    { "echo",        cmd_echo },
-    { "export",      cmd_export },
-    { "font",        cmd_font },
-    { "grep",        cmd_grep },
-    { "history",     cmd_history },
-    { "ls",          cmd_ls },
-    { "menu",        cmd_menu },
-    { "mkdir",       cmd_mkdir },
-    { "more",        cmd_more },
-    { "mv",          cmd_mv },
-    { "pwd",         cmd_pwd },
-    { "rm",          cmd_rm },
-    { "rmdir",       cmd_rmdir },
-    { "set",         cmd_set },
-    { "sh",          cmd_sh },
-    { "touch",       cmd_touch },
-    { "unset",       cmd_unset },
-    { "usbdisk",     cmd_usbdisk },
-    { "vi",          cmd_vi },
-    { "view",        cmd_view },
+    { "backlight",   cmd_backlight,   "backlight [lcd|kbd] [0-255]", "show or set a backlight" },
+    { "battery",     cmd_battery,     "battery", "the battery's charge" },
+    { "bootsel",     cmd_bootsel,     "bootsel", "reboot into BOOTSEL, as a USB drive" },
+    { "cat",         cmd_cat,         "cat file... (or cat < file)", "show or join files" },
+    { "cd",          cmd_cd,          "cd [dir]", "change directory; $HOME with none" },
+    { "clear",       cmd_clear,       "clear", "clear the screen" },
+    { "cp",          cmd_cp,          "cp [-r] from... to", "copy files, -r directories" },
+    { "df",          cmd_df,          "df", "the card's size and free space" },
+    { "displaytest", cmd_displaytest, "displaytest", "the display's stress test" },
+    { "echo",        cmd_echo,        "echo [-n] [word...]", "print words; -n no line break" },
+    { "export",      cmd_export,      "export [NAME=value...]", "set variables, or list them" },
+    { "font",        cmd_font,        "font [8x10|5x10]", "40 or 64 columns; swap with none" },
+    { "grep",        cmd_grep,        "grep [-v] [-n] [-c] [-i] pattern [file...]", "lines that match a pattern" },
+    { "head",        cmd_head,        "head [-n N] [file...]", "the first lines, 10 by default" },
+    { "help",        cmd_help,        "help [command]", "list the commands, or explain one" },
+    { "history",     cmd_history,     "history", "the lines typed before" },
+    { "info",        cmd_info,        "info", "the shell, board, loader and card" },
+    { "ls",          cmd_ls,          "ls [-l] [-a] [path...]", "list a directory" },
+    { "menu",        cmd_menu,        "menu", "UF2 Loader's own menu" },
+    { "mkdir",       cmd_mkdir,       "mkdir [-p] dir...", "make directories" },
+    { "more",        cmd_more,        "more file... (or < file, or | more)", "show text a screen at a time" },
+    { "mv",          cmd_mv,          "mv from... to", "move or rename" },
+    { "phosphor",    cmd_phosphor,    "phosphor [white|green|amber|default]", "the colour of the text" },
+    { "poweroff",    cmd_poweroff,    "poweroff", "switch the PicoCalc off" },
+    { "pwd",         cmd_pwd,         "pwd", "print the current directory" },
+    { "reboot",      cmd_reboot,      "reboot", "restart the shell" },
+    { "rm",          cmd_rm,          "rm [-r] path...", "remove files, -r directories" },
+    { "rmdir",       cmd_rmdir,       "rmdir dir...", "remove empty directories" },
+    { "set",         cmd_set,         "set", "list the variables" },
+    { "sh",          cmd_sh,          "sh file", "run a script" },
+    { "tail",        cmd_tail,        "tail [-n N] [file...]", "the last lines, 10 by default" },
+    { "touch",       cmd_touch,       "touch file...", "make empty files" },
+    { "unset",       cmd_unset,       "unset NAME...", "remove variables" },
+    { "usbdisk",     cmd_usbdisk,     "usbdisk", "offer the card to a computer" },
+    { "vi",          cmd_vi,          "vi [-R] file", "edit a text file" },
+    { "view",        cmd_view,        "view file", "read a text file in vi" },
+    { "wc",          cmd_wc,          "wc [-l] [-w] [-c] [file...]", "count lines, words and bytes" },
 };
 
 #define NBUILTINS (sizeof k_builtins / sizeof k_builtins[0])
@@ -334,6 +355,14 @@ bool shell_is_builtin(const char *name) {
 
 const char *shell_builtin_at(unsigned i) {
     return i < NBUILTINS ? k_builtins[i].name : NULL;
+}
+
+const char *shell_builtin_usage(unsigned i) {
+    return i < NBUILTINS ? k_builtins[i].usage : NULL;
+}
+
+const char *shell_builtin_about(unsigned i) {
+    return i < NBUILTINS ? k_builtins[i].about : NULL;
 }
 
 /* ---- running a line --------------------------------------------------- */
@@ -394,7 +423,7 @@ static int run_cmd(shell_t *sh, const parse_cmd_t *c, pipe_t *from, pipe_t *to) 
     shell_cmd_fn fn = builtin(e->argv[0]);
     if (!fn) {
         status = run_program(sh, e->argc, e->argv, redirected);
-    } else if ((fn == cmd_menu || fn == cmd_usbdisk) && redirected) {
+    } else if ((fn == cmd_menu || fn == cmd_usbdisk || system_leaves(fn)) && redirected) {
         shell_error(sh, "%s: not with a redirection or a pipe\n", e->argv[0]);
         status = 1;
     } else if (in && !files_input(sh, in)) {

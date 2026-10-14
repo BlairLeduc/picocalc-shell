@@ -16,6 +16,113 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M8 — the rest of v1 (branch `m8-rest`, 2026-10-14)
+
+**Done.** The twelve commands are built, checked on the host, run by
+Claude on the Plus 2 W, and checked by the owner on a Pico 2 W, the
+phosphors with their new values included.
+`docs/user-guide.md` explains every command for users.
+
+**Checked on the host** (macOS, Apple clang 21, `-Wall -Wextra -Werror`,
+C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
+
+- Both firmware builds compile clean, development and release; 21 host
+  test binaries pass (M6: 20).
+- **`test_text`**, `head`: the default 10; `-n 3`, `-n3` and `-3`; `-n 0`;
+  more than there are; no final line break; `==> name <==` headers for
+  two files; `<`, a pipe in and a pipe out; a missing file beside a good
+  one; the usages (`-n` alone, `-n x`, `-x`); `--`. `tail`: the same
+  forms; an empty file; blank lines; a 60 KB file through the 4 KB ring;
+  1,000 lines asked of it, giving the 409 whole lines kept and the note;
+  a 5,000-byte line, giving its last 4,096 bytes and the note; a
+  1,535-byte line whole. `wc`: all three counts; `-l`, `-w`, `-c` and
+  `-lc`; a total for two files, and with one missing; `-l <` printed
+  alone; `| wc`; an empty file; a word across the 512-byte reads.
+- **`test_system`** (new), against a fake of the port: each command that
+  needs the port says `not on this machine` without it, and `info` still
+  shows the shell and the card. `help` in three columns at 40 and four at
+  64, `help name` for every builtin (each line under 40 columns), a name
+  that is not a builtin, `help | grep`. `clear` homes and blanks the
+  grid, and writes its escape to a file with `>`. `phosphor`: each ink,
+  drawn at once, shown with no operand, a bad name leaving it as it was.
+  `battery`: percent, charging, `>`, the southbridge failing. `backlight`:
+  both, one, set and stepped as the MCU does, clamped, 256 and `-1` and
+  `x` refused before any write, the southbridge failing for both. `info`:
+  the port's lines, the card, the battery, and the battery failing.
+  `poweroff`, `reboot` and `bootsel`: the port called once with the right
+  request, the history on the card before it, and each refused with `>`
+  (no `.new` left), in a pipe and with an operand.
+- `test_shell` used `help` as its unknown command; it now uses `halp`.
+- **Planted bugs**, 10, one at a time; every one failed a test: `wc`
+  counting a word again at each read (`test_text`); the history not saved
+  before leaving (`test_system`); `backlight` taking 256 (`test_system`);
+  `head` showing a line too many (`test_text`); leaving allowed in a pipe
+  (`test_system`); `phosphor` not remembered (`test_system`); `tail`
+  starting on a cut line (`test_text`); `wc` with no total for two files
+  (`test_text`); `help` ignoring the screen's width (`test_system`);
+  `phosphor` waiting for the next colour reset (`test_system`).
+
+**Checked on the board:** Claude, on the Plus 2 W (RP2350B rev 2, id
+`7458DC82A89AAC12`), development build from SRAM over SWD
+(`tools/swd-ram.sh`), keys typed over the UART, on its test card,
+2026-10-14 (`out/m8-board-1.log`):
+
+- `help` in three columns, `help tail`. `info`: chip and clock, the id,
+  424 KB of 520 KB SRAM, UF2 Loader 2.5 with 4088 KB for programs,
+  "the shell was not started by UF2 Loader" (true over SWD), keyboard
+  firmware `0x00`, the card as `FAT32, 30G, 30G free`, the battery.
+- `battery`: `100%`, on battery with no USB to the PicoCalc.
+- `backlight`: `lcd 32`, `kbd 0` as found. Set and read back, the screen
+  240, 100, 0 and 32 again, the keyboard 255, 100 and 0; 300 refused.
+  The firmware kept each value as written, with none of the stepping its
+  source does (hardware-notes.md §4.11, updated). Left as found.
+- `phosphor amber` and back to `default`; `clear`, the screen dump
+  blank with the prompt on row 0.
+- `wc /BOOT2350.ORG` (559 lines, 3015 words, 89,088 bytes),
+  `head -3` and `tail -2` of `/atom/pico-atom.cfg`, `ls / | wc -l`, and
+  `cat /BOOT2350.ORG | tail -1 | wc -c` through two pipes.
+- `reboot > /r.txt` and `reboot now` refused, no file left. `reboot`:
+  stage3 loaded the card's `/BOOT2350.UF2`, which is an M2 build
+  (`1e4cfc8`), so the shell came back, though not this one. This build,
+  loaded again over SWD, read the history the reboot had saved: its last
+  lines were the marker typed before it and the `reboot` lines.
+- `bootsel`: its message, then over SWD the core was in the boot ROM
+  (pc `0x5e74`, sp `0x50100fc8` in USB RAM): BOOTSEL. No drive on the
+  Mac, as no cable joined the PicoCalc's USB to it.
+- `poweroff > /p.txt` refused. `poweroff`: its message, then nothing
+  more in 14 s (the 10 s "still on" never came), and SWD could no
+  longer reach the chip: the power was off.
+
+- **The owner, on a Pico 2 W, 2026-10-14:** every command worked as
+  designed (the owner's words; the details of each check were not
+  reported). The phosphors did not look as designed: amber showed as pure
+  yellow, green as pure green, white as pure white. Amber's value,
+  `RGB(255, 255, 51)`, is a yellow: the starter defines the phosphors but
+  never draws with them, so they had not been seen. Sending the starter's
+  panel registers in place of ClockworkPi's gamma and power block was
+  tried, did not change amber, and was put back. The owner chose new
+  values: green `RGB(51, 255, 51)`, amber `RGB(255, 183, 0)`, white as it
+  was, and they look right on the panel ("works very well").
+
+**Measurements:**
+
+| What | Estimate | Measured |
+|---|---|---|
+| RAM, development / release (link map) | — | 436,364 B / 432,628 B (M6: 427,004 B / 423,260 B), 9.4 KB more: code and tables about 6.6 KB, `help`'s text most of the rest; `tail` shares `more`'s buffer |
+
+**Not checked:**
+
+- `bootsel` with a USB cable: the RP2350's drive on a computer.
+- `poweroff` on USB power, where the board may stay up and the shell
+  should say so after 10 s.
+- `reboot` into this build from the card: the card still holds an M2
+  shell. The release build, and a Pico 2 W.
+- `battery` charging; the release build of any of these.
+- Whether the MCU's reply to a backlight write already holds the new
+  level; the port reads it back instead.
+- `tail` and `wc` on a large file, timed.
+- Everything carried forward from M6 and M4.
+
 ## M6 — USB speed (branch `m6-usb-speed`, 2026-10-13)
 
 **Done.** Multi-block reads and writes in `sd.c`, a 16 KB MSC buffer,

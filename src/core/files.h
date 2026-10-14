@@ -88,6 +88,9 @@ FRESULT files_open_read(shell_t *sh, const char *cmd, const char *arg, FIL *f);
 int files_options(shell_t *sh, int argc, char **argv, const char *allowed, unsigned *flags,
                   const char *usage);
 
+/* The card in a few words, for `info`: "FAT32, 30G, 12G free". */
+FRESULT files_card(char *buf, size_t size);
+
 int cmd_cat(shell_t *sh, int argc, char **argv);
 int cmd_cd(shell_t *sh, int argc, char **argv);
 int cmd_cp(shell_t *sh, int argc, char **argv);
