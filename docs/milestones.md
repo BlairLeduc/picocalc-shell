@@ -103,6 +103,8 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
 - **The owner, on a Pico 2 W, 2026-10-14:** every command worked as
   designed. `backlight` changed the backlights on the panel, and
   `battery` showed `charging` while the PicoCalc was charging.
+  `backlight lcd 33` read back as `lcd 33`, not the 32 the MCU's source
+  would make it.
   `poweroff` switched it off, on battery and on USB power. `bootsel` entered BOOTSEL, and the RP2350's
   drive showed on the computer. The other checks were not reported in
   detail. The phosphors did not look as designed: amber showed as pure
@@ -122,9 +124,6 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
 
 **Not checked:**
 
-- Whether the light changes in steps, as the MCU's source would have
-  it, though the register reads back the level as written and the owner
-  saw `backlight` set the light to the level given.
 - Whether the MCU's reply to a backlight write already holds the new
   level; the port reads it back instead.
 - `tail` and `wc` on a large file, timed.

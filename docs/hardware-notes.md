@@ -782,9 +782,10 @@ clamps them to 16–240, so a smooth fade would be 15 steps, not 256. The
 installed firmware does not report that: on a Plus 2 W's PicoCalc with
 keyboard firmware `0x00` (2026-10-14, the shell's `backlight` over SWD),
 register `0x05` read back exactly what was written, 100, 0 and 240, and
-`0x0A` 255, 100 and 0, with no stepping or clamping. Whether the light
-itself changes in steps was not seen; read the register back rather than
-assume either. Dimming on
+`0x0A` 255, 100 and 0, with no stepping or clamping; on a Pico 2 W's
+PicoCalc (the owner, the same day) `0x05` kept 33, which the source would
+make 32, and the light followed the levels set. Read the register back
+rather than assume either behaviour: other firmware may step. Dimming on
 pause is a cheap piece of polish and costs one I²C transaction. Read register
 `0x05` before dimming and write that level back on resume: the level may be
 one the user set with the MCU's own Alt chords (§6.3), not one your software
