@@ -60,6 +60,10 @@ void fake_sd_reset(void) {
     fake_sd_faults = 0;
 }
 
+void fake_sd_busy_for(uint32_t us) {
+    c.busy_until = fake_sd_now + us;
+}
+
 bool fake_sd_idle(void) {
     return c.mode == IDLE && c.cmd_n == 0 && c.qh == c.qt && c.busy_after == 0 &&
            fake_sd_now >= c.busy_until;

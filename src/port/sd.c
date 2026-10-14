@@ -247,18 +247,18 @@ sd_status_t sd_read(uint32_t block, uint8_t *buf) {
     return read_data(buf, SD_BLOCK);
 }
 
-/* CMD18 streams blocks until CMD12 stops it. The whole transfer is
- * bounded by SD_BLOCKS_US, then the stop by SD_READY_US, so a card that
- * slows down mid-transfer still comes back below the southbridge's
- * 2.5 s (design.md §4.2). */
+/* CMD18 streams blocks until CMD12 stops it. The command and the
+ * transfer are bounded by SD_BLOCKS_US from entry, then the stop by
+ * SD_READY_US: 1.5 s at worst, so a card that slows down mid-transfer
+ * still comes back below the southbridge's 2.5 s (design.md §4.2). */
 sd_status_t sd_read_blocks(uint32_t block, uint8_t *buf, uint32_t count) {
     if (count == 1) return sd_read(block, buf);
+    absolute_time_t until = make_timeout_time_ms(SD_BLOCKS_US / 1000u);
     uint8_t r1 = command(18, address(block));
     if (r1 != 0) {
         deselect();
         return r1 == 0xFF ? SD_NO_REPLY : SD_REJECTED;
     }
-    absolute_time_t until = make_timeout_time_ms(SD_BLOCKS_US / 1000u);
     sd_status_t st = SD_OK;
     for (uint32_t i = 0; i < count && st == SD_OK; i++)
         st = read_block(buf + i * SD_BLOCK, SD_BLOCK, bound(SD_TOKEN_US, until));
@@ -326,12 +326,12 @@ sd_status_t sd_write(uint32_t block, const uint8_t *buf) {
  * answers is never left mid-transfer. */
 sd_status_t sd_write_blocks(uint32_t block, const uint8_t *buf, uint32_t count) {
     if (count == 1) return sd_write(block, buf);
+    absolute_time_t until = make_timeout_time_ms(SD_BLOCKS_US / 1000u);
     uint8_t r1 = command(25, address(block));
     if (r1 != 0) {
         deselect();
         return r1 == 0xFF ? SD_NO_REPLY : SD_REJECTED;
     }
-    absolute_time_t until = make_timeout_time_ms(SD_BLOCKS_US / 1000u);
     sd_status_t st = SD_OK;
     for (uint32_t i = 0; i < count; i++) {
         xfer(0xFF);
@@ -348,9 +348,9 @@ sd_status_t sd_write_blocks(uint32_t block, const uint8_t *buf, uint32_t count) 
             break;
         }
     }
-    /* A busy card ignores the stop token. With the transfer's time gone,
-     * the card gets SD_READY_US more, and the stop as much again: 2 s in
-     * all at worst. */
+    /* A busy card ignores the stop token. With the transfer's time gone
+     * (its command's ready wait included), the card gets SD_READY_US
+     * more, and the stop as much again: 2 s from entry at worst. */
     if (st != SD_OK) wait_ready(SD_READY_US);
     xfer(TOKEN_STOP);
     xfer(0xFF);    /* busy starts a byte after the stop token */

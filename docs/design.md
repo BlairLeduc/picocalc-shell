@@ -437,9 +437,10 @@ runs at 115,200 baud; measure display speed in the release build.
   multi-block transfer on the card: CMD18, stopped by CMD12, and CMD25,
   stopped by its stop token (`sd_read_blocks`, `sd_write_blocks`).
   FatFs's runs of sectors use the same calls (`diskio.c`). Each wait
-  inside a transfer keeps its own bound, and the transfer as a whole is
-  given 1 s; past that it is stopped, and with the card's last busy and
-  the stop the call returns within 2 s, below the southbridge's 2.5 s.
+  inside a transfer keeps its own bound, and the transfer as a whole,
+  its command's ready wait included, is given 1 s from the call; past
+  that it is stopped, and with the card's last busy and the stop the
+  call returns within 2 s, below the southbridge's 2.5 s.
   The stop is sent after an error too, so a card that answers is never
   left mid-transfer. `test_sd` checks all of this against a model of a
   card in SPI mode. The USB pieces and the card's transfers still take

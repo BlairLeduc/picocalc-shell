@@ -184,6 +184,27 @@ static int test_stuck(void) {
     CHECK(sd_read_blocks(0, buf, 8) == SD_NO_REPLY, "stuck read");
     took = fake_sd_now - t;
     CHECK(took < LIMIT_US, "stuck read took %llu us", (unsigned long long)took);
+
+    /* Every wait used up in turn: busy when called, slow blocks to the
+     * transfer's bound, then busy past the stop. The command's wait is
+     * inside the transfer's bound, or the four would stack to 2.5 s. */
+    if (start(false)) return 1;
+    fake_sd.busy_us = 400000;
+    fake_sd.stop_busy_us = 10000000;
+    fake_sd_busy_for(490000);
+    t = fake_sd_now;
+    CHECK(sd_write_blocks(0, buf, 8) == SD_NO_REPLY, "write, every wait used");
+    took = fake_sd_now - t;
+    CHECK(took < LIMIT_US, "write, every wait used, took %llu us", (unsigned long long)took);
+
+    if (start(false)) return 1;
+    fake_sd.read_us = 10000000;
+    fake_sd.stop_busy_us = 10000000;
+    fake_sd_busy_for(490000);
+    t = fake_sd_now;
+    CHECK(sd_read_blocks(0, buf, 8) == SD_NO_REPLY, "read, every wait used");
+    took = fake_sd_now - t;
+    CHECK(took < LIMIT_US, "read, every wait used, took %llu us", (unsigned long long)took);
     return 0;
 }
 

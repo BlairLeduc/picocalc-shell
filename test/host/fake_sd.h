@@ -25,6 +25,9 @@ extern fake_sd_card_t fake_sd;
 
 void fake_sd_reset(void);
 
+/* Holds MISO low for us from now, as if the card were still writing. */
+void fake_sd_busy_for(uint32_t us);
+
 /* The card's blocks. */
 extern uint8_t fake_sd_data[FAKE_SD_BLOCKS][512];
 
