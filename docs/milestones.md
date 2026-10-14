@@ -89,6 +89,13 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
 - `bootsel`: its message, then over SWD the core was in the boot ROM
   (pc `0x5e74`, sp `0x50100fc8` in USB RAM): BOOTSEL. No drive on the
   Mac, as no cable joined the PicoCalc's USB to it.
+- Later the same day, with the owner's M8 release build on the card
+  (`e130b13-dirty`, built from what was committed as `1d18bd2`): started
+  with `tools/swd-shell.sh` and driven by `tools/swd-drive.py` with an
+  ELF rebuilt from `1d18bd2` to the same layout, checked by its screen
+  and counters reading cleanly. A marker line, then `reboot`: stage3
+  loaded the card's shell afresh (prompt 484 ms after the reset), and
+  `history | tail -3` showed the marker and the `reboot`.
 - `poweroff > /p.txt` refused. `poweroff`: its message, then nothing
   more in 14 s (the 10 s "still on" never came), and SWD could no
   longer reach the chip: the power was off.
@@ -115,10 +122,9 @@ C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
 
 **Not checked:**
 
-- `reboot` into this build from the card: the card still holds an M2
-  shell. The release build, and a Pico 2 W.
 - Whether the light changes in steps, as the MCU's source would have
-  it, though the register reads back the level as written.
+  it, though the register reads back the level as written and the owner
+  saw `backlight` set the light to the level given.
 - Whether the MCU's reply to a backlight write already holds the new
   level; the port reads it back instead.
 - `tail` and `wc` on a large file, timed.
