@@ -1,6 +1,6 @@
 # PicoCalc Shell — design
 
-Status: **Draft 7, 2026-10-14.** Feasibility study and first design. M0
+Status: **Draft 8, 2026-10-14.** Feasibility study and first design. M0
 (the skeleton), M1 (files), M2 (run), M3 (vi), M4 (comfort), M6 (USB
 speed) and M8 (the rest of v1) are done ([milestones.md](milestones.md)). The commands are explained for users
 in [user-guide.md](user-guide.md).
@@ -28,6 +28,7 @@ questions are open; the design is ready for M0.
 | 2026-10-12 | Variables come with M4. | 4.4, 10 |
 | 2026-10-12 | `include/picocalc_shell.h` is offered under the MIT licence as well as the GPL-3.0. | 9 |
 | 2026-10-13 | A patched stage3 that starts the shell at power-on, and the last program with Up/F1/F5 held, is an optional milestone (M7). Until it is installed, the stock loader's behaviour above stands. | 3.4, 10 |
+| 2026-10-14 | A second flavour, built from the same tree, feels like DOS and has an EDIT modelled on MS-DOS 5's, in place of vi. It is a separate `BOOT2350.UF2`; the user copies the one they want to the card, and neither flavour installs the other. The card is `C:`. EDIT covers the core look and keys, not all of MS-DOS 5's. It is never called MS-DOS. | 4.7, 10 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -729,6 +730,74 @@ Its scope is set by the files it is for, which are small text files:
   The cursor is the terminal's underline in every mode; Pico Logo's block
   cursor for normal mode is not there.
 
+### 4.7 The DOS flavour
+
+*Settled 2026-10-14:* many PicoCalc users know DOS, not UNIX. A second
+flavour, chosen at build time with `-DPICO_SHELL_FLAVOUR=dos` (`unix` is
+the default), gives them a command line that feels like DOS and an EDIT
+modelled on MS-DOS 5's. It is never called MS-DOS, which is Microsoft's
+mark; it is "the DOS flavour" of shell. Each flavour is its own
+`BOOT2350.UF2`, and the release ships both. The user copies the one they
+want to the card's root; neither flavour installs the other.
+
+**What is shared.** Everything below the command language: FatFs and the
+card, `files.c` (with safe saves, EL §8.6), running programs (`run.c`,
+`uf2.c`, `loader.c`), the terminal, the line editor and history, pipes,
+`text.c`, `system.c` and `usbdisk`. Programs run by name from
+`/pico2-apps/`, as in §4.3.
+
+**What differs** (the flavour's own files in `src/core/`):
+
+- **The card is `C:`.** The prompt is `PROMPT`'s, `$P$G` by default, so
+  `C:\HOME>`. Paths use `\`, and `/` is read as `\` too; a leading
+  `C:` is accepted and dropped. `$P` writes names as FAT stores them.
+- **The parser.** Command names and switches are not case-sensitive.
+  Switches are `/X`, and may follow a name with no space (`DIR/W`).
+  Variables are `%NAME%`. `\` is a path separator, not an escape. `|`,
+  `>`, `>>` and `<` work as in the UNIX flavour. Wildcards are expanded
+  by each command, with DOS's rules (`*.*` matches every name, `*.` names
+  with no extension), as DOS did, not by the parser.
+- **The commands.** `DIR [/W /P /S /A /B]`, `CD`/`CHDIR`, `MD`/`MKDIR`,
+  `RD`/`RMDIR`, `COPY`, `XCOPY [/S]`, `DEL`/`ERASE`, `DELTREE`,
+  `REN`/`RENAME`, `MOVE`, `TYPE`, `MORE`, `FIND [/V /N /C /I]`, `ATTRIB`,
+  `CLS`, `VER`, `VOL`, `MEM`, `SET`, `PATH`, `PROMPT`, `ECHO`, `PAUSE`,
+  `HELP`, `EDIT`, `EXIT` (back to the loader's menu, as `menu`). The
+  PicoCalc's own commands keep their names: `battery`, `backlight`,
+  `phosphor`, `font`, `info`, `usbdisk`, `poweroff`, `reboot`,
+  `bootsel`. There is no `DATE` or `TIME`: the PicoCalc has no clock.
+- **History.** Up and Down as now; F3 repeats the last line, as DOSKEY
+  and DOS's own F3 did.
+- **Batch files.** `NAME.BAT` runs by name, ahead of a program of the
+  same name. `%0`–`%9`, `SHIFT`, `GOTO :label`, `IF [NOT] EXIST`,
+  `IF [NOT] ERRORLEVEL n`, `IF [NOT] a==b`, `CALL`, `REM`, `ECHO OFF` and
+  `@`, `PAUSE`, and `FOR %%x IN (set) DO command`. `C:\AUTOEXEC.BAT` runs
+  at start, in place of `/etc/profile`.
+- **No vi.** EDIT takes its place.
+
+**EDIT.** The core of MS-DOS 5's EDIT, not all of it. It uses the buffer,
+undo and pattern code under vi (`editor_lines.c`, `editor_undo.c`,
+`editor_pattern.c`), with its own key layer and screen, and keeps vi's
+rules for size, CR LF and safe save (§4.6).
+
+- **The screen.** White on blue; a menu bar on the top row, the file's
+  name in the title row, the status row at the foot (`F1=Help`, line and
+  column). Dialogs are boxes drawn with the font's line-drawing glyphs
+  (§4.1). EDIT switches to the 64-column font while it runs, and back on
+  leaving.
+- **Menus.** Tap Alt for the menu bar, or Alt and the letter: File (New,
+  Open, Save, Save As, Exit), Edit (Cut, Copy, Paste, Clear), Search
+  (Find, Repeat Last Find, Change), Options (Display, the phosphor), Help
+  (the keys, one screen). No Print and no mouse.
+- **Keys.** The arrows, Home, End and the page keys; Ctrl with the arrows
+  for words; Insert toggles overtype; Shift with the movement keys
+  selects; Shift+Del cuts, Ctrl+Ins copies, Shift+Ins pastes, Del clears;
+  Ctrl+Y deletes the line; F3 finds again; Esc closes a menu or a dialog.
+  The clipboard is vi's 8 KB register.
+- **Before the key layer is fixed**, check on the board which Alt chords
+  reach the shell as Alt and a letter: the keyboard's MCU turns some into
+  other keys (Alt+I is Insert, HW §6.3), and tapping Alt alone must be
+  seen as a press and a release.
+
 ## 5. Architecture
 
 The emulators' split applies (EL §2.1):
@@ -977,3 +1046,18 @@ in [milestones.md](milestones.md).
   `poweroff` switches the PicoCalc off, `reboot` comes back to the
   shell with the history kept, and `bootsel` shows the RP2350's drive on
   a computer. Measure the RAM `help`'s text costs.
+- **M9 — The DOS flavour** (§4.7), in steps, each with host tests over
+  FAT16 and FAT32 images:
+  1. The build option, the parser, `C:` paths and the prompt, and the
+     commands, sharing `files.c` and `text.c` with the UNIX flavour.
+  2. Batch files and `AUTOEXEC.BAT`.
+  3. The Alt chords measured on a Plus 2 W and written in HW §6.3, then
+     EDIT.
+
+  Both flavours build with `tools/build.sh` and on the host, and the
+  UNIX flavour's tests still pass unchanged. Done when, on the board, the DOS
+  flavour copies, renames and deletes files, runs a program by name and
+  comes back, runs `AUTOEXEC.BAT`, and EDIT has changed
+  `/atom/pico-atom.cfg` and pico-atom has read it, as M3 did for vi.
+  Measure both flavours' RAM from the link map, and EDIT's opening time
+  for a 41 KB file.
