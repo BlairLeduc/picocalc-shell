@@ -235,14 +235,15 @@ static bool count(const char *s, unsigned long *n) {
     return true;
 }
 
-/* -n N, -nN or -N before the operands, and "--" to end them: the index
- * of the first operand, or -1 after the usage. */
+/* -n N, -nN or -N before the operands, as many as given, the last
+ * winning, and "--" to end them: the index of the first operand, or -1
+ * after the usage. */
 static int lines_option(shell_t *sh, int argc, char **argv, const char *use, unsigned long *n) {
     *n = 10;
     int i = 1;
-    if (i < argc && strcmp(argv[i], "--") == 0) return i + 1;
-    if (i < argc && argv[i][0] == '-' && argv[i][1]) {
+    for (; i < argc && argv[i][0] == '-' && argv[i][1]; i++) {
         const char *a = argv[i];
+        if (strcmp(a, "--") == 0) return i + 1;
         bool ok;
         if (strcmp(a, "-n") == 0) {
             ok = i + 1 < argc && count(argv[i + 1], n);
@@ -256,8 +257,6 @@ static int lines_option(shell_t *sh, int argc, char **argv, const char *use, uns
             shell_error(sh, "usage: %s\n", use);
             return -1;
         }
-        i++;
-        if (i < argc && strcmp(argv[i], "--") == 0) i++;
     }
     return i;
 }

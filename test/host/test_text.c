@@ -216,6 +216,11 @@ int main(void) {
     CHECK(run("head nope n10") == 1 && strstr(con, "head: nope: no such file") && strstr(con, "line 10"),
           "nope, and a file: '%s'", con);
     CHECK(run("head -- n10") == 0 && strcmp(con, span(1, 10)) == 0, "--");
+    /* Several options: the last count wins, as in other heads. */
+    CHECK(run("head -n 5 -n 3 n100") == 0 && strcmp(con, span(1, 3)) == 0, "-n -n: '%s'", con);
+    CHECK(run("head -5 -2 -- n100") == 0 && strcmp(con, span(1, 2)) == 0, "-5 -2 --: '%s'", con);
+    CHECK(run("tail -n 5 -1 n100") == 0 && strcmp(con, "line 100\n") == 0, "tail -n -1: '%s'", con);
+    CHECK(run("head -3 -x n100") == 1 && strstr(con, "usage: head"), "-3 -x");
 
     /* ---- tail ---- */
     CHECK(run("tail n100") == 0 && strcmp(con, span(91, 100)) == 0, "tail: '%s'", con);
