@@ -37,8 +37,11 @@ development build from SRAM, driven by Claude over UART1
 grid stayed 40 x 32, and EDIT's Help menu fitted at the right edge and
 left back to `C:\>`. The `DIR` listing was lost to noise in the capture.
 
-**Not checked:** the panel by eye; the release build on a card; the
-owner's Pico 2 W.
+**Checked by the owner** (2026-10-15, on their Pico 2 W, on the panel):
+the `DIR` listing is right in 40 columns, and `FONT` is not a command.
+
+**Not checked:** which build the owner ran was not recorded; EDIT on
+the owner's panel.
 
 ## After M9 — EDIT in 40 columns (2026-10-15)
 
