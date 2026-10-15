@@ -1,10 +1,11 @@
 # PicoCalc Shell — design
 
-Status: **Draft 9, 2026-10-14.** Feasibility study and first design. M0
+Status: **Draft 10, 2026-10-15.** Feasibility study and first design. M0
 (the skeleton), M1 (files), M2 (run), M3 (vi), M4 (comfort), M6 (USB
 speed), M8 (the rest of v1) and M9 (the DOS flavour) are done
-([milestones.md](milestones.md)); M5 is still to do. The commands are explained for users
-in [user-guide.md](user-guide.md).
+([milestones.md](milestones.md)). There is no M5: *Exit to shell* in the
+emulators is done in their own projects (§3.4). The commands are explained
+for users in [user-guide.md](user-guide.md).
 
 The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
 and pico-oric). Pico Logo is a special case, because it keeps a filesystem
@@ -261,7 +262,8 @@ back:
   is the point where the guest is parked (EL §2.5).
 
 For the emulators, *Exit to shell* belongs in the shared menu (EL §10), as
-one item placed the same way in all three.
+one item placed the same way in all three. That work is done in the
+emulators' own projects, not here (it was M5, removed from this plan).
 
 *As built at M2:* the header is header-only, static inline functions over
 the SDK, so a program needs nothing but the file; `src/port/loader.c`
@@ -1284,7 +1286,6 @@ in [milestones.md](milestones.md).
   pico-atom has read the result.
 - **M4 — Comfort.** History, Tab completion, globs, pipes, variables
   (§4.4), `more`, `grep`, `/etc/profile` and `usbdisk`.
-- **M5 — Exit everywhere.** *Exit to shell* in the emulators' shared menu.
 - **M6 — USB speed.** Make `usbdisk` faster than M4's 512 bytes per
   transfer (about 170 KB/s writing, by eye): a larger MSC buffer, and
   multi-block reads and writes in `sd.c` (CMD18, CMD25), each wait still
