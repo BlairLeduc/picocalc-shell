@@ -183,6 +183,19 @@ static int edit_tests(bool fat32) {
 
     /* Exit with a change: No keeps the file, Esc stays, Yes saves. */
     CHECK(edit("EDIT A.TXT", "Q" ALT "f" "x") == 0 && on_screen("Save it now?"), "asked");
+    {
+        /* Each button's letter in red, the rest of it black on grey. */
+        unsigned r = 0;
+        while (r < TERM_ROWS && !strstr(row(r), "< Yes >")) r++;
+        const char *line = row(r);
+        unsigned y = (unsigned)(strstr(line, "Yes") - line), c = (unsigned)(strstr(line, "Cancel") - line);
+        CHECK(r < TERM_ROWS && shot.cells[r][y].fg == TERM_RGB(205, 0, 0) &&
+                  shot.cells[r][y + 1].fg == 0 && shot.cells[r][c].fg == TERM_RGB(205, 0, 0) &&
+                  shot.cells[r][y].bg == TERM_RGB(168, 168, 168),
+              "the buttons' letters in red: row %u", r);
+    }
+    CHECK(edit("EDIT A.TXT", "Q" ALT "f" "x" "c" "Z") == 0 && strcmp(row(2), "QZXhello") == 0,
+          "C is Cancel: '%s'", row(2));
     CHECK(edit("EDIT A.TXT", "Q" ALT "f" "x" "n") == 0 && is("/HOME/A.TXT", "Xhello\nworld\n"),
           "No");
     CHECK(edit("EDIT A.TXT", "Q" BRK ESC) == 0 && strcmp(row(2), "QXhello") == 0, "Cancel stays");

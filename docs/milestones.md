@@ -137,7 +137,11 @@ that did not run at start was in `C:\HOME`, not the root, so the shell
 was right not to run it: design.md §4.7 names only `C:\AUTOEXEC.BAT`.)
 Later the same day, also on the Pico 2 W: Alt+`,` and Alt+`.` (the
 backlights) did not open EDIT's menu; EDIT opened a 40 KB file at once,
-by eye; and Options, Display's phosphor colours worked. A lowercase
+by eye; and Options, Display's phosphor colours worked. At the owner's
+asking, a question's buttons now show each one's letter in red, as
+MS-DOS's EDIT did, and the keys are taken from those letters, so C is
+Cancel too; `test_edit` checks the colours and C, and the owner saw the
+red letters on the Plus 2 W's panel. A lowercase
 `autoexec.bat` at the root of the Plus 2 W's test card does run when
 the shell is started from SRAM over SWD (`out/m9-autoexec-1.log`).
 

@@ -1052,7 +1052,8 @@ rules for size, CR LF and safe save (§4.6).
   keys until it closes: menus with Left, Right, Up, Down, Enter, the
   item's letter, Alt and a menu's letter, or Esc; a box asking for a
   name or text offers the last one, replaced by the first letter typed;
-  a question takes its buttons' letters, Enter for the first, Esc to
+  a question takes its buttons' letters, drawn in red as in MS-DOS's
+  EDIT (underlined in the phosphor colours), Enter for the first, Esc to
   cancel. Exit, New and Open ask to save a change first; Save As asks
   before writing over another file. Brk is Exit; the end of input
   leaves without saving, as vi does.

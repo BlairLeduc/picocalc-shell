@@ -34,7 +34,7 @@ _Static_assert(STATUS_ROW + 1 == TERM_ROWS, "the bars and the text fill the scre
 #define CTRL(c) ((c) - '@')
 
 /* A cell's style, and a flag for a line-drawing glyph (DEC 0x5F-0x7E). */
-enum { ST_TEXT, ST_SEL, ST_BAR, ST_HOT, ST_PICK, ST_STATUS, ST_N };
+enum { ST_TEXT, ST_SEL, ST_BAR, ST_HOT, ST_PICK, ST_STATUS, ST_KEY, ST_N };
 #define ST_LINE  0x80u
 #define NO_GLYPH 0x7Fu   /* sent as 0x80: the terminal's checkerboard */
 
@@ -42,8 +42,8 @@ enum { ST_TEXT, ST_SEL, ST_BAR, ST_HOT, ST_PICK, ST_STATUS, ST_N };
  * Display). */
 static const char *const s_sgr[2][ST_N] = {
     { "\033[0;37;44m", "\033[0;34;47m", "\033[0;30;48;5;248m", "\033[0;97;48;5;248m",
-      "\033[0;97;40m", "\033[0;30;46m" },
-    { "\033[0m", "\033[0;7m", "\033[0;7m", "\033[0;4;7m", "\033[0m", "\033[0;7m" },
+      "\033[0;97;40m", "\033[0;30;46m", "\033[0;31;48;5;248m" },
+    { "\033[0m", "\033[0;7m", "\033[0;7m", "\033[0;4;7m", "\033[0m", "\033[0;7m", "\033[0;4;7m" },
 };
 
 typedef struct {
@@ -614,11 +614,11 @@ static int menu(int m) {
     }
 }
 
-/* A box of text lines with `buttons` under them; the box's row and
- * column. */
+/* A box of text lines with `buttons` under them, each button's letter
+ * marked with '&' and drawn in red; the box's row and column. */
 static void message_box(const char *title, const char *const *lines, unsigned n,
                         const char *buttons, unsigned *row, unsigned *col) {
-    unsigned crow, ccol, w = (unsigned)strlen(buttons);
+    unsigned crow, ccol, w = label_len(buttons);
     compose(&crow, &ccol);
     for (unsigned i = 0; i < n; i++)
         if (strlen(lines[i]) > w) w = (unsigned)strlen(lines[i]);
@@ -629,14 +629,19 @@ static void message_box(const char *title, const char *const *lines, unsigned n,
     fill(r + n + 1, c + 1, w - 2, 'q', ST_BAR | ST_LINE);
     put(r + n + 1, c, 't', ST_BAR | ST_LINE);
     put(r + n + 1, c + w - 1, 'u', ST_BAR | ST_LINE);
-    text(r + n + 2, c + (w - (unsigned)strlen(buttons)) / 2, buttons, ST_BAR);
+    label(r + n + 2, c + (w - label_len(buttons)) / 2, buttons, ST_BAR, ST_KEY);
     *row = r;
     *col = c;
 }
 
-/* A question; the answer's key from `keys` (Enter is the first), ESC, or
- * -1 at the end of input. */
-static int choose(const char *question, const char *buttons, const char *keys) {
+/* A question; the letter of the button chosen, in lower case (Enter is
+ * the first button), ESC, or -1 at the end of input. */
+static int choose(const char *question, const char *buttons) {
+    char keys[8];
+    unsigned nk = 0;
+    for (const char *a = buttons; (a = strchr(a, '&')) && nk + 1 < sizeof keys; a++)
+        keys[nk++] = lower(a[1]);
+    keys[nk] = '\0';
     for (;;) {
         unsigned r, c;
         message_box(NULL, &question, 1, buttons, &r, &c);
@@ -743,7 +748,7 @@ static bool save_file(bool as) {
         }
         static FILINFO fno;
         if (strcmp(path, ed.path) != 0 && files_stat(path, &fno) == FR_OK &&
-            choose("The file exists. Overwrite it?", "< Yes >  < No >", "yn") != 'y')
+            choose("The file exists. Overwrite it?", "< &Yes >  < &No >") != 'y')
             return false;
         strcpy(ed.path, path);
         ed.named = true;
@@ -769,7 +774,7 @@ static bool save_file(bool as) {
 /* Before the text goes: true to go on, having saved if asked. */
 static bool may_discard(void) {
     if (!ed.modified) return true;
-    int k = choose("The file is not saved. Save it now?", "< Yes >  < No >  < Cancel >", "yn");
+    int k = choose("The file is not saved. Save it now?", "< &Yes >  < &No >  < &Cancel >");
     if (k == 'y') return save_file(false);
     return k == 'n';
 }
@@ -863,7 +868,7 @@ static void run(int cmd) {
         change();
         break;
     case C_DISPLAY: {
-        int k = choose("Colours: Blue, or the Phosphor on black?", "< Blue >  < Phosphor >", "bp");
+        int k = choose("Colours: Blue, or the Phosphor on black?", "< &Blue >  < &Phosphor >");
         if (k == 'b' || k == 'p') {
             ed.phosphor = k == 'p';
             redraw_all();

@@ -755,7 +755,9 @@ Alt does what Shift did in DOS's EDIT:
 | Esc | closes a menu or a box |
 | Brk (Shift+Esc) | File, Exit |
 
-Typing over a selection replaces it. The clipboard holds 8 KB. Find
+Answer a question by pressing a button's red letter (`Y`, `N`, `C`), or
+Enter for the first button; Esc cancels. Typing over a selection
+replaces it. The clipboard holds 8 KB. Find
 and Change match the text as typed, in either case. A box that asks for
 text offers what was typed last: type to replace it, or Backspace to
 change it.
