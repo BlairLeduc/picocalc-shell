@@ -16,6 +16,30 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## After M9 — the DOS flavour in 40 columns only (2026-10-15)
+
+**The owner chose** (2026-10-15) to drop 64 columns from the DOS
+flavour, so it always shows IBM's font (design.md, the decision table;
+§4.7). `FONT` is gone, the terminal ignores mode 4264 in this flavour,
+and everything sized for 64 columns is sized for 40.
+
+**Checked on the host:** `test_edit` checks that `FONT 5x10` is not a
+command and that `ECHO`ing the 64-column escape leaves 40 columns;
+`test_dos` lost its case for `DIR` in 64 columns. All 23 host tests
+pass. The UNIX flavour's tests are unchanged.
+
+**Measured** (release builds, `__end__`): the DOS flavour 407,416 B,
+15,712 B less than before; the UNIX flavour unchanged (design.md §7).
+
+**Checked on the board:** the Plus 2 W on the probe, the DOS flavour's
+development build from SRAM, driven by Claude over UART1
+(`out/dos40.log`): `FONT 5x10` gave `Bad command or file name`, the
+grid stayed 40 x 32, and EDIT's Help menu fitted at the right edge and
+left back to `C:\>`. The `DIR` listing was lost to noise in the capture.
+
+**Not checked:** the panel by eye; the release build on a card; the
+owner's Pico 2 W.
+
 ## After M9 — EDIT in 40 columns (2026-10-15)
 
 EDIT runs in the shell's font instead of switching to 64 columns

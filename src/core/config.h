@@ -12,11 +12,17 @@
 #define SHELL_GLYPH_H      10u
 
 /* The terminal's grid: 32 rows, 40 columns in font_8x10, 64 in font_5x10.
- * The grid is always 64 wide; 40-column mode uses its left part. */
+ * In the UNIX flavour the grid is always 64 wide and 40-column mode uses
+ * its left part. The DOS flavour has only 40 columns, in IBM's font
+ * (design.md §4.7), so its grid is 40 wide. */
 #define TERM_ROWS          32u
 #define TERM_COLS_8X10     40u
+#if SHELL_DOS
+#define TERM_COLS_MAX      TERM_COLS_8X10
+#else
 #define TERM_COLS_5X10     64u
 #define TERM_COLS_MAX      TERM_COLS_5X10
+#endif
 #define TERM_PARAMS        16u    /* CSI parameters kept; more are dropped */
 
 /* One line typed at the prompt, without its terminator, and what the
@@ -99,8 +105,8 @@
 #define VI_TAB_STOP        8u     /* a tab's width on screen */
 #define VI_SHIFT_WIDTH     4u     /* the spaces > and < add and take */
 
-/* EDIT (design.md §4.7, edit.c): the DOS flavour's editor, in the
- * 64-column font. The buffer and the clipboard are vi's sizes; the
+/* EDIT (design.md §4.7, edit.c): the DOS flavour's editor, in its
+ * 40 columns. The buffer and the clipboard are vi's sizes; the
  * screen is a menu bar, a title row, EDIT_TEXT_ROWS of text and a status
  * row. A Find or Change string holds up to EDIT_FIND_MAX bytes. */
 #define EDIT_TEXT_ROWS     29

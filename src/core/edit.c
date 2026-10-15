@@ -23,6 +23,7 @@
 #include "keycodes.h"
 #include "keys.h"
 
+#define COLS       TERM_COLS_8X10   /* the DOS flavour's only width */
 #define MENU_ROW   0
 #define TITLE_ROW  1
 #define TEXT_ROW   2
@@ -89,7 +90,7 @@ static const menu_t s_menus[MENUS] = {
     { "Options", s_options, 1 }, { "Help", s_help, 1 },
 };
 
-/* At most 36 columns, to fit a box in 40. */
+/* At most 36 columns, to fit a box. */
 static const char *const s_keys_help[] = {
     "Tap Alt          the menu bar",
     "Alt+F,E,S,O,H    a menu",
@@ -132,10 +133,9 @@ static char   s_buf[VI_BUF_SIZE];
 static char   s_copy[VI_COPY_SIZE];
 static char   s_find[EDIT_FIND_MAX + 1], s_change[EDIT_FIND_MAX + 1];
 static char   s_name[SHELL_PATH_MAX + 1];   /* what is typed in a box */
-static char   s_indent[TERM_COLS_MAX + 1];   /* a line break and its indentation */
-static char   s_msg[TERM_COLS_MAX + 1];
-static cell_t s_scr[TERM_ROWS][TERM_COLS_MAX], s_shown[TERM_ROWS][TERM_COLS_MAX];
-static unsigned s_cols;                     /* the shell's font's: 40 or 64 */
+static char   s_indent[COLS + 1];           /* a line break and its indentation */
+static char   s_msg[80];                     /* a message; a box wraps it */
+static cell_t s_scr[TERM_ROWS][COLS], s_shown[TERM_ROWS][COLS];
 static char   s_out[1024];
 static size_t s_out_len;
 static bool   s_cursor_on;
@@ -334,7 +334,7 @@ static bool find_from(size_t from, bool wrap, size_t *at) {
 /* ---- the screen --------------------------------------------------------- */
 
 static void put(unsigned r, unsigned c, uint8_t ch, uint8_t st) {
-    if (r < TERM_ROWS && c < s_cols) s_scr[r][c] = (cell_t){ ch, st };
+    if (r < TERM_ROWS && c < COLS) s_scr[r][c] = (cell_t){ ch, st };
 }
 
 static void fill(unsigned r, unsigned c, unsigned n, uint8_t ch, uint8_t st) {
@@ -401,7 +401,7 @@ static unsigned menu_col(int m) {
 
 /* The menu bar, with menu `open` shown chosen (-1 for none). */
 static void compose_bar(int open) {
-    fill(MENU_ROW, 0, s_cols, ' ', ST_BAR);
+    fill(MENU_ROW, 0, COLS, ' ', ST_BAR);
     for (int m = 0; m < MENUS; m++) {
         unsigned c = menu_col(m);
         const char *name = s_menus[m].name;
@@ -414,7 +414,7 @@ static void compose_bar(int open) {
 }
 
 static void compose_title(void) {
-    fill(TITLE_ROW, 0, s_cols, 'q', ST_TEXT | ST_LINE);
+    fill(TITLE_ROW, 0, COLS, 'q', ST_TEXT | ST_LINE);
     char name[24];
     if (!ed.named) {
         strcpy(name, "UNTITLED");
@@ -427,7 +427,7 @@ static void compose_title(void) {
         name[i] = '\0';
     }
     unsigned n = (unsigned)strlen(name) + 2;
-    unsigned at = (s_cols - n) / 2;
+    unsigned at = (COLS - n) / 2;
     put(TITLE_ROW, at, ' ', ST_SEL);
     text(TITLE_ROW, at + 1, name, ST_SEL);
     put(TITLE_ROW, at + n - 1, ' ', ST_SEL);
@@ -442,7 +442,7 @@ static void compose_text(unsigned *crow, unsigned *ccol) {
     if (line >= ed.top + EDIT_TEXT_ROWS) ed.top = line - EDIT_TEXT_ROWS + 1;
     unsigned col = col_of(ed.cursor);
     if (col < ed.left) ed.left = col;
-    if (col >= ed.left + s_cols) ed.left = col - s_cols + 1;
+    if (col >= ed.left + COLS) ed.left = col - COLS + 1;
     *crow = TEXT_ROW + (unsigned)(line - ed.top);
     *ccol = col - ed.left;
 
@@ -450,12 +450,12 @@ static void compose_text(unsigned *crow, unsigned *ccol) {
     selection(&lo, &hi);
     for (int r = 0; r < EDIT_TEXT_ROWS; r++) {
         unsigned row = TEXT_ROW + (unsigned)r;
-        fill(row, 0, s_cols, ' ', ST_TEXT);
+        fill(row, 0, COLS, ' ', ST_TEXT);
         if (ed.top + r > last) continue;
         size_t p = editor_lines_start(&ed.lines, s_buf, ed.len, ed.top + r);
         size_t end = line_end_at(p);
         unsigned c = 0;
-        for (; p < end && c < ed.left + s_cols; p++) {
+        for (; p < end && c < ed.left + COLS; p++) {
             unsigned char u = (unsigned char)s_buf[p];
             uint8_t st = lo <= p && p < hi ? ST_SEL : ST_TEXT;
             unsigned w = width_at((char)u, c);
@@ -479,14 +479,14 @@ static void compose_text(unsigned *crow, unsigned *ccol) {
  * if it must, but a message too long for both hides it until the next
  * key. */
 static void compose_status(void) {
-    fill(STATUS_ROW, 0, s_cols, ' ', ST_STATUS);
+    fill(STATUS_ROW, 0, COLS, ' ', ST_STATUS);
     unsigned end = text(STATUS_ROW, 1, ed.msg ? ed.msg : "F1=Help  Alt=Menu", ST_STATUS);
     char ruler[32];
     int line = editor_lines_at_pos(&ed.lines, s_buf, ed.len, ed.cursor);
     int n = snprintf(ruler, sizeof ruler, "%s Line:%d Col:%u", ed.overtype ? "OVR" : "   ", line + 1,
                      col_of(ed.cursor) + 1);
-    if (n > 0 && (unsigned)n + 2 < s_cols && (!ed.msg || end + 1 + (unsigned)n < s_cols))
-        text(STATUS_ROW, s_cols - 1 - (unsigned)n, ruler, ST_STATUS);
+    if (n > 0 && (unsigned)n + 2 < COLS && (!ed.msg || end + 1 + (unsigned)n < COLS))
+        text(STATUS_ROW, COLS - 1 - (unsigned)n, ruler, ST_STATUS);
 }
 
 /* The whole screen as EDIT shows it with nothing open over the text. */
@@ -518,7 +518,7 @@ static void add_str(const char *s) {
 static void send_row(unsigned r) {
     if (memcmp(s_shown[r], s_scr[r], sizeof s_scr[r]) == 0) return;
     memcpy(s_shown[r], s_scr[r], sizeof s_scr[r]);
-    unsigned n = r == STATUS_ROW ? s_cols - 1 : s_cols;
+    unsigned n = r == STATUS_ROW ? COLS - 1 : COLS;
     char pos[16];
     add(pos, (size_t)snprintf(pos, sizeof pos, "\033[%u;1H", r + 1));
     int st = -1;
@@ -539,7 +539,7 @@ static void send_row(unsigned r) {
         add(&ch, 1);
     }
     if (line) add_str("\033(B");
-    if (n < s_cols) {
+    if (n < COLS) {
         add_str(s_sgr[ed.phosphor][s_scr[r][n].st & ~ST_LINE]);
         add_str("\033[K");
     }
@@ -589,7 +589,7 @@ static int menu(int m) {
         }
         w += 4;
         unsigned c = menu_col(m) - 1;
-        if (c + w > s_cols) c = s_cols - w;
+        if (c + w > COLS) c = COLS - w;
         box(MENU_ROW + 1, c, (unsigned)mu->n + 2, w, NULL);
         for (int i = 0; i < mu->n; i++) {
             unsigned r = MENU_ROW + 2 + (unsigned)i;
@@ -657,11 +657,11 @@ static void message_box(const char *title, const char *const *lines, unsigned n,
                         const char *buttons, unsigned *row, unsigned *col) {
     unsigned crow, ccol, w = label_len(buttons);
     compose(&crow, &ccol);
-    n = wrap(lines, n, s_cols - 4);
+    n = wrap(lines, n, COLS - 4);
     for (unsigned i = 0; i < n; i++)
         if (s_wrap[i].n > w) w = s_wrap[i].n;
     w += 4;
-    unsigned h = n + 4, r = (TERM_ROWS - h) / 2, c = (s_cols - w) / 2;
+    unsigned h = n + 4, r = (TERM_ROWS - h) / 2, c = (COLS - w) / 2;
     box(r, c, h, w, title);
     for (unsigned i = 0; i < n; i++)
         for (unsigned j = 0; j < s_wrap[i].n; j++)
@@ -709,7 +709,7 @@ static bool ask(const char *title, const char *prompt, char *buf, size_t cap, bo
     size_t n = strlen(buf);
     bool offered = n > 0;
     for (;;) {
-        unsigned crow, ccol, w = s_cols - 8, r = 12, c = 4;
+        unsigned crow, ccol, w = COLS - 8, r = 12, c = 4;
         compose(&crow, &ccol);
         box(r, c, 7, w, title);
         text(r + 2, c + 2, prompt, ST_BAR);
@@ -1015,7 +1015,6 @@ int cmd_edit(shell_t *sh, int argc, char **argv) {
         }
     }
 
-    s_cols = shell_cols(sh);
     keys_report_chords(true);
     out_puts(&sh->con, "\033[0m\033[2J");
     redraw_all();

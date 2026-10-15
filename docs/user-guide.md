@@ -588,9 +588,8 @@ but its commands are DOS's: `DIR`, `COPY`, `DEL`, `CD`. It has its own
 `BOOT2350.UF2`. To use it, copy that file to the card's root in place of
 the UNIX one; to go back, copy the UNIX one there again. Neither flavour
 installs the other. In place of vi it has EDIT, an editor like the
-one DOS had (below). In 40 columns it uses IBM's PC font, as DOS
-showed it; in 64 columns it uses the same narrow font as the UNIX
-flavour.
+one DOS had (below). It shows 40 columns in IBM's PC font, as DOS
+did; it has no 64-column font and no `FONT` command.
 
 ### The prompt and paths
 
@@ -653,7 +652,7 @@ files; give the name in full to reach one. `DIR NAME` lists `NAME.*`.
 | `EXIT` | UF2 Loader's own menu, as `menu` in the UNIX flavour |
 
 The PicoCalc's own commands keep their names in this flavour: `BATTERY`,
-`BACKLIGHT`, `PHOSPHOR`, `FONT`, `INFO`, `USBDISK`, `POWEROFF`, `REBOOT`
+`BACKLIGHT`, `PHOSPHOR`, `INFO`, `USBDISK`, `POWEROFF`, `REBOOT`
 and `BOOTSEL` (section 4). There is no `DATE` or `TIME`: the PicoCalc has
 no clock.
 
@@ -718,8 +717,8 @@ card out and edit the file on a computer.
 ### EDIT
 
 `EDIT NAME.TXT` opens a file to edit, or a new one by that name; `EDIT`
-alone starts an untitled one. EDIT uses the font the shell has: 40
-columns, or 64 after `FONT 5x10`. A line wider than the screen scrolls
+alone starts an untitled one. EDIT shows 40 columns, like the rest of
+this flavour. A line wider than the screen scrolls
 sideways as the cursor moves along it. The top row is the menu bar, the next the
 file's name, and the bottom row says `F1=Help` and where the cursor is.
 

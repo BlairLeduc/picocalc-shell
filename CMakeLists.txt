@@ -16,12 +16,9 @@ option(PICO_SHELL_HOST "Build the portable core and its host tests, with no Pico
 # What both flavours share (design.md §4.7)...
 set(SHELL_CORE_SOURCES
     src/core/bininfo.c
-    src/core/displaytest.c
     src/core/editor_file.c
     src/core/editor_pattern.c
     src/core/files.c
-    src/core/font-5x10.c
-    src/core/font-8x10.c
     src/core/history.c
     src/core/input.c
     src/core/keys.c
@@ -37,12 +34,15 @@ set(SHELL_CORE_SOURCES
     src/core/uf2.c
     src/core/vars.c
 )
-# ...the UNIX flavour's command language and vi...
+# ...the UNIX flavour's command language, vi and fonts...
 set(SHELL_UNIX_SOURCES
+    src/core/displaytest.c
     src/core/editor_lines.c
     src/core/editor_undo.c
     src/core/editor_vi.c
     src/core/expand.c
+    src/core/font-5x10.c
+    src/core/font-8x10.c
     src/core/parse.c
     src/core/unix.c
     src/core/vi.c

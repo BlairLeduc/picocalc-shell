@@ -197,6 +197,7 @@ static void reset_region(term_t *t) {
     t->bottom = (uint8_t)MAX_ROW;
 }
 
+#if !SHELL_DOS
 static void set_cols(term_t *t, unsigned cols) {
     if (t->cols == cols) return;
     t->cols = (uint8_t)cols;
@@ -204,6 +205,7 @@ static void set_cols(term_t *t, unsigned cols) {
     t->save_col = (uint8_t)imin(t->save_col, (int)cols - 1);
     t->dirty = ALL_ROWS;
 }
+#endif
 
 static void update_leds(term_t *t, uint8_t leds) {
     t->leds = leds;
@@ -498,7 +500,9 @@ static void dec_final(term_t *t, uint8_t ch) {
     bool set = ch == 'h';
     for (unsigned i = 0; i <= t->nparam; i++) {
         if (t->params[i] == 25) t->cursor_on = set;                    /* DECTCEM */
+#if !SHELL_DOS   /* the DOS flavour has only 40 columns */
         else if (t->params[i] == 4264) set_cols(t, set ? TERM_COLS_5X10 : TERM_COLS_8X10);
+#endif
     }
 }
 

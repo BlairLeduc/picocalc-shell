@@ -29,11 +29,12 @@ static uint32_t    s_rows_drawn, s_cells_drawn;
 
 static uint16_t    s_line[2][SHELL_PANEL_W];   /* ping-pong (hardware-notes.md §4.6) */
 
-/* The 40-column font: the DOS flavour's is IBM's (design.md §4.7). */
+/* The font for a width: the DOS flavour has only IBM's, in 40 columns
+ * (design.md §4.7). */
 #if SHELL_DOS
-#define FONT_40 font_ibm_8x10
+#define FONT_FOR(cols) (&font_ibm_8x10)
 #else
-#define FONT_40 font_8x10
+#define FONT_FOR(cols) ((cols) == TERM_COLS_5X10 ? &font_5x10 : &font_8x10)
 #endif
 
 static term_cell_t *shadow_row(unsigned row) {
@@ -44,7 +45,7 @@ static term_cell_t *shadow_row(unsigned row) {
  * set pixel one to the right (8x10 only), and the last row is the
  * underline's, and the cursor's. */
 static uint16_t *glyph_line(uint16_t *px, const term_cell_t *c, unsigned i, bool cursor) {
-    const font_t *font = s_cols == TERM_COLS_5X10 ? &font_5x10 : &FONT_40;
+    const font_t *font = FONT_FOR(s_cols);
     unsigned w = font->width;
     uint8_t bits = font->glyphs[c->ch * GLYPH_HEIGHT + i];
     bool last = i == GLYPH_HEIGHT - 1u;

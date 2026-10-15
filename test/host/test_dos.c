@@ -467,13 +467,6 @@ static int dos_tests(bool fat32) {
     CHECK(run("DIR") == 0 && has(dir_line("asteroids-deluxe.lua", "6")) &&
               has("\n4D1F8172 - MacPlus v3 with a long name.ROM\n                                      7\n"),
           "long names: '%s'", con);
-    sh.wide = true;
-    CHECK(run("DIR *.lua") == 0 && has(dir_line("asteroids-deluxe.lua", "6")),
-          "64 columns, laid out to 40: '%s'", con);
-    CHECK(run("DIR *.ROM") == 0 &&
-              has("\n4D1F8172 - MacPlus v3 with a long name.ROM\n                                      7\n"),
-          "and a long name's size on the next line: '%s'", con);
-    sh.wide = false;
     CHECK(run("DEL asteroids-deluxe.lua") == 0 && run("DEL \"4D1F8172 - MacPlus v3 with a long name.ROM\"") == 0,
           "long names gone");
 

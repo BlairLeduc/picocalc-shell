@@ -149,29 +149,15 @@ bool shell_interrupted(shell_t *sh) {
 }
 
 unsigned shell_cols(const shell_t *sh) {
+#if SHELL_DOS
+    (void)sh;
+    return TERM_COLS_8X10;
+#else
     return sh->wide ? TERM_COLS_5X10 : TERM_COLS_8X10;
+#endif
 }
 
 /* ---- commands --------------------------------------------------------- */
-
-int cmd_font(shell_t *sh, int argc, char **argv) {
-    bool wide = !sh->wide;
-    if (argc > 2) {
-        shell_error(sh, "usage: font [8x10|5x10]\n");
-        return 1;
-    }
-    if (argc == 2) {
-        if (strcmp(argv[1], "8x10") == 0) wide = false;
-        else if (strcmp(argv[1], "5x10") == 0) wide = true;
-        else {
-            shell_error(sh, "font: %s: no such font; 8x10 or 5x10\n", argv[1]);
-            return 1;
-        }
-    }
-    sh->wide = wide;
-    out_puts(&sh->con, wide ? "\033[?4264h" : "\033[?4264l");
-    return 0;
-}
 
 int cmd_usbdisk(shell_t *sh, int argc, char **argv) {
     (void)argv;
