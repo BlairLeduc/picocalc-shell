@@ -37,11 +37,12 @@ development build from SRAM, driven by Claude over UART1
 grid stayed 40 x 32, and EDIT's Help menu fitted at the right edge and
 left back to `C:\>`. The `DIR` listing was lost to noise in the capture.
 
-**Checked by the owner** (2026-10-15, on their Pico 2 W, on the panel):
-the `DIR` listing is right in 40 columns, and `FONT` is not a command.
+**Checked by the owner** (2026-10-15, on their Pico 2 W, the DOS
+flavour's release build, on the panel): the `DIR` listing is right in
+40 columns, `FONT` is not a command, and EDIT's boxes and menus, in
+IBM's line glyphs, join up.
 
-**Not checked:** which build the owner ran was not recorded; EDIT on
-the owner's panel.
+**Not checked:** nothing carried forward.
 
 ## After M9 — EDIT in 40 columns (2026-10-15)
 
@@ -61,8 +62,9 @@ line typed and scrolled sideways, F1's box, Options Display's question,
 then Brk and No, back at `C:\>` in 40 columns. The screen was read
 from the grid, not seen on the panel.
 
-**Not checked:** the panel itself, by eye (IBM's line glyphs in EDIT's
-boxes); the release build on a card; the owner's Pico 2 W.
+**Not checked:** nothing carried forward; the owner's run of the
+40-column-only release build (above) covered the panel, IBM's line
+glyphs in EDIT's boxes, and a Pico 2 W.
 
 ## M9 — the DOS flavour, step 3, and M9 done (branch `m9-dos`, 2026-10-14)
 
