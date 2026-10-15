@@ -2,9 +2,8 @@
 
 Status: **Draft 9, 2026-10-14.** Feasibility study and first design. M0
 (the skeleton), M1 (files), M2 (run), M3 (vi), M4 (comfort), M6 (USB
-speed) and M8 (the rest of v1) are done ([milestones.md](milestones.md));
-of M9 (the DOS flavour), steps 1 to 3 are built, and its done-when
-checks on a card are to come. The commands are explained for users
+speed), M8 (the rest of v1) and M9 (the DOS flavour) are done
+([milestones.md](milestones.md)); M5 is still to do. The commands are explained for users
 in [user-guide.md](user-guide.md).
 
 The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
@@ -1350,8 +1349,9 @@ in [milestones.md](milestones.md).
   3. The Alt chords measured on a Plus 2 W and written in HW §6.3, then
      EDIT. *Built 2026-10-14* (§4.7, milestones.md).
 
-  Both flavours build with `tools/build.sh` and on the host, and the
-  UNIX flavour's tests still pass unchanged. Done when, on the board, the DOS
+  *Done 2026-10-14* (milestones.md). Both flavours build with
+  `tools/build.sh` and on the host, and the UNIX flavour's tests still
+  pass unchanged. Done when, on the board, the DOS
   flavour copies, renames and deletes files, runs a program by name and
   comes back, runs `AUTOEXEC.BAT`, and EDIT has changed
   `/atom/pico-atom.cfg` and pico-atom has read it, as M3 did for vi.

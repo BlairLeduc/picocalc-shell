@@ -16,12 +16,15 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
-## M9 — the DOS flavour, step 3 (branch `m9-dos`, 2026-10-14)
+## M9 — the DOS flavour, step 3, and M9 done (branch `m9-dos`, 2026-10-14)
 
-**In progress.** Step 3 of three is built: the Alt chords measured and
+**Done.** Step 3 of three is built: the Alt chords measured and
 written in HW §6.3, then EDIT (design.md §4.7, *As built at M9,
-step 3*; `src/core/edit.c`). M9's done-when checks on a card are still
-to come (below).
+step 3*; `src/core/edit.c`). M9's done-when is met: copying, renaming
+and deleting on the Plus 2 W (step 1), and on the owner's Pico 2 W
+running a program by name and coming back, `AUTOEXEC.BAT` at a real
+power-on, and EDIT's change to `/atom/pico-atom.cfg` read by pico-atom
+(below); both flavours' RAM and EDIT's opening time are measured.
 
 **The chords** (the Plus 2 W on the probe, the DOS flavour's
 development build from SRAM, the owner pressing keys on the panel while
@@ -120,17 +123,24 @@ the root were removed after.
 | The DOS flavour's RAM (release, `__end__`) | — | 422,100 B, 100,872 B more than step 2: EDIT's 64 KB buffer, 8 KB clipboard, two 4 KB cell screens, and its code |
 | The UNIX flavour's RAM (release) | unchanged | 434,708 B, 772 B less than step 2 |
 
+**Checked by the owner on a Pico 2 W** (2026-10-14, the DOS flavour
+from the card as `/BOOT2350.UF2` in place of the UNIX one, started by
+UF2 Loader after the UNIX flavour's `reboot`): EDIT changed
+`/atom/pico-atom.cfg` and pico-atom showed the change; in EDIT, Alt with
+the arrows selected, copy and paste worked, Ctrl with the arrows moved
+by words, Home and End worked, and Ctrl+Home and Ctrl+End went to the
+top and the bottom of the file; pico-atom was run from the DOS prompt
+by name, and the shell came back by F1 held at power-on; `@` at the
+start of a line in a batch file hid that line; and `C:\AUTOEXEC.BAT`
+ran at a real power-on, its `@` line hidden. (A first `autoexec.bat`
+that did not run at start was in `C:\HOME`, not the root, so the shell
+was right not to run it: design.md §4.7 names only `C:\AUTOEXEC.BAT`.) A lowercase
+`autoexec.bat` at the root of the Plus 2 W's test card does run when
+the shell is started from SRAM over SWD (`out/m9-autoexec-1.log`).
+
 **Not checked:**
 
 - All of steps 1's and 2's lists, which stand.
-- **M9's done-when on a card:** the DOS flavour as `/BOOT2350.UF2`,
-  started by the loader; running a program by name and coming back;
-  `AUTOEXEC.BAT` at a real start; EDIT changing `/atom/pico-atom.cfg`
-  and pico-atom reading it (the owner, on the panel).
-- **Keys pressed on the panel inside EDIT**: Ctrl with the arrows, Home
-  and End (Ctrl+Shift+Tab, Ctrl+Shift+Del) were neither captured nor
-  typed (the UART cannot send Ctrl with them); Alt with the arrows and
-  a tap of Alt only through the UART's US.
 - A quick Alt+`,` or Alt+`.` (the backlights) opening the menu as a tap
   would: expected from the source, not tried.
 - EDIT's opening time in the release build, and EDIT's deepest stack.
