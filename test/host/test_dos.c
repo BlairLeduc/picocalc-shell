@@ -393,6 +393,12 @@ static int dos_tests(bool fat32) {
           con);
     CHECK(run("TYPE DOCS") == 1 && strcmp(con, "Access denied - DOCS\n") == 0, "'%s'", con);
     CHECK(run("TYPE A.TXT > NUL") == 0 && strcmp(con, "") == 0 && !exists("/HOME/NUL"), "> NUL");
+    CHECK(run("EXIT > NUL") != 0 && !has("redirection") && has("no UF2 Loader") && !exists("/HOME/NUL"),
+          "EXIT > NUL is EXIT, not refused: '%s'", con);
+    CHECK(run("REBOOT > NUL") != 0 && !has("redirection") && !exists("/HOME/NUL"),
+          "REBOOT > NUL is REBOOT: '%s'", con);
+    CHECK(run("EXIT > OUT.TXT") == 1 && has("not with a redirection") && !exists("/HOME/OUT.TXT"),
+          "EXIT > a file is still refused: '%s'", con);
     CHECK(run("ECHO") == 0 && strcmp(con, "ECHO is on\n") == 0, "'%s'", con);
 
     /* COPY. */
@@ -479,7 +485,7 @@ static int dos_tests(bool fat32) {
         CHECK(put(name, "x"), "%s", name);
     }
     keys = " ";
-    char f26[64];
+    char f26[128];
     snprintf(f26, sizeof f26, "F26      TXT%27s\nPress any key to continue . . .\nF27", "1");
     CHECK(run("DIR \\MANY /P") == 0 && has(f26) &&
               has("bytes free"),

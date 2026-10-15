@@ -834,7 +834,9 @@ rules for size, CR LF and safe save (§4.6).
   unset one is empty; `%%` is `%`, and any other `%` is itself. Then the
   line is split at `|`, outside `"…"`; there is no `;`, `&&` or `||`, as
   in DOS. `<`, `>` and `>>` take the next word, anywhere in a command,
-  and `> NUL` throws the output away. Words are split at blanks, and
+  and `> NUL` throws the output away (for a program or a command that
+  leaves the shell, which refuse a redirection, it is dropped: NUL
+  leaves no file behind). Words are split at blanks, and
   `"…"` keeps blanks in one and is removed. A command's name ends at a
   `/`, `\` or `.` when what comes before is a builtin, so `DIR/W`, `CD..`,
   `CD\` and `ECHO.` work. ECHO, SET, PATH and PROMPT read what followed

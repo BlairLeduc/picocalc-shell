@@ -141,7 +141,18 @@ by eye; and Options, Display's phosphor colours worked. At the owner's
 asking, a question's buttons now show each one's letter in red, as
 MS-DOS's EDIT did, and the keys are taken from those letters, so C is
 Cancel too; `test_edit` checks the colours and C, and the owner saw the
-red letters on the Plus 2 W's panel. A lowercase
+red letters on the Plus 2 W's panel.
+
+**From the review of PR #8** (2026-10-14): a test's 64-byte buffer cut
+DIR /P's expected text at 63 characters, so on macOS the check passed
+on a prefix and on Linux GCC refused to build it; the buffer is 128 B
+and the whole text is checked. Every host source was then checked with
+GCC's `-Wformat-truncation` (the Arm toolchain's, `-fsyntax-only`, for
+want of a host GCC); nothing else was cut. `EXIT > NUL`, and any
+program or command that leaves the shell with `> NUL`, was refused as
+redirected; NUL leaves no file, so it is now dropped for them, and a
+redirection to a file is still refused. A quoted command name, `"DIR"`,
+stays `Bad command or file name`, as in DOS 5. A lowercase
 `autoexec.bat` at the root of the Plus 2 W's test card does run when
 the shell is started from SRAM over SWD (`out/m9-autoexec-1.log`).
 
