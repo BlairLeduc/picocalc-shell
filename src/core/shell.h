@@ -1,12 +1,11 @@
-/* shell.h — the command line (design.md §4.4, §4.5).
+/* shell.h — the command line (design.md §4.4, §4.5, §4.7).
  *
- * The banner, /etc/profile, the prompt and its line editor (line.h), the
- * parser (parse.h), expansion (expand.h), pipes (pipe.h), and the
- * builtins: the file commands (files.h), `more`, `grep`, `head`, `tail`
- * and `wc` (text.h), the PicoCalc's own (system.h), `echo`, `font`,
- * `set`, `unset`, `export`, `sh`, `history`, `menu`, `usbdisk`, `vi`
- * and `view` (vi.h), and the development command `displaytest`. Any
- * other command is a program (run.h). */
+ * What both flavours share: the prompt and its line editor (line.h),
+ * running a command with its redirections, pipes (pipe.h), and the
+ * builtins' table, which is the flavour's (flavour.h). The UNIX
+ * flavour's parser, expansion and scripts are in unix.c, the DOS
+ * flavour's in dos.c. Any command that is not a builtin is a program
+ * (run.h). */
 #ifndef SHELL_SHELL_H
 #define SHELL_SHELL_H
 
@@ -88,6 +87,7 @@ typedef struct shell {
     char          cwd[SHELL_PATH_MAX + 1];   /* absolute and normal (path.h) */
     bool          wide;             /* font_5x10, 64 columns */
     uint8_t       phosphor;         /* system.h: the ink chosen, 0 for the default */
+    unsigned long mem_used, mem_total;   /* SRAM, for DOS's MEM; 0: not known */
     line_t        line;
 } shell_t;
 
@@ -102,9 +102,13 @@ void shell_set_loader(shell_t *sh, const struct shell_loader *loader);
 /* The port's link to the PicoCalc's southbridge, ink and power. */
 void shell_set_system(shell_t *sh, const shell_system_t *sys);
 
-/* Mount the card, reset the terminal, print the banner, run
- * /etc/profile, read the history, and show the first prompt. The
- * starting directory is $HOME if the card has it. */
+/* The SRAM the shell uses and the SRAM there is, in bytes, for MEM. */
+void shell_set_memory(shell_t *sh, unsigned long used, unsigned long total);
+
+/* Mount the card, reset the terminal, read the history, print the
+ * banner, run the flavour's startup script (/etc/profile), and show the
+ * first prompt. The starting directory is $HOME, or /home, if the card
+ * has it. */
 void shell_start(shell_t *sh);
 
 /* One input byte (keys.h): a character, or a key code of 0x80 and above. */
@@ -128,16 +132,17 @@ bool shell_interrupted(shell_t *sh);
 /* The terminal's width in columns. */
 unsigned shell_cols(const shell_t *sh);
 
-/* Whether `name` is a builtin; and the i-th builtin's name, NULL past
- * the last, for Tab completion and `help`. */
+/* Whether `name` is a builtin, and which, -1 if none; and the i-th
+ * builtin's name, NULL past the last, for Tab completion and `help`. */
 bool shell_is_builtin(const char *name);
+int shell_builtin_index(const char *name);
 const char *shell_builtin_at(unsigned i);
 /* The i-th builtin's usage and what it does, for `help`. */
 const char *shell_builtin_usage(unsigned i);
 const char *shell_builtin_about(unsigned i);
 
-/* Show the prompt: on a line of its own if the cursor is not at the
- * start of one. */
+/* Show the flavour's prompt: on a line of its own if the cursor is not
+ * at the start of one. */
 void shell_prompt(shell_t *sh);
 
 #endif /* SHELL_SHELL_H */

@@ -8,6 +8,8 @@
  *   Tab                                           complete (below)
  *   Ctrl-C                                        drop the line
  *   Enter                                         run it
+ *   F3, Esc (the DOS flavour)                     the rest of the last line from
+ *                                                 the cursor's column; drop the line
  *
  * Tab completes the word before the cursor: a command name (a builtin or
  * a program in $PATH) as the first word of a command, and a path
@@ -15,7 +17,9 @@
  * directory and a space for anything else; several put in what they
  * share, and a second Tab with nothing to add lists them. Names are
  * matched without regard to case and put in as the card spells them,
- * with a '\' before any character the shell would take as special.
+ * with a '\' before any character the shell would take as special. In
+ * the DOS flavour a directory gets a '\' after it, and nothing is put
+ * before a special character: DOS has no escapes.
  *
  * The line may run over several rows. The terminal wraps as soon as a
  * row is full (term.c), so the cursor's place is worked out from the

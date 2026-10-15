@@ -180,8 +180,12 @@ static int test_sgr(void) {
     CHECK(ink_of("\033[91m") == TERM_RGB(255, 0, 0), "SGR 91");
     CHECK(ink_of("\033[38;2;255;0;0m") == TERM_RGB(255, 0, 0), "SGR 38;2");
     CHECK(ink_of("\033[38;5;9m") == 0xF800, "SGR 38;5;9");
-    CHECK(ink_of("\033[38;5;232m") == 0x0000 && ink_of("\033[38;5;255m") == 0x7BCF,
-          "the grey ramp, as the starter has it");
+    CHECK(ink_of("\033[38;5;232m") == TERM_RGB(8, 8, 8) && ink_of("\033[38;5;248m") == TERM_RGB(168, 168, 168) &&
+              ink_of("\033[38;5;255m") == TERM_RGB(238, 238, 238),
+          "the grey ramp, as xterm's");
+    CHECK(ink_of("\033[38;5;16m") == 0 && ink_of("\033[38;5;21m") == TERM_RGB(0, 0, 255) &&
+              ink_of("\033[38;5;196m") == TERM_RGB(255, 0, 0) && ink_of("\033[38;5;110m") == TERM_RGB(135, 175, 215),
+          "the colour cube, as xterm's");
     CHECK(ink_of("\033[2m") == TERM_DIM, "SGR 2 is dim");
     CHECK(ink_of("\033[31;0m") == TERM_FOREGROUND, "SGR 0 resets");
     CHECK(ink_of("\033[31;39m") == TERM_FOREGROUND, "SGR 39");

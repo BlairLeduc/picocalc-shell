@@ -16,6 +16,307 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M9 — the DOS flavour, step 3, and M9 done (branch `m9-dos`, 2026-10-14)
+
+**Done.** Step 3 of three is built: the Alt chords measured and
+written in HW §6.3, then EDIT (design.md §4.7, *As built at M9,
+step 3*; `src/core/edit.c`). M9's done-when is met: copying, renaming
+and deleting on the Plus 2 W (step 1), and on the owner's Pico 2 W
+running a program by name and coming back, `AUTOEXEC.BAT` at a real
+power-on, and EDIT's change to `/atom/pico-atom.cfg` read by pico-atom
+(below); both flavours' RAM and EDIT's opening time are measured.
+
+**The chords** (the Plus 2 W on the probe, the DOS flavour's
+development build from SRAM, the owner pressing keys on the panel while
+Claude captured UART1 with the new RS logging, `out/m9-keys-1.log`, 495
+events): a tap of Alt is a press and a release with no hold between;
+Alt with a letter sends the capital, Alt+I Insert, Alt with an arrow
+the arrow; Ctrl with X, C and V the lower-case letter; no overflow and
+no I²C error. Alt+C and Alt+2 sent nothing and some keys under Alt had
+no release, once, unexplained. Shift with the arrows was not captured;
+the MCU's source swallows it, so **the owner chose** (2026-10-14) Alt
+with the arrows to select and Ctrl+X, C and V to cut, copy and paste,
+in place of the design's Shift keys.
+
+**Checked on the host:**
+
+- All 23 test binaries pass; the UNIX flavour's unchanged, vi's
+  included, after its file code moved to `editor_file.c`.
+- **`test_keys`**: Alt not reported at the prompt (Alt+F is `F`, no
+  tap); reported, a tap, Alt+F, Alt+Left, Alt+I still Insert, Alt+F3
+  still F3, no tap after a key or once held, Ctrl+Right and Ctrl+Home,
+  Ctrl+X still `^X`, Ctrl+Left plain at the prompt; the UART's US and
+  US US.
+- **`test_edit`**, new, over FAT16 and FAT32: the screen (menu bar,
+  title, text, status, 64 columns, the cursor, 40 columns after);
+  typing and Save; the menus by a tap, across and down, Enter, Esc,
+  Alt and a letter; Help and F1; Find's box; Exit asking, No, Cancel,
+  Yes (Enter), the end of input not saving; Alt with the arrows
+  selecting, Ctrl+X and Ctrl+V, Ctrl+C, Alt+Down and Del, typing over
+  a selection, the Edit menu's Cut and Paste; Ctrl+Y in the middle and
+  on the last line, and on an empty file changing nothing; Ctrl with the
+  arrows by words, Ctrl+Home and End; the goal column past a short line
+  and onto a tab; Enter's indentation; overtype and `OVR`; Find in
+  either case, F3, not found; the done-when edit of a CR LF settings
+  file, kept CR LF; Change of three, to nothing, Esc; UNTITLED saved by
+  name, Save As to another directory, Save As over a file asking, Open,
+  a failed Open keeping the text, New asking to save, a new file by
+  name; a read-only file shown and not saved; a directory, two names
+  and a file over 64 KB refused; chords off after EDIT.
+- **Found by the owner** on the panel: the menu bar and menus were
+  black, so their black letters could not be seen. The terminal's
+  256-colour table, from the starter, was wrong: its grey ramp climbed
+  to white at 247 and fell back to black at 248, the bar's grey, and its
+  colour cube was wrong too. `term.c` now works colours 16-255 out by
+  xterm's formula; `test_term` checks the ramp and the cube, and
+  `test_edit` the bar's cells (black on 168 grey, letters white) and the
+  text's blue. With the old table both fail. After the fix the owner
+  saw the menu bar and the File menu drawn correctly on the panel (the
+  Plus 2 W on the probe, the DOS flavour's development build from SRAM,
+  2026-10-14).
+- **Found by the owner**: DIR's lines were 23 columns, so a long name
+  pushed its size past the end of the line. The size is now at the
+  right of the screen, short of the last column (39 or 63), and a name
+  too long to leave room puts its size on the next line. `test_dos`
+  checks the lines in 40 columns, a long name, one too long, and one in
+  64 columns. On the Plus 2 W (the DOS development build from SRAM,
+  2026-10-14), `DIR \LUA\LUA` fitted every line, `asteroids.lua` and
+  `mandelbrot.lua` included. Then, at the owner's asking, as DOS showed
+  them: `<DIR>` in its own column, 15, apart from the sizes, and sizes
+  and totals with a comma every three digits (`1,234,566`); the totals'
+  field grew to 14. `test_dos` checks both, a long directory's name,
+  and one too long for `<DIR>`; `DIR \` on the Plus 2 W fitted every
+  line (`20,971,520`, `31,766,970,368 bytes free`). Last, at the
+  owner's asking, the lines keep to 40 columns in the 64-column font
+  too, so the sizes stay near their names: checked by `test_dos` and,
+  with `FONT 5x10`, by `DIR \LUA\LUA` on the Plus 2 W. The two totals
+  lines' numbers end in one column, so `bytes` lines up: `test_dos`
+  checks the columns (a planted misalignment failed 4 checks), and
+  `DIR \` on the Plus 2 W showed them lined up.
+- **The DOS flavour's font**, at the owner's asking: IBM's PC BIOS 8x8
+  from VileR's font pack (CC BY-SA 4.0), drawn in the 8x10 cell by
+  `tools/mkfont-ibm.py`, for 40 columns only. The link maps show each
+  flavour links only its own 40-column font; RAM (release, `__end__`):
+  DOS 422,196 B (+96), UNIX 434,364 B (-344, the 256-colour table now
+  code). Shown on the Plus 2 W from SRAM with `DIR \LUA\LUA`; the owner
+  saw it on the panel and approved it.
+- **Planted bugs**, each caught: a splice of nothing marking the file
+  changed (2 failures), Alt with an arrow restarting the selection (2),
+  Exit not asking (too many to list), a held Alt counted as a tap (1).
+
+**Checked on the board:** the Plus 2 W on the probe, by Claude, the DOS
+flavour's development build from SRAM over SWD (`tools/swd-ram.sh`),
+on the test card, typed over UART1 with US for Alt
+(`out/m9-keys-1.log`): EDIT typed and saved a file; a tap of Alt opened
+the File menu, drawn with its box; Alt+Right five times and Ctrl+X cut
+five letters; Brk asked to save and No left the file as it was; a new
+file typed, saved, a Change and Exit with Yes, then TYPE showed it. A
+41,573-byte file (three Lua files joined with TYPE `>>`) opened. The
+card's own files were only read; `\EDTEST` and the two files made in
+the root were removed after.
+
+**Measured:**
+
+| | Estimate | Measured |
+|---|---|---|
+| EDIT opening a 41 KB file | under a second, as vi (M3) | 0.247 s, 0.247 s, 0.248 s from the Enter to the status row on the UART (Plus 2 W, development build, 2026-10-14). About 0.245 s of it is the 2,823 bytes mirrored at 115,200 baud, so the release build is faster; not timed there |
+| The DOS flavour's RAM (release, `__end__`) | — | 422,100 B, 100,872 B more than step 2: EDIT's 64 KB buffer, 8 KB clipboard, two 4 KB cell screens, and its code |
+| The UNIX flavour's RAM (release) | unchanged | 434,708 B, 772 B less than step 2 |
+
+**Checked by the owner on a Pico 2 W** (2026-10-14, the DOS flavour
+from the card as `/BOOT2350.UF2` in place of the UNIX one, started by
+UF2 Loader after the UNIX flavour's `reboot`): EDIT changed
+`/atom/pico-atom.cfg` and pico-atom showed the change; in EDIT, Alt with
+the arrows selected, copy and paste worked, Ctrl with the arrows moved
+by words, Home and End worked, and Ctrl+Home and Ctrl+End went to the
+top and the bottom of the file; pico-atom was run from the DOS prompt
+by name, and the shell came back by F1 held at power-on; `@` at the
+start of a line in a batch file hid that line; and `C:\AUTOEXEC.BAT`
+ran at a real power-on, its `@` line hidden. (A first `autoexec.bat`
+that did not run at start was in `C:\HOME`, not the root, so the shell
+was right not to run it: design.md §4.7 names only `C:\AUTOEXEC.BAT`.)
+Later the same day, also on the Pico 2 W: Alt+`,` and Alt+`.` (the
+backlights) did not open EDIT's menu; EDIT opened a 40 KB file at once,
+by eye; and Options, Display's phosphor colours worked. At the owner's
+asking, a question's buttons now show each one's letter in red, as
+MS-DOS's EDIT did, and the keys are taken from those letters, so C is
+Cancel too; `test_edit` checks the colours and C, and the owner saw the
+red letters on the Plus 2 W's panel.
+
+**From the review of PR #8** (2026-10-14): a test's 64-byte buffer cut
+DIR /P's expected text at 63 characters, so on macOS the check passed
+on a prefix and on Linux GCC refused to build it; the buffer is 128 B
+and the whole text is checked. Every host source was then checked with
+GCC's `-Wformat-truncation` (the Arm toolchain's, `-fsyntax-only`, for
+want of a host GCC); nothing else was cut. `EXIT > NUL`, and any
+program or command that leaves the shell with `> NUL`, was refused as
+redirected; NUL leaves no file, so it is now dropped for them, and a
+redirection to a file is still refused. A quoted command name, `"DIR"`,
+stays `Bad command or file name`, as in DOS 5. A lowercase
+`autoexec.bat` at the root of the Plus 2 W's test card does run when
+the shell is started from SRAM over SWD (`out/m9-autoexec-1.log`).
+
+**Not checked:**
+
+- All of steps 1's and 2's lists, which stand.
+- EDIT's opening time measured in the release build (by eye only:
+  at once), and EDIT's deepest stack.
+- Each of EDIT's boxes and dialogs on the panel, one by one.
+
+## M9 — the DOS flavour, step 2 (branch `m9-dos`, 2026-10-14)
+
+**In progress.** Step 2 of three is built: batch files and
+`AUTOEXEC.BAT` (design.md §4.7, *As built at M9, step 2*;
+`src/core/dos_batch.c`). EDIT (step 3) is to come, and M9's done-when
+checks on the board with it.
+
+**Checked on the host** (the same tools as step 1):
+
+- All 22 test binaries pass; the UNIX flavour's unchanged.
+- **`test_dos`**, new, over FAT16 and FAT32: `%0`–`%3` with `,` between
+  words and a missing one empty, `%%`, quotes kept in a parameter, `%1`
+  left alone at the prompt; `@ECHO OFF` and ECHO back on after; REM with
+  a `>` making no file; ECHO ON showing each line after the prompt, a
+  label not shown, `@` hiding one; a SHIFT loop over eleven words with
+  GOTO `:label` in another case and a label with words after it; a
+  missing label; GOTO at the prompt; IF EXIST of a file, a directory, a
+  wildcard with and without a match, IF NOT EXIST, ERRORLEVEL after a
+  failed TYPE (and not after a false IF), `a == b` with blanks, quoted
+  words, a case difference, IF after IF; IF's four syntax errors, and IF
+  after a `|`; FOR at the prompt with `%x` (shown with ECHO ON, hidden by
+  `@`) and in a file with `%%x`, over a wildcard with a path, a hidden
+  file left out, nested, an empty set, four syntax errors; CALL coming
+  back, a batch file without CALL taking the caller's place, and from
+  inside a FOR; CALL of a builtin, CALL with `>`; a batch file with `>`
+  or in a pipe refused; a file running itself six times without CALL;
+  CALL nested past three; a batch file ahead of a program here, on PATH,
+  by path and as `NAME.BAT`, and not as `NAME.TXT`; a 300-character line
+  and the line after it; `AUTOEXEC.BAT` at start and its absence;
+  Break stopping an endless GOTO loop and a FOR.
+- **Planted bugs**, each caught: ECHO not put back after a batch file
+  (8 failures), a batch file run from another coming back instead of
+  taking its place (8), IF NOT inverted (6).
+
+**Checked on the board:** the Plus 2 W on the probe, by Claude, the DOS
+flavour's release build run from SRAM over SWD (`tools/swd-ram.sh`),
+on the test card, typed with `tools/swd-drive.py`: a batch file written
+line by line with `ECHO … >>` in a new `\DOSTEST`, then run as `T a,b c`,
+with SHIFT, GOTO, IF `"%1"==""` and a FOR over `*.BAT`, all as on the
+host; an endless `GOTO` loop stopped by Esc (`^C`, the screen still
+after); CALL coming back and a second batch file taking the first's
+place; `IF EXIST *.BAT`; a `C:\AUTOEXEC.BAT` (the card had none) setting
+PROMPT and CD at the next start, with ECHO on after. After the stack
+change below: a FOR CALLing a batch file and three IFs on one line.
+`AUTOEXEC.BAT` and `\DOSTEST` were removed after. **Found on the board:**
+a batch file looping through quick builtins could not be stopped, since
+nothing in the loop looked for Break; the batch file and FOR loops now
+look before each line and each turn. (It was found because typing more
+than the tool's 64-key ring at once mangled the file into a loop: the
+tool's limit, not the shell's.)
+
+**Measured** (link map, release builds): the DOS flavour 321,228 B of
+RAM (step 1: 301,628 B), 12,416 B of it the four batch levels; the UNIX
+flavour unchanged at 435,480 B. `-fstack-usage` first showed about
+2.6 KB of stack per CALL level (IF's and FOR's buffers), so about 11 KB
+three levels deep with a COPY under them, over the 8 KB stack; with
+those buffers made static and IF after IF a loop, about 720 B a level,
+and *estimated* 5.8 KB at the deepest. The prompt came up 501 ms after
+the SWD reset with a four-line `AUTOEXEC.BAT`, 496 ms without.
+
+**Not checked:**
+
+- All of step 1's list, which stands.
+- A batch file that runs a program: it leaves the shell, as a typed
+  name does, but no program was run from the SRAM build.
+- A program in `AUTOEXEC.BAT` running at every start; the user guide
+  says to take the card out to edit it.
+- The deepest stack on the board: the 5.8 KB is a sum of
+  `-fstack-usage` frames, not a measurement.
+
+## M9 — the DOS flavour, step 1 (branch `m9-dos`, 2026-10-14)
+
+**In progress.** Step 1 of three (design.md §10) is built: the build
+option, the DOS flavour's parser, `C:` paths, the prompt and its
+commands (design.md §4.7, *As built at M9, step 1*). Batch files and
+`AUTOEXEC.BAT` (step 2) and EDIT (step 3) are to come, and M9's
+done-when checks on the board with them.
+
+**Checked on the host** (macOS, Apple clang 21, `-Wall -Wextra -Werror`,
+C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
+
+- The UNIX flavour's 21 test binaries pass unchanged after `shell.c`'s
+  command language moved to `unix.c`; 22 with `test_dos`.
+- All four firmware builds compile clean: each flavour, development and
+  release. The host builds `shell` and `shell-dos`.
+- **`test_dos`**, on its own: `dos_match` (17 patterns: `*.*`, `*.`,
+  `?` matching none at a part's end, long names with several dots),
+  `dos_rename` (7 masks), `dos_resolve` (`C:\`, `C:X`, `..\`, `/`, other
+  drives), `dos_show`, `dos_expand` (`%name%` in either case, `%%`, an
+  unset one, a lone `%`, too long), and `dos_parse` (`DIR/W/P`, `cd..`,
+  `CD\`, `ECHO.`, a program's name with a `-`, a `.BAT` name not cut,
+  quotes in words and redirections, `>>`, pipes with `|` inside quotes,
+  blank lines, four syntax errors).
+- **`test_dos`** over FAT16 and FAT32 images, each command as typed: the
+  banner and `C:\HOME>` as the card spells HOME; CD (alone, `..`, `\`,
+  `C:\`, `/HOME`, a missing one); MD over one there; `A:` and `C:`; `Bad
+  command or file name`; ECHO with `>`, `>>`, `ECHO.`, and `> NUL`
+  making no file; TYPE of a file, a missing one and a directory; COPY of
+  one, under a mask, into a directory, onto itself, several into one,
+  none, and a directory's files; DIR's header with the label, its lines
+  and totals, `/B`, `NAME` as `NAME.*`, `/W`, `/A` with hidden names, `/S`
+  and `/S /B` from the root, an unknown switch, a pipe into FIND; `/P`
+  over 40 files, going on with Space and stopped by Esc, and not pausing
+  into a pipe; REN by mask, onto another file, a change of case, a path
+  refused, a directory; ATTRIB `+R`, `-R +H`, showing, hidden files
+  included, a bad letter; DEL of a read-only file, `*.*` answered N then
+  Y, `/P` answered N and Y, none, a hidden name in full; RD of a full
+  directory, an empty one and the current one; XCOPY `/S` with a hidden
+  file left out, a cyclic copy, no match, one file; MOVE into a
+  directory, a directory renamed, several into a file, a directory into
+  itself, a list with commas replacing a file; DELTREE answered N then Y
+  with a read-only file inside, `/Y` of a file, the current directory;
+  FIND with `/I /N`, `/V /C`, a pipe, `<`, a missing file, nothing to
+  find; MORE into a file; SET and `%NAME%`, clearing, a syntax error;
+  PATH, `PATH ;`, setting it in capitals; PROMPT's codes, its width for
+  the line editor, the default, ECHO OFF hiding it; programs found in
+  the current directory, on PATH and by path; VER, VOL, `VOL D:`, MEM
+  with and without the port's figures; HELP and `help copy`; PHOSPHOR's
+  word in capitals; F3, Esc and Tab (a directory, then a command) at the
+  prompt; a COPY whose writes fail part way, leaving the old file.
+
+**Checked on the board:** the Plus 2 W on the probe, by Claude, the DOS
+flavour's release build run from SRAM over SWD (`tools/swd-ram.sh`, so
+not through stage3), on the test card, driven by `tools/swd-drive.py`:
+the banner and `C:\>` (the card has no `HOME`), VER, MEM, VOL (the card's
+label `PICOCALC` and serial number), INFO, DIR /W and DIR /B of the root,
+`DIR /B | FIND /V "["`, ATTRIB of the root with its hidden `._` files,
+`DIR PICO2-APPS /B`; then MD, CD, `ECHO hi > A.TXT`, COPY, `REN *.TXT
+*.OLD`, DIR /B and TYPE in a new `\DOSTEST`, removed after with
+`DELTREE /Y`. All as on the host. The banner and VER wrapped at 40
+columns with a long version string and were shortened.
+
+**Measured** (link map, release builds): the UNIX flavour 435,480 B of
+RAM (M8: 432,516 B), the DOS flavour 301,628 B. The DOS commands' deepest
+call, COPY into FatFs, uses about 3 KB of the 8 KB stack
+(`-fstack-usage`).
+
+**Not checked:**
+
+- The DOS flavour's `BOOT2350.UF2` from the card through stage3, and so
+  running a program by name and coming back (M9's done-when, with steps
+  2 and 3).
+- Typing on the PicoCalc's own keyboard: F3, Esc and Tab were tested on
+  the host; on the board, only keys typed over SWD.
+- `FONT`, `USBDISK`, `POWEROFF`, `REBOOT`, `BOOTSEL` and `EXIT` in the
+  DOS flavour on the board; they are the UNIX flavour's commands.
+- The UNIX flavour on the board after the refactor: its host tests pass
+  unchanged, but it was not run there.
+- One name in the test card's root shows as blank in both flavours; it
+  is not `Icon\r`, and was not identified. `ls` printed it the same way
+  before M9.
+- A card formatted by another tool for VOL's label and serial number:
+  only the test card (formatted on a Mac) and FatFs's own images.
+
 ## M8 — the rest of v1 (branch `m8-rest`, 2026-10-14)
 
 **Done.** The twelve commands are built, checked on the host, run by

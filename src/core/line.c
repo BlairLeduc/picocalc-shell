@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "files.h"
+#include "flavour.h"
 #include "history.h"
 #include "keycodes.h"
 #include "path.h"
@@ -55,8 +56,10 @@ static void redraw(shell_t *sh, size_t from) {
 
 /* The prompt and the line again, on a new row, after a listing. */
 static void reprompt(shell_t *sh) {
+    static char prompt[SHELL_PROMPT_MAX + 1];
     line_t *l = &sh->line;
-    out_printf(&sh->con, "%s>", sh->cwd);
+    flavour_prompt(sh, prompt, sizeof prompt);
+    out_puts(&sh->con, prompt);
     out_write(&sh->con, l->text, l->len);
     l->cur = l->prompt + l->len;
     l->shown = l->len;
@@ -195,21 +198,31 @@ static void offer_commands(shell_t *sh, const char *prefix, size_t n) {
         if (has_prefix(name, prefix, n)) offer(name, strlen(name), false);
     /* An empty entry is the current directory, as in run.c's search. */
     for (const char *path = vars_get("PATH", 4); path;) {
-        const char *colon = strchr(path, ':');
+        const char *colon = strchr(path, FLAVOUR_PATH_SEP);
         size_t len = colon ? (size_t)(colon - path) : strlen(path);
         char entry[SHELL_PATH_MAX + 1];
         if (len <= SHELL_PATH_MAX) {
             memcpy(entry, path, len);
             entry[len] = '\0';
             if (len == 0) strcpy(entry, ".");
-            if (path_resolve(s_dir, sh->cwd, entry)) offer_dir(s_dir, prefix, n, true);
+            if (flavour_resolve(s_dir, sh->cwd, entry)) offer_dir(s_dir, prefix, n, true);
         }
         path = colon ? colon + 1 : NULL;
     }
 }
 
+/* What needs a '\' before it; DOS has no escapes. */
 static bool special(char c) {
-    return strchr(" \t'\"\\;&|<>#$*?[", c) != NULL;
+    return !SHELL_DOS && strchr(" \t'\"\\;&|<>#$*?[", c) != NULL;
+}
+
+/* After a directory's name: DOS's separator, or UNIX's. */
+static const char k_sep[] = { SHELL_DOS ? '\\' : '/', '\0' };
+
+/* Whether c ends a directory in a path being completed: in DOS, '\',
+ * '/' and the ':' of C:. */
+static bool is_sep(char c) {
+    return c == '/' || (SHELL_DOS && (c == '\\' || c == ':'));
 }
 
 /* Put name[from, to) in at the cursor, escaped. */
@@ -240,7 +253,7 @@ static void list(shell_t *sh) {
         for (unsigned i = r; i < s_count; i += rows) {
             out_puts(&sh->con, ent(i));
             size_t w = strlen(ent(i));
-            if (s_ents[i].dir) out_puts(&sh->con, "/"), w++;
+            if (s_ents[i].dir) out_puts(&sh->con, k_sep), w++;
             if (i + rows < s_count)
                 for (; w < colw; w++) out_puts(&sh->con, " ");
         }
@@ -258,7 +271,7 @@ static void complete(shell_t *sh) {
     /* The word before the cursor, and whether it names a command. */
     size_t start = l->pos;
     while (start > 0 && !(word_break(l->text[start - 1]) &&
-                          (start < 2 || l->text[start - 2] != '\\')))
+                          (SHELL_DOS || start < 2 || l->text[start - 2] != '\\')))
         start--;
     size_t before = start;
     while (before > 0 && (l->text[before - 1] == ' ' || l->text[before - 1] == '\t')) before--;
@@ -266,10 +279,10 @@ static void complete(shell_t *sh) {
 
     size_t n = 0, base = 0, raw_base = start;
     for (size_t i = start; i < l->pos; i++) {
-        if (l->text[i] == '\\' && i + 1 < l->pos) i++;
+        if (!SHELL_DOS && l->text[i] == '\\' && i + 1 < l->pos) i++;
         else if (l->text[i] == '\'' || l->text[i] == '"') continue;   /* quotes are not completed */
         s_word[n++] = l->text[i];
-        if (l->text[i] == '/') {
+        if (is_sep(l->text[i])) {
             base = n;
             raw_base = i + 1;
         }
@@ -283,7 +296,7 @@ static void complete(shell_t *sh) {
     } else {
         char keep = s_word[base];
         s_word[base] = '\0';
-        bool ok = path_resolve(s_dir, sh->cwd, base ? s_word : ".");
+        bool ok = flavour_resolve(s_dir, sh->cwd, base ? s_word : ".");
         s_word[base] = keep;
         if (ok) offer_dir(s_dir, s_word + base, n - base, false);
     }
@@ -307,7 +320,7 @@ static void complete(shell_t *sh) {
     /* The base as typed goes, and comes back as the card spells it. */
     erase(sh, raw_base, l->pos - raw_base);
     insert_escaped(sh, ent(0), 0, common);
-    if (s_count == 1) insert(sh, s_ents[0].dir ? "/" : " ", 1);
+    if (s_count == 1) insert(sh, s_ents[0].dir ? k_sep : " ", 1);
 }
 
 /* ---- keys ------------------------------------------------------------- */
@@ -366,6 +379,19 @@ bool line_key(shell_t *sh, int key) {
         break;
     case KEY_TAB:
         complete(sh);
+        break;
+    case KEY_F3:   /* DOS: the rest of the line before, from the cursor's column */
+        if (SHELL_DOS && history_count() > 0) {
+            const char *last = history_get(history_count() - 1u);
+            size_t n = strlen(last);
+            if (n > l->len) {
+                l->pos = l->len;
+                insert(sh, last + l->len, n - l->len);
+            }
+        }
+        break;
+    case 0x1B:   /* DOS: Esc drops what is typed */
+        if (SHELL_DOS) erase(sh, 0, l->len);
         break;
     default:
         if (key >= 0x20 && key < 0x7F) {

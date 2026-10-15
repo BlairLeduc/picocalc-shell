@@ -3,7 +3,8 @@
 The shell is a small UNIX-like command line for the ClockworkPi PicoCalc
 with an RP2350 board. From it you manage the files on the SD card, edit
 text files in vi, and run programs by name. This guide covers every
-command and the command line itself. To install the shell, see the
+command and the command line itself. Section 9 covers the DOS flavour,
+a second build with DOS's commands. To install the shell, see the
 [README](../README.md).
 
 ## Contents
@@ -16,6 +17,7 @@ command and the command line itself. To install the shell, see the
 6. [vi](#6-vi)
 7. [The card](#7-the-card)
 8. [Messages and limits](#8-messages-and-limits)
+9. [The DOS flavour](#9-the-dos-flavour)
 
 ## 1. Getting started
 
@@ -577,3 +579,207 @@ Limits:
 | A file in vi | 64 KB |
 | Scripts within scripts | 3 deep |
 | A path | 255 characters |
+
+## 9. The DOS flavour
+
+The shell also comes in a second flavour, for anyone who knows DOS
+better than UNIX. It manages the same card and runs the same programs,
+but its commands are DOS's: `DIR`, `COPY`, `DEL`, `CD`. It has its own
+`BOOT2350.UF2`. To use it, copy that file to the card's root in place of
+the UNIX one; to go back, copy the UNIX one there again. Neither flavour
+installs the other. In place of vi it has EDIT, an editor like the
+one DOS had (below). In 40 columns it uses IBM's PC font, as DOS
+showed it; in 64 columns, and in EDIT, it uses the same narrow font as
+the UNIX flavour.
+
+### The prompt and paths
+
+The card is drive `C:`, and the prompt is the drive and directory
+followed by `>`:
+
+```
+C:\HOME>DIR /B
+TODO.TXT
+NOTES
+C:\HOME>CD ..
+C:\>
+```
+
+- Paths use `\`: `C:\ORIC\KEYMAPS`. `/` works as well, except at the
+  start of a word for a command that takes switches, where `/W` is a
+  switch, as in DOS.
+- Commands and switches can be typed in either case: `dir /w` is `DIR /W`.
+- `CD..`, `CD\` and `DIR/W` work with no space, as in DOS.
+- Put a name with spaces in quotes: `TYPE "my notes.txt"`.
+- The shell starts in `C:\HOME` if the card has one, and otherwise in
+  `C:\`.
+
+### Wildcards
+
+`*` stands for any characters and `?` for one, before or after the
+name's last dot: `*.TXT` is every name ending `.TXT`, `*.*` is every
+name, `*.` is every name with no extension, and `REPORT?.TXT` matches
+`REPORT.TXT` and `REPORT1.TXT`. Wildcards leave out hidden and system
+files; give the name in full to reach one. `DIR NAME` lists `NAME.*`.
+
+### Commands
+
+| Command | Does |
+|---|---|
+| `DIR [path] [/W] [/P] [/S] [/A] [/B]` | lists files: `/W` wide, `/P` a screen at a time, `/S` in every directory below, `/A` hidden files too, `/B` names only |
+| `CD [path]`, `CHDIR` | changes directory; with none, shows the current one |
+| `MD path`, `MKDIR` | makes a directory |
+| `RD path`, `RMDIR` | removes an empty directory |
+| `COPY source [destination]` | copies files: `COPY A.TXT B.TXT`, `COPY *.TXT \BACKUP`, `COPY *.TXT *.BAK` |
+| `XCOPY source [destination] [/S]` | copies files and, with `/S`, every directory below |
+| `DEL path`, `ERASE` | deletes files. `DEL *.*` asks first; `/P` asks for each. **There is no undo** |
+| `DELTREE [/Y] path...` | deletes a directory and everything in it, after asking (not with `/Y`) |
+| `REN path name`, `RENAME` | renames files: `REN *.TXT *.OLD` |
+| `MOVE source... destination` | moves files into a directory, or renames a file or directory |
+| `TYPE file` | shows a text file |
+| `MORE < file`, `command \| MORE` | shows text a screen at a time |
+| `FIND [/V] [/C] [/N] [/I] "text" [file...]` | lines that contain the text: `/V` those that do not, `/C` how many, `/N` with numbers, `/I` in either case |
+| `ATTRIB [+R\|-R] [+A\|-A] [+S\|-S] [+H\|-H] [path]` | shows or changes a file's attributes: read-only, archive, system, hidden |
+| `SET [name=[value]]` | lists the variables, sets one, or with nothing after `=`, clears it. Use one as `%NAME%` |
+| `PATH [dir;dir...]` | shows or sets where programs are found; `PATH ;` clears it |
+| `PROMPT [text]` | sets the prompt: `$P` the path, `$G` `>`, `$_` a new line, `$N` the drive. `PROMPT` alone puts back `$P$G` |
+| `ECHO [ON\|OFF\|message]` | prints a message; `ECHO.` prints a blank line; `ECHO OFF` hides the prompt |
+| `PAUSE` | waits for a key |
+| `EDIT [file]` | edits a text file (below) |
+| `CALL`, `FOR`, `GOTO`, `IF`, `REM`, `SHIFT` | for batch files (below); `FOR` and `IF` work at the prompt too |
+| `CLS` | clears the screen |
+| `VER`, `VOL`, `MEM` | the shell's version; the card's label and serial number; the memory in use and free |
+| `HELP [command]` | lists the commands, or explains one |
+| `EXIT` | UF2 Loader's own menu, as `menu` in the UNIX flavour |
+
+The PicoCalc's own commands keep their names in this flavour: `BATTERY`,
+`BACKLIGHT`, `PHOSPHOR`, `FONT`, `INFO`, `USBDISK`, `POWEROFF`, `REBOOT`
+and `BOOTSEL` (section 4). There is no `DATE` or `TIME`: the PicoCalc has
+no clock.
+
+Output can go to a file with `>` or `>>`, or be thrown away with `> NUL`.
+A command can read a file with `<`, and `|` joins commands:
+`DIR /B | FIND "TXT"`.
+
+### Programs
+
+Type a program's name to run it, as in the UNIX flavour: `PICO-ATOM`
+runs `PICO-ATOM.UF2`. The shell looks in the current directory first,
+then in each directory of `PATH`, which starts as `C:\PICO2-APPS`. A
+batch file of the same name, `PICO-ATOM.BAT`, anywhere it looks, runs
+in its place.
+
+### Batch files
+
+A batch file is a text file of commands, one to a line, whose name ends
+`.BAT`. Type its name, with or without `.BAT`, to run it; the shell
+looks for it where it looks for programs.
+
+```
+@ECHO OFF
+REM BACKUP.BAT: copy the text files given, or say how
+IF "%1"=="" GOTO USAGE
+:NEXT
+IF "%1"=="" GOTO END
+COPY %1 \BACKUP
+SHIFT
+GOTO NEXT
+:USAGE
+ECHO Usage: BACKUP file...
+:END
+```
+
+| In a batch file | Does |
+|---|---|
+| `%0` to `%9` | the name it was run by, and the words after it. Words are split at blanks, commas and semicolons; quotes are kept |
+| `SHIFT` | moves the words down one: `%2` becomes `%1`, and a word past `%9` comes in |
+| `:LABEL` and `GOTO LABEL` | carries on from the line after the label. `Label not found` ends the batch file |
+| `IF [NOT] EXIST name command` | runs the command if the file or directory is there; with a wildcard, if any file matches |
+| `IF [NOT] ERRORLEVEL n command` | runs it if the last command's status is `n` or more. Every command sets it: 0 if it worked, 1 or more if not |
+| `IF [NOT] a==b command` | runs it if the two are the same, in the same case. Put both in quotes, `"%1"==""`, in case one is empty |
+| `FOR %%X IN (set) DO command` | runs the command once for each word of the set, with `%%X` replaced by it; a wildcard in the set is each file it matches. At the prompt, write `%X` |
+| `CALL name [words]` | runs another batch file and comes back. Without `CALL`, the other one takes this one's place, and this one does not go on |
+| `REM text` | a comment |
+| `ECHO OFF`, `@` | `ECHO OFF` stops the shell showing each line before running it; `@` at a line's start hides that line. At the end of the batch file, ECHO is as it was at the prompt |
+| `PAUSE` | waits for a key |
+
+Break, Esc or Ctrl-C stops a batch file, even one that loops for ever.
+`%NAME%` is a variable, as at the prompt. Lines can be up to 255
+characters long, and batch files can `CALL` one another three deep. A
+batch file's output cannot be redirected or piped as `NAME > FILE`, but
+`CALL NAME > FILE` works.
+
+`C:\AUTOEXEC.BAT`, if the card has one, runs each time the shell starts,
+before the first prompt: it is the place for `PATH`, `PROMPT` and `SET`.
+A program run from it would run at every start, so keep that to a
+program you can leave; if the shell can no longer be reached, take the
+card out and edit the file on a computer.
+
+### EDIT
+
+`EDIT NAME.TXT` opens a file to edit, or a new one by that name; `EDIT`
+alone starts an untitled one. EDIT switches to the 64-column font while
+it runs and back when it ends. The top row is the menu bar, the next the
+file's name, and the bottom row says `F1=Help` and where the cursor is.
+
+**Menus.** Tap Alt on its own to open the File menu, or hold Alt and
+press a menu's letter: Alt+F, Alt+E, Alt+S, Alt+O, Alt+H. In a menu,
+Left and Right go to the next menu, Up and Down choose, and Enter or an
+item's highlighted letter carries it out. Esc closes the menu.
+
+| Menu | Items |
+|---|---|
+| File | New, Open, Save, Save As, Exit |
+| Edit | Cut, Copy, Paste, Clear |
+| Search | Find, Repeat Last Find, Change (every match, at once) |
+| Options | Display: white on blue, or your phosphor on black |
+| Help | Keys: this table, on the screen |
+
+**Keys.** The PicoCalc's keyboard cannot send Shift with the arrows, so
+Alt does what Shift did in DOS's EDIT:
+
+| Key | Does |
+|---|---|
+| Arrows | move |
+| Ctrl+Left, Ctrl+Right | a word left or right |
+| Shift+Tab, Shift+Del | Home and End: the start and end of the line |
+| Ctrl+Shift+Tab, Ctrl+Shift+Del | the start and end of the file |
+| Shift+Up, Shift+Down | a page up or down |
+| Alt with the arrows | select |
+| Ctrl+X, Ctrl+C, Ctrl+V | cut, copy, paste |
+| Del | clears the selection, or the letter under the cursor |
+| Ctrl+Y | cuts the line |
+| Alt+I | Insert: switches between inserting and typing over (`OVR`) |
+| F1 | the keys |
+| F3 | finds the same text again |
+| Esc | closes a menu or a box |
+| Brk (Shift+Esc) | File, Exit |
+
+Answer a question by pressing a button's red letter (`Y`, `N`, `C`), or
+Enter for the first button; Esc cancels. Typing over a selection
+replaces it. The clipboard holds 8 KB. Find
+and Change match the text as typed, in either case. A box that asks for
+text offers what was typed last: type to replace it, or Backspace to
+change it.
+
+**Saving.** Save writes the file through `NAME.TXT.new`, as vi does, so a
+cut in the power leaves the old file or the new one. Exit and New ask
+before they lose a change. EDIT keeps the file's line endings, `CR LF`
+or `LF`; a new file gets `LF`. A file larger than 64 KB is not opened.
+A read-only file opens, but must be saved under another name.
+
+### Keys at the prompt
+
+The keys of section 2 work here too, and as in DOS:
+
+| Key | Does |
+|---|---|
+| F3 | types the rest of the last line from where the cursor is |
+| Esc | clears the line |
+| Tab | completes a command or a path, with `\` after a directory |
+
+### Messages
+
+Errors are DOS's: `Bad command or file name`, `File not found - X.TXT`,
+`Access denied`, `Invalid directory`, `Required parameter missing`,
+`Invalid switch - /X`.

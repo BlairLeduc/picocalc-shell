@@ -1,8 +1,9 @@
 # PicoCalc Shell — design
 
-Status: **Draft 7, 2026-10-14.** Feasibility study and first design. M0
+Status: **Draft 9, 2026-10-14.** Feasibility study and first design. M0
 (the skeleton), M1 (files), M2 (run), M3 (vi), M4 (comfort), M6 (USB
-speed) and M8 (the rest of v1) are done ([milestones.md](milestones.md)). The commands are explained for users
+speed), M8 (the rest of v1) and M9 (the DOS flavour) are done
+([milestones.md](milestones.md)); M5 is still to do. The commands are explained for users
 in [user-guide.md](user-guide.md).
 
 The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
@@ -28,6 +29,9 @@ questions are open; the design is ready for M0.
 | 2026-10-12 | Variables come with M4. | 4.4, 10 |
 | 2026-10-12 | `include/picocalc_shell.h` is offered under the MIT licence as well as the GPL-3.0. | 9 |
 | 2026-10-13 | A patched stage3 that starts the shell at power-on, and the last program with Up/F1/F5 held, is an optional milestone (M7). Until it is installed, the stock loader's behaviour above stands. | 3.4, 10 |
+| 2026-10-14 | A second flavour, built from the same tree, feels like DOS and has an EDIT modelled on MS-DOS 5's, in place of vi. It is a separate `BOOT2350.UF2`; the user copies the one they want to the card, and neither flavour installs the other. The card is `C:`. EDIT covers the core look and keys, not all of MS-DOS 5's. It is never called MS-DOS. | 4.7, 10 |
+| 2026-10-14 | The DOS flavour's 40-column font is IBM's PC BIOS 8x8, from VileR's Ultimate Oldschool PC Font Pack (CC BY-SA 4.0), drawn in the 8x10 cell so the grid stays 40 x 32. The UNIX flavour keeps the owner's VT100-like font, and both keep the owner's 5x10 for 64 columns. This narrows the 2026-10-12 decision on fonts for the DOS flavour only. | 4.1, 4.7 |
+| 2026-10-14 | EDIT selects with Alt and the arrows, and cuts, copies and pastes with Ctrl+X, Ctrl+C and Ctrl+V: the keyboard cannot send Shift with the arrows, and Shift+Del is End (HW §6.3). | 4.7 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -379,16 +383,19 @@ Key codes come from the starter's `keyboard.h`, checked against HW §6.2.
 
 Keys come from the southbridge FIFO. In the development build, UART1
 mirrors the screen and its received bytes are typed as keys (EL §13.1,
-§13.2), so a scripted run needs nobody at the keyboard. Two bytes are not
-keys: FS (`0x1C`) dumps the grid as text, and GS (`0x1D`) logs the start
-time and the counters (`tools/uart-screen.sh`). The mirror writes to the
+§13.2), so a scripted run needs nobody at the keyboard. Three bytes are
+not keys: FS (`0x1C`) dumps the grid as text, GS (`0x1D`) logs the start
+time and the counters (`tools/uart-screen.sh`), and RS (`0x1E`) starts or
+stops logging each key event as `key <state> <code>`, as the southbridge
+sent it (*from M9*, to capture chords, HW §6.3). The mirror writes to the
 UART as the output happens, so a long output in the development build
 runs at 115,200 baud; measure display speed in the release build.
 
 ### 4.2 Filesystem
 
 - **FatFs R0.15**, with the emulators' `ffconf.h` (`src/fatfs/ffconf.h`)
-  plus `FF_USE_CHMOD` and `FF_FS_LOCK`, so a file open twice, or removed
+  plus `FF_USE_CHMOD` and `FF_FS_LOCK` (and, *from M9*, `FF_USE_LABEL`, for
+  DOS's `VOL` and `DIR`), so a file open twice, or removed
   while open, is refused rather than corrupted. FAT12, FAT16 and FAT32 are
   all supported; exFAT stays off. The host build adds `FF_USE_MKFS` to
   format its test images.
@@ -729,6 +736,330 @@ Its scope is set by the files it is for, which are small text files:
   The cursor is the terminal's underline in every mode; Pico Logo's block
   cursor for normal mode is not there.
 
+### 4.7 The DOS flavour
+
+*Settled 2026-10-14:* many PicoCalc users know DOS, not UNIX. A second
+flavour, chosen at build time with `-DPICO_SHELL_FLAVOUR=dos` (`unix` is
+the default), gives them a command line that feels like DOS and an EDIT
+modelled on MS-DOS 5's. It is never called MS-DOS, which is Microsoft's
+mark; it is "the DOS flavour" of shell. Each flavour is its own
+`BOOT2350.UF2`, and the release ships both. The user copies the one they
+want to the card's root; neither flavour installs the other.
+
+**What is shared.** Everything below the command language: FatFs and the
+card, `files.c` (with safe saves, EL §8.6), running programs (`run.c`,
+`uf2.c`, `loader.c`), the terminal, the line editor and history, pipes,
+`text.c`, `system.c` and `usbdisk`. Programs run by name from
+`/pico2-apps/`, as in §4.3.
+
+**What differs** (the flavour's own files in `src/core/`):
+
+- **The card is `C:`.** The prompt is `PROMPT`'s, `$P$G` by default, so
+  `C:\HOME>`. Paths use `\`, and `/` is read as `\` too; a leading
+  `C:` is accepted and dropped. `$P` writes names as FAT stores them.
+- **The parser.** Command names and switches are not case-sensitive.
+  Switches are `/X`, and may follow a name with no space (`DIR/W`).
+  Variables are `%NAME%`. `\` is a path separator, not an escape. `|`,
+  `>`, `>>` and `<` work as in the UNIX flavour. Wildcards are expanded
+  by each command, with DOS's rules (`*.*` matches every name, `*.` names
+  with no extension), as DOS did, not by the parser.
+- **The commands.** `DIR [/W /P /S /A /B]`, `CD`/`CHDIR`, `MD`/`MKDIR`,
+  `RD`/`RMDIR`, `COPY`, `XCOPY [/S]`, `DEL`/`ERASE`, `DELTREE`,
+  `REN`/`RENAME`, `MOVE`, `TYPE`, `MORE`, `FIND [/V /N /C /I]`, `ATTRIB`,
+  `CLS`, `VER`, `VOL`, `MEM`, `SET`, `PATH`, `PROMPT`, `ECHO`, `PAUSE`,
+  `HELP`, `EDIT`, `EXIT` (back to the loader's menu, as `menu`). The
+  PicoCalc's own commands keep their names: `battery`, `backlight`,
+  `phosphor`, `font`, `info`, `usbdisk`, `poweroff`, `reboot`,
+  `bootsel`. There is no `DATE` or `TIME`: the PicoCalc has no clock.
+- **History.** Up and Down as now; F3 repeats the last line, as DOSKEY
+  and DOS's own F3 did.
+- **Batch files.** `NAME.BAT` runs by name, ahead of a program of the
+  same name. `%0`–`%9`, `SHIFT`, `GOTO :label`, `IF [NOT] EXIST`,
+  `IF [NOT] ERRORLEVEL n`, `IF [NOT] a==b`, `CALL`, `REM`, `ECHO OFF` and
+  `@`, `PAUSE`, and `FOR %%x IN (set) DO command`. `C:\AUTOEXEC.BAT` runs
+  at start, in place of `/etc/profile`.
+- **No vi.** EDIT takes its place.
+
+**EDIT.** The core of MS-DOS 5's EDIT, not all of it. It uses the buffer,
+undo and pattern code under vi (`editor_lines.c`, `editor_undo.c`,
+`editor_pattern.c`), with its own key layer and screen, and keeps vi's
+rules for size, CR LF and safe save (§4.6).
+
+- **The screen.** White on blue; a menu bar on the top row, the file's
+  name in the title row, the status row at the foot (`F1=Help`, line and
+  column). Dialogs are boxes drawn with the font's line-drawing glyphs
+  (§4.1). EDIT switches to the 64-column font while it runs, and back on
+  leaving.
+- **Menus.** Tap Alt for the menu bar, or Alt and the letter: File (New,
+  Open, Save, Save As, Exit), Edit (Cut, Copy, Paste, Clear), Search
+  (Find, Repeat Last Find, Change), Options (Display, the phosphor), Help
+  (the keys, one screen). No Print and no mouse.
+- **Keys.** The arrows, Home, End and the page keys; Ctrl with the arrows
+  for words; Insert toggles overtype; *(changed 2026-10-14, after the
+  chords were measured, HW §6.3)* Alt with the arrows selects, since
+  the keyboard swallows Shift with Left and Right and turns Shift with
+  Up and Down into the page keys; Ctrl+X cuts, Ctrl+C copies, Ctrl+V
+  pastes, since Shift+Del is End and Insert is only Shift+Enter or
+  Alt+I; Del clears; Ctrl+Y deletes the line; F3 finds again; Esc closes
+  a menu or a dialog. The clipboard is vi's 8 KB register.
+- **The chords were checked on the board** before the key layer was
+  fixed (HW §6.3): Alt with a letter arrives as the capital beside Alt's
+  events, Alt with an arrow as the arrow, and a tap of Alt as a press
+  and a release with no hold between.
+
+*As built at M9, step 1* (2026-10-14; `src/core/dos*.c`, `flavour.h`):
+
+- **How the flavours divide.** `flavour.h` is what a flavour gives the
+  rest: its builtins' table, the variables' defaults, the banner and
+  startup, the prompt's text, running a typed line, resolving a path as
+  typed, and its words for a missing command or a file it cannot use.
+  `unix.c` holds the UNIX flavour's (the parser, expansion, `sh` and
+  `/etc/profile`, moved out of `shell.c` unchanged); `dos.c` the DOS
+  flavour's. `shell.c` keeps what both share: running one command with
+  its redirections (`shell_command`), a pipeline (`shell_pipeline`),
+  the prompt and `font` and `usbdisk`. `files.c` resolves every operand
+  through the flavour, so a shared command reads `C:\X` in the DOS
+  build, and says its failures in the flavour's words. CMake builds the
+  core once per flavour, with `SHELL_DOS` 0 or 1 for the few places that
+  differ by a character (Tab's separator, F3 and Esc, `help`'s last
+  lines, the builtins' case). The UNIX flavour's tests pass unchanged.
+- **Start.** The banner is `PicoCalc shell <version> (DOS)`. The shell
+  starts in `\HOME` if the card has it, spelled as the card has it, so
+  the prompt is `C:\HOME>`; otherwise in `C:\`. `AUTOEXEC.BAT` runs
+  after the banner (*from step 2*).
+- **The line.** `%NAME%` is replaced over the whole line before it is
+  parsed, at the prompt as well as in batch files (DOS 5 did it only in
+  batch files; the design asks for variables, so the prompt has them
+  too). Names are looked up in capitals, `SET` stores them so, and an
+  unset one is empty; `%%` is `%`, and any other `%` is itself. Then the
+  line is split at `|`, outside `"…"`; there is no `;`, `&&` or `||`, as
+  in DOS. `<`, `>` and `>>` take the next word, anywhere in a command,
+  and `> NUL` throws the output away (for a program or a command that
+  leaves the shell, which refuse a redirection, it is dropped: NUL
+  leaves no file behind). Words are split at blanks, and
+  `"…"` keeps blanks in one and is removed. A command's name ends at a
+  `/`, `\` or `.` when what comes before is a builtin, so `DIR/W`, `CD..`,
+  `CD\` and `ECHO.` work. ECHO, SET, PATH and PROMPT read what followed
+  the name as typed, so `ECHO a   b` keeps its spaces.
+- **`/` as a switch or a separator.** The commands that take switches
+  (DIR, COPY, XCOPY, DEL, DELTREE, FIND) read a word that starts with `/`
+  as switches, one or several (`/W/P`), in either case; an unknown one
+  is `Invalid switch - /X`. Every other `/` separates names, so
+  `CD /HOME` works, and so does `TYPE HOME/A.TXT`.
+- **Wildcards** (`dos_match`). A pattern with no `.` matches the whole
+  name; one with a `.` matches the parts before and after the name's last
+  `.` separately. `*` matches the rest of a part, `?` one character or
+  none at a part's end, without regard to case, against the long name
+  or the 8.3 one. So `*.*` is every name, `*.` names with no extension,
+  `*` every name. DIR adds `.*` to a pattern with no `.`, as DOS did:
+  `DIR A` lists `A.TXT` and `A.BAK`. A wildcard skips hidden and system
+  entries (§4.2's rule), and a name given whole finds itself. A
+  directory given whole is every file in it, for DIR, COPY, XCOPY and
+  DEL; REN, MOVE, ATTRIB and DELTREE take it as itself.
+- **The commands**, in DOS 5's words (`File not found`, `Access denied`,
+  `Invalid directory`, `Required parameter missing`, `Too many
+  parameters - X`, `Bad command or file name`):
+  - **DIR** prints the volume line and serial number (`f_getlabel`, so
+    `FF_USE_LABEL` is on), then the entries in the card's order, as DOS
+    did. With no clock (§4.2) there are no date and time columns: a name
+    that fits 8.3 is `NAME     EXT`, another is as it is. *(Changed
+    2026-10-14, at the owner's asking: it was 23 columns, and a long name
+    pushed the size off the line.)* `<DIR>` has its own column, 15, after
+    the name, as in DOS; a size, with a comma every three digits, ends at
+    column 39, short of the 40th, where the terminal wraps in the
+    40-column font. In the 64-column font the lines keep to 40 columns
+    too, so the sizes stay near their names. A name too long to leave
+    room puts either on the next line.
+    Then the count, the bytes, and the bytes free, their numbers ending
+    in the same column so `bytes` lines up (the count has 5 digits, as a
+    FAT directory holds at most 65,535 entries).
+    `/W` gives names 13 columns apart, `[DIR]` for directories; `/P`
+    waits at `Press any key to continue . . .` each screenful, only on
+    the screen, and Esc, Break or Ctrl-C there stops; `/S` lists each
+    directory below that has a match, with `Total files listed:`; `/A`
+    includes hidden and system entries; `/B` gives names alone, whole
+    paths with `/S`.
+  - **COPY** copies one file, every file a wildcard or a directory
+    names (each name said), into a directory, or under a wildcard name
+    (`COPY *.TXT *.BAK`); then `n file(s) copied`. A file over itself is
+    `File cannot be copied onto itself`. DOS's joining of several files
+    into one, and `+`, are not there: `Cannot copy several files into
+    one file`. Every copy goes through `files_copy`, `cp`'s, so through
+    `name.new`. `/V` is accepted and changes nothing.
+  - **XCOPY** says `Reading source file(s)...`, names each file, and
+    ends `n File(s) copied`. A directory, a wildcard or `/S` copies into
+    a directory, made if need be; one file without them is copied to
+    the name given. `/S` walks the tree (`files_walk`, cp -r's stack),
+    makes each directory as a file is copied into it, so empty ones are
+    left out, as without `/E` in DOS, and skips hidden entries. Copying
+    a tree into itself is `Cannot perform a cyclic copy`. Its status is
+    DOS's 4 for an error.
+  - **DEL** (and ERASE) deletes the files a name, a wildcard or a
+    directory names. `*.*`, or a directory, asks `All files in directory
+    will be deleted! Are you sure (Y/N)?`; `/P` asks for each. The answer
+    is one key. A read-only file is `Access denied`.
+  - **DELTREE** asks `Delete directory "X" and all its subdirectories?
+    [yn]` (or of a file), unless `/Y`, says `Deleting X...`, and removes
+    everything below, whatever its attributes. It refuses the root and
+    the current directory or one above it.
+  - **REN** (and RENAME) renames by a mask, `REN *.TXT *.BAK`: each part
+    of the new name, before and after its last `.`, takes `?` and `*`
+    from the old one. The new name has no path (`Invalid parameter`).
+    A name in the way is `Duplicate file name or file not found`; a
+    change of case is allowed.
+  - **MOVE**, as DOS 6's, moves files (several, a wildcard, or a list
+    with commas) into a directory, or renames one file or directory.
+    Each line says `C:\FROM => C:\TO [ok]` or why not. A file replaces a
+    file; nothing replaces a directory.
+  - **CD** alone, or `CD C:`, prints the current directory; **MD** and
+    **RD** take one name; RD refuses the current directory or one above
+    it (`Attempt to remove current directory`).
+  - **TYPE** shows one file; **MORE** pages its input, or one file,
+    through the UNIX flavour's `more`; **FIND** finds text as it is, not
+    a pattern, with case unless `/I`; `/V`, `/N` (`[n]` before each line)
+    and `/C`; a `---------- NAME` line before each file's lines.
+  - **ATTRIB** shows `A  SHR     C:\PATH` for each file, hidden ones
+    included, or sets and clears `+R -R +A -A +S -S +H -H`.
+  - **SET**, **PATH** (in capitals, `;` between directories, `PATH ;`
+    clears) and **PROMPT** (`$P $G $L $B $Q $$ $N $_ $E $H $V`; `$T` and
+    `$D` give nothing, with no clock). With PROMPT cleared the prompt is
+    `C>`, DOS's own. **ECHO** prints the rest of the line as typed,
+    `ECHO.` a blank line, and `ECHO OFF` hides the prompt.
+  - **VER**, **VOL**, **MEM** (the port's static SRAM through
+    `shell_set_memory`, and the app partition's size as the largest
+    program), **CLS**, **PAUSE**, **HELP** (the shared `help`), **EXIT**
+    (`menu`), and the PicoCalc's own commands under their names, which
+    take their words in either case.
+- **Programs.** A name that is not a builtin runs `NAME.UF2` from the
+  current directory first, as DOS looked, then from each directory of
+  `PATH`; a name with a `\`, `/` or `:` is a path. Otherwise `Bad command
+  or file name`.
+- **At the prompt.** F3 puts in the rest of the last line from the
+  cursor's column, as DOS's F3 did; Esc drops the line. Tab completes
+  with `\` after a directory and puts nothing before a space, since DOS
+  has no escapes. Up and Down work as in the UNIX flavour; `history` is
+  not a command here. The history file is shared.
+
+*As built at M9, step 2* (2026-10-14; `src/core/dos_batch.c`):
+
+- **Levels.** A batch file runs a line at a time at the level below the
+  command that ran it, as `sh` does (§4.4), up to `SHELL_DEPTH - 1` (3)
+  deep. Each level has its file and reader, its parameters, its
+  expanded line and its FOR (a directory, its word and pattern, and a
+  line), 3,104 B; the four are 12,416 B. Buffers a function is done with
+  before anything it runs could need them again (IF's two words, the
+  echoed prompt, a path being searched) are file-scope statics, not on
+  the stack, and IF after IF is taken in a loop, not by recursion, so a
+  CALL level costs about 720 B of stack (`-fstack-usage`). `dos.c` keeps the parser's output per level, and
+  `dos_batch.c` everything above it: a line, typed or read, goes through
+  `dos_line`, which expands it, takes REM, IF and FOR from its start, and
+  hands the rest to the parser (`dos_commands`).
+- **Finding one.** A name that is not a builtin is looked for as
+  `NAME.BAT` in the current directory, then along `PATH`, before
+  `NAME.UF2` is looked for at all: a batch file anywhere on the search
+  beats a program of the same name, which is the design's rule rather
+  than DOS's per-directory order. `NAME.BAT` typed in full, and a path,
+  work too; another extension is never a batch file. A batch file in a
+  pipe or with a redirection is refused (`Cannot redirect a batch file;
+  CALL it`), since its lines have their own; `CALL NAME > FILE` runs it
+  under CALL's redirection.
+- **Parameters.** `%0` is the name as typed; `%1`… are the words after
+  it, split at blanks, `,`, `;` and `=` outside `"…"`, with the quotes
+  kept, as DOS kept them, so `IF "%1"==""` works. Up to
+  `SHELL_WORDS_MAX` are kept, and SHIFT brings those past `%9` in. They
+  are replaced in the same pass as `%NAME%` (`dos_expand`), so `%%`
+  becomes `%` first; at the prompt `%1` is left as it is, as in DOS.
+- **The line.** With ECHO ON, each line but a label is shown after a
+  blank line and the prompt, expanded, as DOS did; `@` at its start
+  hides it. Leaving a batch file for the prompt puts ECHO back as it was
+  there, so `@ECHO OFF` in `AUTOEXEC.BAT` does not hide the prompt.
+  A line over 255 characters is `Line too long`, and the next runs.
+  Break, Esc or Ctrl-C is looked for before each line and each turn of a
+  FOR (`shell_interrupted`), so a loop of commands that never look for
+  it still stops; the line ends with `^C` and status 130, as any stopped
+  line does. DOS's `Terminate batch job (Y/N)?` is not asked.
+- **IF** takes `NOT`, then `EXIST name` (a file or a directory, or with
+  a wildcard any file that matches), `ERRORLEVEL n` (status `n` or
+  more), or `a==b` (exactly, case included, quotes and all; blanks may
+  stand round `==`), then a command, which may be another IF or a FOR.
+  Every builtin sets the status (0, or 1 and more on failure), not only
+  programs as in DOS, since a program never comes back to report one; a
+  false IF, REM, an empty FOR and a label leave it as it was.
+- **FOR %x IN (set) DO command**: the set is split as parameters are;
+  a word with a wildcard is each file it matches, in the card's order,
+  hidden ones left out, each with the path typed before it
+  (`SUB\*.TXT` gives `SUB\A.TXT`). `%x` is one character, matched in
+  its case; in a batch file it is written `%%x`. FOR cannot be nested
+  in a line, as in DOS, though a CALLed file has its own. With ECHO ON
+  each command is shown, at the prompt too, as DOS did.
+- **GOTO** reads the file again from its start for `:label` (the label's
+  word, in either case); not found, it says `Label not found` and the
+  batch file ends. At the prompt it does nothing. **CALL** runs a batch
+  file at the level below and comes back, or anything else as if typed.
+  Without CALL, a batch file run from another takes its level, file and
+  parameters, so a file may run itself without limit, as in DOS; GOTO
+  and this both end a FOR running at that level.
+- **`AUTOEXEC.BAT`** at the card's root runs after the banner, at level
+  1, opened as `/etc/profile` is (`files_open_startup`, so a `.new` left
+  by a cut write is used). Missing, it is nothing.
+
+*As built at M9, step 3* (2026-10-14; `src/core/edit.c`,
+`editor_file.c`, `keys.c`):
+
+- **The font** *(decided 2026-10-14)*. In 40 columns the DOS flavour
+  draws IBM's PC BIOS 8x8 glyphs (`font-ibm-8x10.c`, made by
+  `tools/mkfont-ibm.py` from VileR's font pack, CC BY-SA 4.0,
+  THIRD-PARTY.md) in rows 1-8 of the 8x10 cell. The DEC line-drawing
+  glyphs EDIT's boxes use come from the same font where code page 437
+  has them, their lines carried to the cell's edges so they join;
+  `screen.c` picks the font by `SHELL_DOS`, so each flavour links only
+  its own. In 64 columns, and so in EDIT, both use the owner's 5x10:
+  IBM made no font that narrow.
+
+- **Chords.** `keys_event` reports chords only while EDIT asks
+  (`keys_report_chords`), so the prompt and vi are as they were: Alt with
+  a letter or an arrow is `KEYS_ALT` with the lower-case letter or the
+  arrow; a tap of Alt, pressed and let go with no key and no hold event
+  between, is `KEYS_ALT_TAP`; Ctrl with an arrow, Home or End is
+  `KEYS_CTRL` with it. Alt+I stays Insert. Alt+`,` and Alt+`.` (the
+  MCU's backlights) were expected to look like a tap and open the menu,
+  but on the owner's Pico 2 W they did not (HW §6.3). On the UART, US (`0x1F`) puts Alt on the
+  next byte, and US US is a tap; RS (`0x1E`) logs the key events (§4.1).
+- **The file.** vi's reading and writing moved to `editor_file.c`
+  unchanged, and both editors use it: the whole file in one buffer of
+  `VI_BUF_SIZE`, CR LF kept if every break is one, the last line break
+  kept, read-only from FAT's bit, saved through `name.new`. A new file
+  gets LF, as in vi. A failed Open leaves the text as it was. EDIT has
+  its own 64 KB buffer and 8 KB clipboard; the DOS build has no vi, so
+  nothing is held twice.
+- **Not used from vi:** the undo journal (no key in the design asks for
+  undo, as MS-DOS 5's EDIT had none) and the pattern matcher: Find and
+  Change match the text as typed, in either case, as EDIT did. Change
+  changes every match at once and says how many; EDIT's Find and Verify
+  is not there. `editor_lines.c` (the line memo and word moves) is
+  shared.
+- **The screen.** The 64-column font while EDIT runs, and back after if
+  it was 40. Row 0 is the menu bar, black on grey with each menu's
+  letter in white; row 1 the name, in capitals, centred in a line;
+  rows 2-30 the text, white on blue (`EDIT_TEXT_ROWS`); row 31 the
+  status, black on cyan: `F1=Help  Alt=Menu` or a message, `OVR` when
+  typing over, and `Line:n Col:n`. Boxes and menus use the DEC line
+  glyphs (`ESC ( 0`). The screen is built as cells and only the rows
+  that changed are sent, as in vi; the status row's last cell is erased,
+  not written, so the terminal never scrolls. Options, Display swaps the
+  colours for the phosphor on black, in reverse video. The bar's grey is
+  xterm's 248; the starter's 256-colour table had it nearly black, so
+  `term.c` now works colours 16-255 out by xterm's formula (§4.1).
+- **Menus and boxes.** A menu or a box draws over the text and takes
+  keys until it closes: menus with Left, Right, Up, Down, Enter, the
+  item's letter, Alt and a menu's letter, or Esc; a box asking for a
+  name or text offers the last one, replaced by the first letter typed;
+  a question takes its buttons' letters, drawn in red as in MS-DOS's
+  EDIT (underlined in the phosphor colours), Enter for the first, Esc to
+  cancel. Exit, New and Open ask to save a change first; Save As asks
+  before writing over another file. Brk is Exit; the end of input
+  leaves without saving, as vi does.
+
 ## 5. Architecture
 
 The emulators' split applies (EL §2.1):
@@ -776,6 +1107,12 @@ decide (§4.1).
   and shell), `src/fatfs/ffconf.h`, `include/picocalc_shell.h`,
   `test/host/`, `test/pico/` (board-only programs, such as `exit-test`),
   `tools/`, `docs/`, plus `references/` (read-only).
+- **Flavours** (*from M9*, §4.7). `-DPICO_SHELL_FLAVOUR=dos` builds the
+  DOS flavour's `BOOT2350.UF2`, in a directory of its own
+  (`tools/build.sh -DPICO_SHELL_FLAVOUR=dos build/pico-dos`); `unix` is
+  the default. The host build makes both cores, `shell_core` and
+  `shell_core_dos`, both host shells, `shell` and `shell-dos`, and
+  `test_dos` beside the UNIX flavour's tests.
 - **Targets:** one CMake tree with two targets, as in the emulators. The
   default is the firmware: `PICO_BOARD=pico2`, `no_flash`, with output named
   `BOOT2350.UF2`. `-DPICO_SHELL_HOST=ON` builds the core with the system
@@ -856,6 +1193,34 @@ variables, about 8 KB; and the rest of the new code. About 100 KB of the
 release 423,260 B, 17,000 B more than M4: TinyUSB's MSC buffer grew from
 512 B to 16 KB, and the multi-block transfers are about 1 KB of code.
 About 83 KB is left.
+
+**Measured at M9, step 1** (the same tools, 2026-10-14, release builds):
+the UNIX flavour 435,480 B, 2,964 B more than M8's 432,516 B (mostly the
+walk's own FatFs entry, two 321-byte prompt buffers, and `f_getlabel`); the DOS flavour 301,628 B, which has no vi (its 64 KB
+buffer, 16 KB journal, 8 KB register and four levels of UNIX parse) but
+its own four levels of expanded and parsed line, about 6 KB. EDIT is to
+come. The DOS commands' deepest call, COPY down into FatFs, is about
+3 KB of the 8 KB stack (`-fstack-usage`): each command keeps two paths
+on the stack.
+
+**Measured at M9, step 2** (the same tools, 2026-10-14, release builds,
+the linker's RAM figure): the DOS flavour 321,228 B, 19,600 B more than
+step 1's 301,628 B: 12,416 B for the batch files' four levels, about
+1.7 KB of buffers kept off the stack, the rest their code. The UNIX
+flavour is unchanged at 435,480 B. *Estimated from `-fstack-usage`:*
+the deepest stack, a typed line CALLing three levels down through IF
+and FOR to a COPY, is about 5.8 KB of the 8 KB: about 720 B a level
+and step 1's 3 KB for COPY.
+
+**Measured at M9, step 3** (the same tools, 2026-10-14, release builds,
+`__end__` from the link map): the DOS flavour 422,100 B, 100,872 B more
+than step 2's 321,228 B: EDIT's 64 KB buffer, 8 KB clipboard and two
+4 KB screens of cells (shown and built), its code and `editor_lines.c`.
+12,608 B less than the UNIX flavour, so it leaves a little more room.
+The UNIX flavour 434,708 B, 772 B less than step 2's, in code, after
+vi's file code moved to `editor_file.c`. EDIT keeps its large state static; its
+own frames are small, and it runs at the prompt's depth or a batch
+file's.
 
 **The stack** (*corrected at M3*). Core 0's stack starts at the top of
 scratch Y and may run down to `__StackLimit` at the bottom of scratch X:
@@ -977,3 +1342,21 @@ in [milestones.md](milestones.md).
   `poweroff` switches the PicoCalc off, `reboot` comes back to the
   shell with the history kept, and `bootsel` shows the RP2350's drive on
   a computer. Measure the RAM `help`'s text costs.
+- **M9 — The DOS flavour** (§4.7), in steps, each with host tests over
+  FAT16 and FAT32 images:
+  1. The build option, the parser, `C:` paths and the prompt, and the
+     commands, sharing `files.c` and `text.c` with the UNIX flavour.
+     *Built 2026-10-14* (§4.7, milestones.md).
+  2. Batch files and `AUTOEXEC.BAT`. *Built 2026-10-14* (§4.7,
+     milestones.md).
+  3. The Alt chords measured on a Plus 2 W and written in HW §6.3, then
+     EDIT. *Built 2026-10-14* (§4.7, milestones.md).
+
+  *Done 2026-10-14* (milestones.md). Both flavours build with
+  `tools/build.sh` and on the host, and the UNIX flavour's tests still
+  pass unchanged. Done when, on the board, the DOS
+  flavour copies, renames and deletes files, runs a program by name and
+  comes back, runs `AUTOEXEC.BAT`, and EDIT has changed
+  `/atom/pico-atom.cfg` and pico-atom has read it, as M3 did for vi.
+  Measure both flavours' RAM from the link map, and EDIT's opening time
+  for a 41 KB file.

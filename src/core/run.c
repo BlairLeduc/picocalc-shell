@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "files.h"
+#include "flavour.h"
 #include "path.h"
 #include "vars.h"
 
@@ -123,15 +124,24 @@ static int run_path(shell_t *sh, const char *name, const char *path, bool ram_on
     return 1;
 }
 
-/* `name` as a program: a path if it has a '/', otherwise name.uf2 in
- * the first directory of $PATH that has it, the directories separated
- * by ':'. False, with the error printed, if none. */
+/* `name.uf2` in the directory `dir`, as typed in $PATH: into s_path if
+ * it is there. */
+static bool in_dir(shell_t *sh, const char *dir, const char *file) {
+    static char abs[SHELL_PATH_MAX + 1];
+    return flavour_resolve(abs, sh->cwd, dir) && path_join(s_path, abs, file) &&
+           f_stat(s_path, &s_fno) == FR_OK && !(s_fno.fattrib & AM_DIR);
+}
+
+/* `name` as a program: a path if it has a '/' (in DOS, a '\' or a
+ * drive), otherwise name.uf2 in the first directory of $PATH that has
+ * it, the directories separated by ':' (DOS: ';', after the current
+ * directory, as DOS looked). False, with the error printed, if none. */
 static bool find(shell_t *sh, const char *name) {
-    static char file[SHELL_PATH_MAX + 1], dir[SHELL_PATH_MAX + 1], abs[SHELL_PATH_MAX + 1];
+    static char file[SHELL_PATH_MAX + 1], dir[SHELL_PATH_MAX + 1];
     size_t n = strlen(name);
     FRESULT r;
-    if (strchr(name, '/')) {
-        if (!path_resolve(s_path, sh->cwd, name)) {
+    if (flavour_is_path(name)) {
+        if (!flavour_resolve(s_path, sh->cwd, name)) {
             shell_error(sh, "%s: name too long\n", name);
             return false;
         }
@@ -144,24 +154,23 @@ static bool find(shell_t *sh, const char *name) {
     if (n + sizeof SHELL_PROGRAM_EXT <= sizeof file) {
         memcpy(file, name, n);
         memcpy(file + n, SHELL_PROGRAM_EXT, sizeof SHELL_PROGRAM_EXT);
+        if (SHELL_DOS && in_dir(sh, ".", file)) return true;
         /* An empty entry is the current directory, as in sh. */
         for (const char *p = vars_get("PATH", 4); p;) {
-            const char *colon = strchr(p, ':');
+            const char *colon = strchr(p, FLAVOUR_PATH_SEP);
             size_t len = colon ? (size_t)(colon - p) : strlen(p);
             if (len < sizeof dir) {
                 memcpy(dir, p, len);
                 dir[len] = '\0';
                 if (len == 0) strcpy(dir, ".");
-                if (path_resolve(abs, sh->cwd, dir) && path_join(s_path, abs, file) &&
-                    f_stat(s_path, &s_fno) == FR_OK && !(s_fno.fattrib & AM_DIR))
-                    return true;
+                if (in_dir(sh, dir, file)) return true;
             }
             p = colon ? colon + 1 : NULL;
         }
     }
     /* A name not found is "not found", whatever stopped the search, as
      * in sh. */
-    shell_error(sh, "%s: not found\n", name);
+    flavour_not_found(sh, name);
     return false;
 }
 

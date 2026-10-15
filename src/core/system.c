@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "files.h"
+#include "flavour.h"
 #include "term.h"
 
 static int usage(shell_t *sh, const char *text) {
@@ -23,12 +24,11 @@ int cmd_help(shell_t *sh, int argc, char **argv) {
     if (argc > 2) return usage(sh, "help [command]");
     const char *name;
     if (argc == 2) {
-        for (unsigned i = 0; (name = shell_builtin_at(i)) != NULL; i++) {
-            if (strcmp(name, argv[1]) == 0) {
-                out_printf(&sh->out, "usage: %s\n%s\n", shell_builtin_usage(i),
-                           shell_builtin_about(i));
-                return 0;
-            }
+        int i = shell_builtin_index(argv[1]);
+        if (i >= 0) {
+            out_printf(&sh->out, "usage: %s\n%s\n", shell_builtin_usage((unsigned)i),
+                       shell_builtin_about((unsigned)i));
+            return 0;
         }
         shell_error(sh, "help: %s: not a builtin; a program, if one has that name\n", argv[1]);
         return 1;
@@ -50,8 +50,10 @@ int cmd_help(shell_t *sh, int argc, char **argv) {
             out_printf(&sh->out, "%-*s", (int)width, name);
         }
     }
-    out_puts(&sh->out, "\n`help name` for one. Any other name runs\n"
-                       "a program from $PATH, as `name.uf2`.\n");
+    out_puts(&sh->out, SHELL_DOS ? "\nHELP name for one. Any other name runs\n"
+                                   "a program from PATH, as NAME.UF2.\n"
+                                 : "\n`help name` for one. Any other name runs\n"
+                                   "a program from $PATH, as `name.uf2`.\n");
     return 0;
 }
 

@@ -70,7 +70,22 @@ not in the tree: the firmware links the Pico SDK's copy.
 ## The fonts — the owner's
 
 `src/core/font.h`, `font-8x10.c` and `font-5x10.c` are copied unchanged from
-the owner's `references/fonts/` (design.md §4.1).
+the owner's `references/fonts/` (design.md §4.1); `font.h` adds only the
+declaration of the DOS flavour's font, below.
+
+## The DOS flavour's font — VileR, CC BY-SA 4.0
+
+`src/core/font-ibm-8x10.c` is made by `tools/mkfont-ibm.py` from
+`Bm437_IBM_BIOS.otb` in **The Ultimate Oldschool PC Font Pack** v2.2,
+(c) 2016-2020 VileR, https://int10h.org/oldschool-pc-fonts/, licensed under
+the Creative Commons Attribution-ShareAlike 4.0 International License
+(https://creativecommons.org/licenses/by-sa/4.0/). Changes: the IBM PC BIOS
+8x8 glyphs are drawn in rows 1-8 of an 8x10 cell, the box-drawing glyphs
+carried into rows 0 and 9, and arranged as the terminal's 128 glyphs, with
+the owner's glyphs where code page 437 has none (design.md §4.7). This
+adaptation is licensed under CC BY-SA 4.0 as well, which Creative Commons
+declares one-way compatible with the GPL-3.0 the rest is under. Only the
+DOS flavour's firmware contains it.
 
 ## FatFs — ChaN
 

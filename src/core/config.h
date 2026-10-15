@@ -23,6 +23,7 @@
  * parser makes of it (parse.h): words across all its commands, and
  * commands joined by ;, && and ||. */
 #define SHELL_LINE_MAX     255u
+#define SHELL_PROMPT_MAX   320u   /* the prompt as shown: a whole path, or DOS's PROMPT */
 #define SHELL_WORDS_MAX    32u
 #define SHELL_CMDS_MAX     8u
 
@@ -97,6 +98,13 @@
 #define VI_TEXT_ROWS       31
 #define VI_TAB_STOP        8u     /* a tab's width on screen */
 #define VI_SHIFT_WIDTH     4u     /* the spaces > and < add and take */
+
+/* EDIT (design.md §4.7, edit.c): the DOS flavour's editor, in the
+ * 64-column font. The buffer and the clipboard are vi's sizes; the
+ * screen is a menu bar, a title row, EDIT_TEXT_ROWS of text and a status
+ * row. A Find or Change string holds up to EDIT_FIND_MAX bytes. */
+#define EDIT_TEXT_ROWS     29
+#define EDIT_FIND_MAX      48u
 
 /* The vi key layer's own capacities, under Pico Logo's names (its
  * core/limits.h explains each). Its 40-column footer fits this status
