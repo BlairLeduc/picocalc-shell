@@ -134,18 +134,19 @@ by name, and the shell came back by F1 held at power-on; `@` at the
 start of a line in a batch file hid that line; and `C:\AUTOEXEC.BAT`
 ran at a real power-on, its `@` line hidden. (A first `autoexec.bat`
 that did not run at start was in `C:\HOME`, not the root, so the shell
-was right not to run it: design.md §4.7 names only `C:\AUTOEXEC.BAT`.) A lowercase
+was right not to run it: design.md §4.7 names only `C:\AUTOEXEC.BAT`.)
+Later the same day, also on the Pico 2 W: Alt+`,` and Alt+`.` (the
+backlights) did not open EDIT's menu; EDIT opened a 40 KB file at once,
+by eye; and Options, Display's phosphor colours worked. A lowercase
 `autoexec.bat` at the root of the Plus 2 W's test card does run when
 the shell is started from SRAM over SWD (`out/m9-autoexec-1.log`).
 
 **Not checked:**
 
 - All of steps 1's and 2's lists, which stand.
-- A quick Alt+`,` or Alt+`.` (the backlights) opening the menu as a tap
-  would: expected from the source, not tried.
-- EDIT's opening time in the release build, and EDIT's deepest stack.
-- Options, Display's phosphor colours on the panel; the menus were
-  seen, not each box and dialog.
+- EDIT's opening time measured in the release build (by eye only:
+  at once), and EDIT's deepest stack.
+- Each of EDIT's boxes and dialogs on the panel, one by one.
 
 ## M9 — the DOS flavour, step 2 (branch `m9-dos`, 2026-10-14)
 

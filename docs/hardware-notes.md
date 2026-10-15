@@ -1155,8 +1155,11 @@ error):
   Alt's own events: in the source, the MCU's Alt branch comes before its
   lower-casing. Alt+I is Insert, `0xd1`, pressed and
   released. Alt+B, Alt+`,`, Alt+`.` and Alt+Space are the MCU's own
-  (backlights, battery) and send nothing, so a quick one looks like a
-  tap of Alt to the host.
+  (backlights, battery) and send nothing. The source suggests a quick
+  one would then look like a tap of Alt to the host, but on a Pico 2 W
+  (2026-10-14, the owner) Alt+`,` and Alt+`.` did not open EDIT's menu,
+  which opens on a tap: why is not known (the MCU may send something, or
+  the chord last long enough for Alt's hold events).
 - **Alt with an arrow sends the arrow's own code** (`0xb4`-`0xb7`)
   beside Alt's hold events. Alt+digit sends the digit.
 - **Ctrl with a letter sends the lower-case letter** beside Ctrl's

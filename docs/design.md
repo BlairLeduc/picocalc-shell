@@ -1019,9 +1019,9 @@ rules for size, CR LF and safe save (§4.6).
   a letter or an arrow is `KEYS_ALT` with the lower-case letter or the
   arrow; a tap of Alt, pressed and let go with no key and no hold event
   between, is `KEYS_ALT_TAP`; Ctrl with an arrow, Home or End is
-  `KEYS_CTRL` with it. Alt+I stays Insert. A quick Alt+`,` (the MCU's
-  backlight) looks like a tap and opens the menu; it was not worth a
-  timer to tell them apart. On the UART, US (`0x1F`) puts Alt on the
+  `KEYS_CTRL` with it. Alt+I stays Insert. Alt+`,` and Alt+`.` (the
+  MCU's backlights) were expected to look like a tap and open the menu,
+  but on the owner's Pico 2 W they did not (HW §6.3). On the UART, US (`0x1F`) puts Alt on the
   next byte, and US US is a tap; RS (`0x1E`) logs the key events (§4.1).
 - **The file.** vi's reading and writing moved to `editor_file.c`
   unchanged, and both editors use it: the whole file in one buffer of
