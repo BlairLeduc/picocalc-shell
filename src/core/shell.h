@@ -85,7 +85,9 @@ typedef struct shell {
     const struct shell_loader *loader;   /* run.h; NULL: programs cannot run */
     const char   *version;
     char          cwd[SHELL_PATH_MAX + 1];   /* absolute and normal (path.h) */
+#if !SHELL_DOS
     bool          wide;             /* font_5x10, 64 columns */
+#endif
     uint8_t       phosphor;         /* system.h: the ink chosen, 0 for the default */
     unsigned long mem_used, mem_total;   /* SRAM, for DOS's MEM; 0: not known */
     line_t        line;

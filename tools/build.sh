@@ -75,5 +75,18 @@ if [ ! -f "$cache" ] || [ ${#fresh[@]} -gt 0 ] || [ ${#defs[@]} -gt 0 ]; then
 fi
 cmake --build "$dir" -j
 
+# The SDK writes the UF2 only when it links the ELF, so a UF2 moved or
+# deleted since (copied to the card with mv, say) is not made again by a
+# build with nothing to do: relink.
+if [ ! -f "$dir/BOOT2350.uf2" ]; then
+    echo "build.sh: $dir/BOOT2350.uf2 is missing; relinking"
+    rm -f "$dir/BOOT2350.elf"
+    cmake --build "$dir" -j --target shell
+fi
+if [ ! -f "$dir/BOOT2350.uf2" ]; then
+    echo "build.sh: no $dir/BOOT2350.uf2 was made" >&2
+    exit 1
+fi
+
 arm-none-eabi-size "$dir/BOOT2350.elf"
 echo "build.sh: $dir/BOOT2350.uf2, to be copied to the card as /BOOT2350.UF2"

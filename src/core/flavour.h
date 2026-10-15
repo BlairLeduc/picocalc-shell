@@ -69,7 +69,6 @@ void flavour_not_found(shell_t *sh, const char *name);
 /* ---- shell.c's, for the flavours -------------------------------------- */
 
 /* The commands both flavours have. */
-int cmd_font(shell_t *sh, int argc, char **argv);
 int cmd_usbdisk(shell_t *sh, int argc, char **argv);
 
 /* The builtin called `name`, or NULL: by its exact name in the UNIX

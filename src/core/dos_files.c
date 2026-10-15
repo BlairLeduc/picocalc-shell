@@ -218,8 +218,7 @@ int dos_rd(shell_t *sh, int argc, char **argv) {
 
 #define DIR_COL   15u   /* where <DIR> starts, after a name of 8.3 */
 #define DIR_TOTAL "%5u file(s) %14s bytes"   /* its number ends where "%28s bytes free"'s does */
-#define DIR_WIDTH 40u   /* a line's columns in either font: in 64, the
-                         * sizes would be too far from their names */
+#define DIR_WIDTH TERM_COLS_8X10   /* the screen's columns */
 
 enum { DIR_W = 1u << 0, DIR_P = 1u << 1, DIR_S = 1u << 2, DIR_A = 1u << 3, DIR_B = 1u << 4 };
 

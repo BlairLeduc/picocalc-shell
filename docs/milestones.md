@@ -16,6 +16,56 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## After M9 — the DOS flavour in 40 columns only (2026-10-15)
+
+**The owner chose** (2026-10-15) to drop 64 columns from the DOS
+flavour, so it always shows IBM's font (design.md, the decision table;
+§4.7). `FONT` is gone, the terminal ignores mode 4264 in this flavour,
+and everything sized for 64 columns is sized for 40.
+
+**Checked on the host:** `test_edit` checks that `FONT 5x10` is not a
+command and that `ECHO`ing the 64-column escape leaves 40 columns;
+`test_dos` lost its case for `DIR` in 64 columns. All 23 host tests
+pass. The UNIX flavour's tests are unchanged.
+
+**Measured** (release builds, `__end__`): the DOS flavour 407,416 B,
+15,712 B less than before; the UNIX flavour unchanged (design.md §7).
+
+**Checked on the board:** the Plus 2 W on the probe, the DOS flavour's
+development build from SRAM, driven by Claude over UART1
+(`out/dos40.log`): `FONT 5x10` gave `Bad command or file name`, the
+grid stayed 40 x 32, and EDIT's Help menu fitted at the right edge and
+left back to `C:\>`. The `DIR` listing was lost to noise in the capture.
+
+**Checked by the owner** (2026-10-15, on their Pico 2 W, the DOS
+flavour's release build, on the panel): the `DIR` listing is right in
+40 columns, `FONT` is not a command, and EDIT's boxes and menus, in
+IBM's line glyphs, join up.
+
+**Not checked:** nothing carried forward.
+
+## After M9 — EDIT in 40 columns (2026-10-15)
+
+EDIT runs in the shell's font instead of switching to 64 columns
+(design.md §4.7, *In 40 columns*; the decision table, 2026-10-15).
+
+**Checked on the host:** `test_edit` now runs in 40 columns by default
+and checks 64 after `FONT 5x10`, staying 64 after; a 46-column line
+scrolled to its end; the keys help in 40; the read-only reason wrapped
+in its box; the ruler hidden by a message too long for both. All 23
+host tests pass over FAT16 and FAT32.
+
+**Checked on the board:** the Plus 2 W on the probe, the DOS flavour's
+development build from SRAM (`tools/swd-ram.sh`), driven by Claude over
+UART1 (`out/edit40.log`, `out/edit40b.log`): `EDIT T40.TXT`, a 60-column
+line typed and scrolled sideways, F1's box, Options Display's question,
+then Brk and No, back at `C:\>` in 40 columns. The screen was read
+from the grid, not seen on the panel.
+
+**Not checked:** nothing carried forward; the owner's run of the
+40-column-only release build (above) covered the panel, IBM's line
+glyphs in EDIT's boxes, and a Pico 2 W.
+
 ## M9 — the DOS flavour, step 3, and M9 done (branch `m9-dos`, 2026-10-14)
 
 **Done.** Step 3 of three is built: the Alt chords measured and

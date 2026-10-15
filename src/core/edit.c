@@ -23,7 +23,7 @@
 #include "keycodes.h"
 #include "keys.h"
 
-#define COLS       TERM_COLS_5X10   /* EDIT runs in the 64-column font */
+#define COLS       TERM_COLS_8X10   /* the DOS flavour's only width */
 #define MENU_ROW   0
 #define TITLE_ROW  1
 #define TEXT_ROW   2
@@ -90,22 +90,24 @@ static const menu_t s_menus[MENUS] = {
     { "Options", s_options, 1 }, { "Help", s_help, 1 },
 };
 
+/* At most 36 columns, to fit a box. */
 static const char *const s_keys_help[] = {
-    "Tap Alt             the menu bar",
-    "Alt+F, E, S, O, H   a menu",
-    "Arrows              move",
-    "Ctrl+Left, Right    a word left or right",
-    "Shift+Tab, Shift+Del  Home and End: the line's ends",
-    "Ctrl+Home, End      the file's start or end",
-    "Shift+Up, Down      PgUp and PgDn",
-    "Alt+arrows          select",
-    "Ctrl+X, C, V        cut, copy, paste",
-    "Del                 clear the selection or a letter",
-    "Ctrl+Y              cut the line",
-    "Alt+I (Insert)      insert or overtype",
-    "F3                  find again",
-    "Esc                 close a menu or a box",
-    "Brk (Shift+Esc)     exit",
+    "Tap Alt          the menu bar",
+    "Alt+F,E,S,O,H    a menu",
+    "Arrows           move",
+    "Ctrl+Left,Right  a word",
+    "Shift+Tab        Home: line's start",
+    "Shift+Del        End: line's end",
+    "Ctrl+Home, End   file's start, end",
+    "Shift+Up, Down   PgUp and PgDn",
+    "Alt+arrows       select",
+    "Ctrl+X, C, V     cut, copy, paste",
+    "Del              clear",
+    "Ctrl+Y           cut the line",
+    "Alt+I (Insert)   insert, overtype",
+    "F3               find again",
+    "Esc              close a menu, box",
+    "Brk (Shift+Esc)  exit",
 };
 #define KEYS_HELP_LINES (sizeof s_keys_help / sizeof s_keys_help[0])
 
@@ -132,7 +134,7 @@ static char   s_copy[VI_COPY_SIZE];
 static char   s_find[EDIT_FIND_MAX + 1], s_change[EDIT_FIND_MAX + 1];
 static char   s_name[SHELL_PATH_MAX + 1];   /* what is typed in a box */
 static char   s_indent[COLS + 1];           /* a line break and its indentation */
-static char   s_msg[COLS + 1];
+static char   s_msg[80];                     /* a message; a box wraps it */
 static cell_t s_scr[TERM_ROWS][COLS], s_shown[TERM_ROWS][COLS];
 static char   s_out[1024];
 static size_t s_out_len;
@@ -189,7 +191,7 @@ static bool delete_selection(void) {
 
 static bool copy_range(size_t lo, size_t hi) {
     if (hi - lo > sizeof s_copy) {
-        ed.msg = "Too much to copy; the clipboard holds 8 KB";
+        ed.msg = "Too much: the clipboard holds 8 KB";
         return false;
     }
     memcpy(s_copy, &s_buf[lo], hi - lo);
@@ -220,7 +222,7 @@ static void paste(void) {
 static void cut_line(void) {
     size_t start = line_start_at(ed.cursor), end = line_end_at(ed.cursor);
     if (end - start + 1 > sizeof s_copy) {
-        ed.msg = "Too much to copy; the clipboard holds 8 KB";
+        ed.msg = "Too much: the clipboard holds 8 KB";
         return;
     }
     memcpy(s_copy, &s_buf[start], end - start);
@@ -473,14 +475,18 @@ static void compose_text(unsigned *crow, unsigned *ccol) {
     }
 }
 
+/* The message or the keys, and the ruler. The ruler goes over the keys
+ * if it must, but a message too long for both hides it until the next
+ * key. */
 static void compose_status(void) {
     fill(STATUS_ROW, 0, COLS, ' ', ST_STATUS);
-    text(STATUS_ROW, 1, ed.msg ? ed.msg : "F1=Help  Alt=Menu", ST_STATUS);
+    unsigned end = text(STATUS_ROW, 1, ed.msg ? ed.msg : "F1=Help  Alt=Menu", ST_STATUS);
     char ruler[32];
     int line = editor_lines_at_pos(&ed.lines, s_buf, ed.len, ed.cursor);
     int n = snprintf(ruler, sizeof ruler, "%s Line:%d Col:%u", ed.overtype ? "OVR" : "   ", line + 1,
                      col_of(ed.cursor) + 1);
-    if (n > 0 && (unsigned)n < COLS - 2) text(STATUS_ROW, COLS - 1 - (unsigned)n, ruler, ST_STATUS);
+    if (n > 0 && (unsigned)n + 2 < COLS && (!ed.msg || end + 1 + (unsigned)n < COLS))
+        text(STATUS_ROW, COLS - 1 - (unsigned)n, ruler, ST_STATUS);
 }
 
 /* The whole screen as EDIT shows it with nothing open over the text. */
@@ -614,18 +620,52 @@ static int menu(int m) {
     }
 }
 
+/* Lines broken at a space, or where they must, to be at most `max`
+ * columns: up to WRAP_MAX of them in s_wrap. */
+#define WRAP_MAX 24
+typedef struct {
+    const char *s;
+    unsigned    n;
+} span_t;
+static span_t s_wrap[WRAP_MAX];
+
+static unsigned wrap(const char *const *lines, unsigned n, unsigned max) {
+    unsigned k = 0;
+    for (unsigned i = 0; i < n && k < WRAP_MAX; i++) {
+        const char *s = lines[i];
+        size_t left = strlen(s);
+        do {
+            size_t len = left;
+            if (len > max) {
+                len = max;
+                while (len > 0 && s[len] != ' ') len--;
+                if (len == 0) len = max;
+            }
+            s_wrap[k++] = (span_t){ s, (unsigned)len };
+            s += len;
+            left -= len;
+            while (left > 0 && *s == ' ') s++, left--;
+        } while (left > 0 && k < WRAP_MAX);
+    }
+    return k;
+}
+
 /* A box of text lines with `buttons` under them, each button's letter
- * marked with '&' and drawn in red; the box's row and column. */
+ * marked with '&' and drawn in red; the box's row and column. A line
+ * wider than the screen is wrapped. */
 static void message_box(const char *title, const char *const *lines, unsigned n,
                         const char *buttons, unsigned *row, unsigned *col) {
     unsigned crow, ccol, w = label_len(buttons);
     compose(&crow, &ccol);
+    n = wrap(lines, n, COLS - 4);
     for (unsigned i = 0; i < n; i++)
-        if (strlen(lines[i]) > w) w = (unsigned)strlen(lines[i]);
+        if (s_wrap[i].n > w) w = s_wrap[i].n;
     w += 4;
     unsigned h = n + 4, r = (TERM_ROWS - h) / 2, c = (COLS - w) / 2;
     box(r, c, h, w, title);
-    for (unsigned i = 0; i < n; i++) text(r + 1 + i, c + 2, lines[i], ST_BAR);
+    for (unsigned i = 0; i < n; i++)
+        for (unsigned j = 0; j < s_wrap[i].n; j++)
+            put(r + 1 + i, c + 2 + j, (uint8_t)s_wrap[i].s[j], ST_BAR);
     fill(r + n + 1, c + 1, w - 2, 'q', ST_BAR | ST_LINE);
     put(r + n + 1, c, 't', ST_BAR | ST_LINE);
     put(r + n + 1, c + w - 1, 'u', ST_BAR | ST_LINE);
@@ -732,7 +772,7 @@ static const char *open_file(const char *name) {
     ed.file = f;
     strcpy(ed.path, path);
     ed.named = true;
-    if (f.readonly) ed.msg = "Read-only: it can be changed, not saved";
+    if (f.readonly) ed.msg = "Read-only: changes can't be saved";
     return NULL;
 }
 
@@ -868,7 +908,7 @@ static void run(int cmd) {
         change();
         break;
     case C_DISPLAY: {
-        int k = choose("Colours: Blue, or the Phosphor on black?", "< &Blue >  < &Phosphor >");
+        int k = choose("Colours: Blue, or Phosphor on black?", "< &Blue >  < &Phosphor >");
         if (k == 'b' || k == 'p') {
             ed.phosphor = k == 'p';
             redraw_all();
@@ -975,10 +1015,8 @@ int cmd_edit(shell_t *sh, int argc, char **argv) {
         }
     }
 
-    bool was_wide = sh->wide;
-    sh->wide = true;
     keys_report_chords(true);
-    out_puts(&sh->con, "\033[?4264h\033[0m\033[2J");
+    out_puts(&sh->con, "\033[0m\033[2J");
     redraw_all();
     s_cursor_on = false;
 
@@ -1011,8 +1049,6 @@ int cmd_edit(shell_t *sh, int argc, char **argv) {
     }
 
     keys_report_chords(false);
-    sh->wide = was_wide;
     out_puts(&sh->con, "\033[0m\033(B\033[2J\033[H\033[?25h");
-    if (!was_wide) out_puts(&sh->con, "\033[?4264l");
     return 0;
 }

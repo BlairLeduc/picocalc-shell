@@ -246,11 +246,6 @@ static void lower_args(int argc, char **argv) {
             if (*s >= 'A' && *s <= 'Z') *s = (char)(*s - 'A' + 'a');
 }
 
-static int dos_font(shell_t *sh, int argc, char **argv) {
-    lower_args(argc, argv);
-    return cmd_font(sh, argc, argv);
-}
-
 static int dos_phosphor(shell_t *sh, int argc, char **argv) {
     lower_args(argc, argv);
     return cmd_phosphor(sh, argc, argv);
@@ -280,7 +275,6 @@ const shell_builtin_t flavour_builtins[] = {
     { "EXIT",      cmd_menu,      "EXIT", "UF2 Loader's own menu" },
     { "FIND",      dos_find,      "FIND [/V] [/C] [/N] [/I] \"text\" [file...]", "lines that contain text" },
     { "FOR",       dos_control,   "FOR %x IN (set) DO command", "a command for each in a set" },
-    { "FONT",      dos_font,      "FONT [8x10|5x10]", "40 or 64 columns; swap with none" },
     { "GOTO",      dos_goto,      "GOTO label", "go on at :label in a batch file" },
     { "HELP",      cmd_help,      "HELP [command]", "list the commands, or explain one" },
     { "IF",        dos_control,   "IF [NOT] EXIST f|ERRORLEVEL n|a==b command", "a command if..." },

@@ -143,10 +143,10 @@ static int edit_tests(bool fat32) {
     shell_start(&sh);
     CHECK(strcmp(sh.cwd, "/HOME") == 0, "in \\HOME");
 
-    /* The screen: menu bar, title, text, status, in 64 columns. */
+    /* The screen: menu bar, title, text, status, in 40 columns. */
     CHECK(put("/HOME/A.TXT", "hello\nworld\n"), "a.txt");
     CHECK(edit("EDIT a.txt", "") == 0, "%s: edit", fs);
-    CHECK(shot.cols == 64, "64 columns while EDIT runs: %u", shot.cols);
+    CHECK(shot.cols == 40, "40 columns while EDIT runs: %u", shot.cols);
     CHECK(strcmp(row(0), "  File  Edit  Search  Options  Help") == 0, "menu bar '%s'", row(0));
     CHECK(shot.cells[0][2].bg == TERM_RGB(168, 168, 168) && shot.cells[0][3].fg == 0 &&
               shot.cells[0][2].fg == TERM_RGB(255, 255, 255),
@@ -159,6 +159,22 @@ static int edit_tests(bool fat32) {
           row(31));
     CHECK(shot.row == 2 && shot.col == 0, "cursor at %u,%u", shot.row, shot.col);
     CHECK(t.cols == 40 && strcmp(sh.cwd, "/HOME") == 0, "40 columns after: %u", t.cols);
+
+    /* Only 40 columns: no FONT, and the 64-column mode is ignored. */
+    CHECK(shell_run(&sh, "FONT 5x10") != 0 && t.cols == 40, "no FONT");
+    CHECK(shell_run(&sh, "ECHO \x1b[?4264h") == 0 && t.cols == 40, "no 64-column mode: %u", t.cols);
+
+    /* 40 columns: a long line scrolls sideways; the boxes fit. */
+    CHECK(put("/HOME/W.TXT", "0123456789012345678901234567890123456789ABCDEF\n"), "w.txt");
+    CHECK(edit("EDIT W.TXT", END) == 0 && strcmp(row(2), "789012345678901234567890123456789ABCDEF") == 0 &&
+              shot.col == 39 && strstr(row(31), "Col:47"),
+          "scrolled: '%s' col %u", row(2), shot.col);
+    CHECK(edit("EDIT W.TXT", F1) == 0 && on_screen("Ctrl+X, C, V     cut, copy, paste") &&
+              on_screen("Shift+Del        End: line's end"),
+          "the keys in 40");
+    CHECK(edit("EDIT W.TXT", ALT "o" "d") == 0 && on_screen(" Colours: Blue, or Phosphor on black? ") &&
+              on_screen("< Blue >"),
+          "Display's question");
 
     /* Type, save with Alt+F S, and leave with Brk. */
     CHECK(edit("EDIT A.TXT", "X" ALT "f" "s" BRK) == 0 && is("/HOME/A.TXT", "Xhello\nworld\n"),
@@ -178,7 +194,7 @@ static int edit_tests(bool fat32) {
           "Esc closes the menu: '%s'", row(2));
     CHECK(edit("EDIT A.TXT", ALT "h" "k") == 0 && on_screen("Keys") && on_screen("cut the line"),
           "Help, Keys");
-    CHECK(edit("EDIT A.TXT", F1) == 0 && on_screen("Alt+arrows          select"), "F1");
+    CHECK(edit("EDIT A.TXT", F1) == 0 && on_screen("Alt+arrows       select"), "F1");
     CHECK(edit("EDIT A.TXT", ALT "s" "f") == 0 && on_screen("Find What:"), "Find's box");
 
     /* Exit with a change: No keeps the file, Esc stays, Yes saves. */
@@ -299,10 +315,12 @@ static int edit_tests(bool fat32) {
 
     /* Read-only: shown, not saved. */
     CHECK(f_chmod("/HOME/L.TXT", AM_RDO, AM_RDO) == FR_OK, "chmod");
-    CHECK(edit("EDIT L.TXT", "") == 0 && strstr(row(31), "Read-only"), "read-only '%s'", row(31));
-    CHECK(edit("EDIT L.TXT", "x" ALT "f" "s") == 0 && on_screen("read-only") &&
-              is("/HOME/L.TXT", "two\none\n"),
-          "not saved");
+    CHECK(edit("EDIT L.TXT", "") == 0 && strstr(row(31), "Read-only: changes can't be saved") &&
+              !strstr(row(31), "Line:"),
+          "read-only, the ruler hidden in 40: '%s'", row(31));
+    CHECK(edit("EDIT L.TXT", "x" ALT "f" "s") == 0 && on_screen(" The file is read-only; save it under ") &&
+              on_screen(" another name ") && is("/HOME/L.TXT", "two\none\n"),
+          "not saved, the reason wrapped in 40");
 
     /* What EDIT refuses before it starts. */
     CHECK(edit("EDIT \\HOME", "") == 1, "a directory");
