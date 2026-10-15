@@ -29,7 +29,7 @@ The prompt is the current directory followed by `>`:
 
 ```
 /home>ls
-notes  todo.txt
+notes/  todo.txt
 /home>cat todo.txt
 buy batteries
 /home>cd /oric
@@ -232,12 +232,12 @@ program (section 5).
 |---|---|
 | `pwd` | prints the current directory |
 | `cd [dir]` | changes directory; to `$HOME` with none. `..` is the directory above |
-| `ls [-l] [-a] [path...]` | lists a directory, sorted. `-l` adds the size, and `d` for a directory. `-a` includes hidden names |
+| `ls [-l] [-a] [path...]` | lists a directory, sorted, with `/` after each directory's name. `-l` adds the size, and `d` for a directory. `-a` includes hidden names |
 
 ```
 />ls -l /home
 -rw       24 a.txt
-drw          notes
+drw          notes/
 ```
 
 ### Files and directories
