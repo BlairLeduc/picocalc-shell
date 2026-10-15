@@ -90,7 +90,7 @@ static int glob_tests(bool fat32) {
     /* A variable's value is not globbed. */
     CHECK(run("P='*.txt'; echo $P") == 0 && strcmp(con, "*.txt\n") == 0, "$P: '%s'", con);
     /* Commands see the matches as their operands. */
-    CHECK(run("rm *.txt && ls") == 0 && strcmp(con, "notes  sub    x[1]\n") == 0, "rm *: '%s'",
+    CHECK(run("rm *.txt && ls") == 0 && strcmp(con, "notes  sub/   x[1]\n") == 0, "rm *: '%s'",
           con);
     CHECK(run("cat *.none") == 1 && strcmp(con, "cat: *.none: invalid name\n") == 0,
           "no match is an operand: '%s'", con);

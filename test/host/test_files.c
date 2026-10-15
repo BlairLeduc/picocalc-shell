@@ -147,22 +147,22 @@ static int files_tests(bool fat32) {
      * one per line into a file; hidden names; -l. */
     CHECK(run("mkdir /l && cd /l && touch b C a .hidden ._mac && mkdir D") == 0, "make /l: %s",
           con);
-    CHECK(run("ls") == 0 && strcmp(con, "a  b  C  D\n") == 0, "ls: '%s'", con);
+    CHECK(run("ls") == 0 && strcmp(con, "a   b   C   D/\n") == 0, "ls: '%s'", con);
     /* FAT's hidden and system bits hide a name as a leading '.' does. */
     CHECK(run("touch secret sys") == 0 && f_chmod("/l/secret", AM_HID, AM_HID) == FR_OK &&
               f_chmod("/l/sys", AM_SYS, AM_SYS) == FR_OK,
           "hidden and system files");
-    CHECK(run("ls") == 0 && strcmp(con, "a  b  C  D\n") == 0, "hidden by attribute: '%s'", con);
+    CHECK(run("ls") == 0 && strcmp(con, "a   b   C   D/\n") == 0, "hidden by attribute: '%s'", con);
     /* '.' < 'H' < '_' once case is folded. */
     CHECK(run("ls -a") == 0 && strcmp(con, ".hidden  a        C        secret\n"
-                                           "._mac    b        D        sys\n") == 0,
+                                           "._mac    b        D/       sys\n") == 0,
           "ls -a:\n%s", con);
     CHECK(run("ls secret") == 0 && strcmp(con, "secret\n") == 0, "named, it is shown: '%s'", con);
     CHECK(run("ls > /out.txt") == 0, "ls >");
     s = slurp("/out.txt");
-    CHECK(s && strcmp(s, "a\nb\nC\nD\n") == 0, "ls > file: '%s'", s ? s : "");
+    CHECK(s && strcmp(s, "a\nb\nC\nD/\n") == 0, "ls > file: '%s'", s ? s : "");
     CHECK(run("echo abc > a") == 0 && run("ls -l") == 0 &&
-              strcmp(con, "-rw        4 a\n-rw        0 b\n-rw        0 C\ndrw          D\n") == 0,
+              strcmp(con, "-rw        4 a\n-rw        0 b\n-rw        0 C\ndrw          D/\n") == 0,
           "ls -l:\n%s", con);
     CHECK(f_chmod("/l/b", AM_RDO, AM_RDO) == FR_OK, "chmod");
     CHECK(run("ls -l b") == 0 && strcmp(con, "-r-        0 b\n") == 0, "ls -l read-only: '%s'",

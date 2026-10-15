@@ -329,7 +329,17 @@ static void ls_long(shell_t *sh, const char *name, uint8_t attr, uint32_t size) 
     if (attr & AM_DIR) out_printf(&sh->out, "%s %8s ", mode, "");
     else out_printf(&sh->out, "%s %8lu ", mode, (unsigned long)size);
     out_puts(&sh->out, name);
-    out_puts(&sh->out, "\n");
+    out_puts(&sh->out, (attr & AM_DIR) ? "/\n" : "\n");
+}
+
+/* A directory's name ends in '/', as ls -F shows it. */
+static size_t ent_width(const ent_t *e) {
+    return strlen(s_names + e->name) + ((e->attr & AM_DIR) ? 1u : 0u);
+}
+
+static void ls_name(shell_t *sh, const ent_t *e) {
+    out_puts(&sh->out, s_names + e->name);
+    if (e->attr & AM_DIR) out_puts(&sh->out, "/");
 }
 
 /* Down the columns, as ls does on a terminal, and one per line when the
@@ -337,14 +347,14 @@ static void ls_long(shell_t *sh, const char *name, uint8_t attr, uint32_t size) 
 static void ls_names(shell_t *sh, unsigned n) {
     if (!sh->out_is_con) {
         for (unsigned i = 0; i < n; i++) {
-            out_puts(&sh->out, s_names + s_ents[i].name);
+            ls_name(sh, &s_ents[i]);
             out_puts(&sh->out, "\n");
         }
         return;
     }
     size_t wmax = 0;
     for (unsigned i = 0; i < n; i++) {
-        size_t w = strlen(s_names + s_ents[i].name);
+        size_t w = ent_width(&s_ents[i]);
         if (w > wmax) wmax = w;
     }
     unsigned colw = (unsigned)wmax + 2u;
@@ -353,10 +363,9 @@ static void ls_names(shell_t *sh, unsigned n) {
     unsigned rows = (n + cols - 1u) / cols;
     for (unsigned r = 0; r < rows; r++) {
         for (unsigned i = r; i < n; i += rows) {
-            const char *name = s_names + s_ents[i].name;
-            out_puts(&sh->out, name);
+            ls_name(sh, &s_ents[i]);
             if (i + rows < n)
-                for (size_t pad = strlen(name); pad < colw; pad++) out_puts(&sh->out, " ");
+                for (size_t pad = ent_width(&s_ents[i]); pad < colw; pad++) out_puts(&sh->out, " ");
         }
         out_puts(&sh->out, "\n");
     }
@@ -392,7 +401,7 @@ static int ls_dir(shell_t *sh, const char *shown, const char *path, unsigned fla
         while (r == FR_OK && (r = f_readdir(&d, &s_fno)) == FR_OK && s_fno.fname[0]) {
             if (!(flags & LS_A) && files_hidden(&s_fno)) continue;
             if (flags & LS_L) ls_long(sh, s_fno.fname, s_fno.fattrib, (uint32_t)s_fno.fsize);
-            else out_printf(&sh->out, "%s\n", s_fno.fname);
+            else out_printf(&sh->out, "%s%s\n", s_fno.fname, (s_fno.fattrib & AM_DIR) ? "/" : "");
             if (shell_interrupted(sh)) break;
         }
         f_closedir(&d);
