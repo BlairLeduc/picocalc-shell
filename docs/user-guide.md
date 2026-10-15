@@ -589,8 +589,8 @@ but its commands are DOS's: `DIR`, `COPY`, `DEL`, `CD`. It has its own
 the UNIX one; to go back, copy the UNIX one there again. Neither flavour
 installs the other. In place of vi it has EDIT, an editor like the
 one DOS had (below). In 40 columns it uses IBM's PC font, as DOS
-showed it; in 64 columns, and in EDIT, it uses the same narrow font as
-the UNIX flavour.
+showed it; in 64 columns it uses the same narrow font as the UNIX
+flavour.
 
 ### The prompt and paths
 
@@ -718,8 +718,9 @@ card out and edit the file on a computer.
 ### EDIT
 
 `EDIT NAME.TXT` opens a file to edit, or a new one by that name; `EDIT`
-alone starts an untitled one. EDIT switches to the 64-column font while
-it runs and back when it ends. The top row is the menu bar, the next the
+alone starts an untitled one. EDIT uses the font the shell has: 40
+columns, or 64 after `FONT 5x10`. A line wider than the screen scrolls
+sideways as the cursor moves along it. The top row is the menu bar, the next the
 file's name, and the bottom row says `F1=Help` and where the cursor is.
 
 **Menus.** Tap Alt on its own to open the File menu, or hold Alt and

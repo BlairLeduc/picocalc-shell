@@ -33,6 +33,7 @@ questions are open; the design is ready for M0.
 | 2026-10-14 | A second flavour, built from the same tree, feels like DOS and has an EDIT modelled on MS-DOS 5's, in place of vi. It is a separate `BOOT2350.UF2`; the user copies the one they want to the card, and neither flavour installs the other. The card is `C:`. EDIT covers the core look and keys, not all of MS-DOS 5's. It is never called MS-DOS. | 4.7, 10 |
 | 2026-10-14 | The DOS flavour's 40-column font is IBM's PC BIOS 8x8, from VileR's Ultimate Oldschool PC Font Pack (CC BY-SA 4.0), drawn in the 8x10 cell so the grid stays 40 x 32. The UNIX flavour keeps the owner's VT100-like font, and both keep the owner's 5x10 for 64 columns. This narrows the 2026-10-12 decision on fonts for the DOS flavour only. | 4.1, 4.7 |
 | 2026-10-14 | EDIT selects with Alt and the arrows, and cuts, copies and pastes with Ctrl+X, Ctrl+C and Ctrl+V: the keyboard cannot send Shift with the arrows, and Shift+Del is End (HW §6.3). | 4.7 |
+| 2026-10-15 | EDIT runs in the shell's font, 40 or 64 columns as `FONT` left it, and no longer switches to 64. In 40 columns it draws with IBM's font, its boxes included. | 4.7 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -790,8 +791,8 @@ rules for size, CR LF and safe save (§4.6).
 - **The screen.** White on blue; a menu bar on the top row, the file's
   name in the title row, the status row at the foot (`F1=Help`, line and
   column). Dialogs are boxes drawn with the font's line-drawing glyphs
-  (§4.1). EDIT switches to the 64-column font while it runs, and back on
-  leaving.
+  (§4.1). EDIT runs in the shell's font, 40 or 64 columns, as `FONT`
+  left it *(changed 2026-10-15; it switched to 64 before)*.
 - **Menus.** Tap Alt for the menu bar, or Alt and the letter: File (New,
   Open, Save, Save As, Exit), Edit (Cut, Copy, Paste, Clear), Search
   (Find, Repeat Last Find, Change), Options (Display, the phosphor), Help
@@ -1015,8 +1016,8 @@ rules for size, CR LF and safe save (§4.6).
   glyphs EDIT's boxes use come from the same font where code page 437
   has them, their lines carried to the cell's edges so they join;
   `screen.c` picks the font by `SHELL_DOS`, so each flavour links only
-  its own. In 64 columns, and so in EDIT, both use the owner's 5x10:
-  IBM made no font that narrow.
+  its own. In 64 columns both use the owner's 5x10: IBM made no font
+  that narrow. EDIT uses whichever the shell has.
 
 - **Chords.** `keys_event` reports chords only while EDIT asks
   (`keys_report_chords`), so the prompt and vi are as they were: Alt with
@@ -1040,8 +1041,10 @@ rules for size, CR LF and safe save (§4.6).
   changes every match at once and says how many; EDIT's Find and Verify
   is not there. `editor_lines.c` (the line memo and word moves) is
   shared.
-- **The screen.** The 64-column font while EDIT runs, and back after if
-  it was 40. Row 0 is the menu bar, black on grey with each menu's
+- **The screen.** The shell's font, 40 or 64 columns *(changed
+  2026-10-15: EDIT switched to 64 before; the width is now read from
+  `shell_cols` when EDIT starts, and every row, box and menu is laid
+  out to it)*. Row 0 is the menu bar, black on grey with each menu's
   letter in white; row 1 the name, in capitals, centred in a line;
   rows 2-30 the text, white on blue (`EDIT_TEXT_ROWS`); row 31 the
   status, black on cyan: `F1=Help  Alt=Menu` or a message, `OVR` when
@@ -1061,6 +1064,13 @@ rules for size, CR LF and safe save (§4.6).
   cancel. Exit, New and Open ask to save a change first; Save As asks
   before writing over another file. Brk is Exit; the end of input
   leaves without saving, as vi does.
+- **In 40 columns** *(2026-10-15)*. The menu bar is 37 columns, so it
+  fits. The keys help is written to 36 columns, to fit its box. A
+  question or a reason wider than the screen less 4 is broken at a
+  space. The ruler gives way to nothing but a message: it goes over
+  `F1=Help  Alt=Menu` if it must, and a message too long to leave it
+  room hides it until the next key. Two messages were shortened to fit
+  the status row's 39 cells.
 
 ## 5. Architecture
 

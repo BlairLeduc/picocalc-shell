@@ -16,6 +16,27 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## After M9 — EDIT in 40 columns (2026-10-15)
+
+EDIT runs in the shell's font instead of switching to 64 columns
+(design.md §4.7, *In 40 columns*; the decision table, 2026-10-15).
+
+**Checked on the host:** `test_edit` now runs in 40 columns by default
+and checks 64 after `FONT 5x10`, staying 64 after; a 46-column line
+scrolled to its end; the keys help in 40; the read-only reason wrapped
+in its box; the ruler hidden by a message too long for both. All 23
+host tests pass over FAT16 and FAT32.
+
+**Checked on the board:** the Plus 2 W on the probe, the DOS flavour's
+development build from SRAM (`tools/swd-ram.sh`), driven by Claude over
+UART1 (`out/edit40.log`, `out/edit40b.log`): `EDIT T40.TXT`, a 60-column
+line typed and scrolled sideways, F1's box, Options Display's question,
+then Brk and No, back at `C:\>` in 40 columns. The screen was read
+from the grid, not seen on the panel.
+
+**Not checked:** the panel itself, by eye (IBM's line glyphs in EDIT's
+boxes); the release build on a card; the owner's Pico 2 W.
+
 ## M9 — the DOS flavour, step 3, and M9 done (branch `m9-dos`, 2026-10-14)
 
 **Done.** Step 3 of three is built: the Alt chords measured and
