@@ -16,6 +16,101 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M9 — the DOS flavour, step 3 (branch `m9-dos`, 2026-10-14)
+
+**In progress.** Step 3 of three is built: the Alt chords measured and
+written in HW §6.3, then EDIT (design.md §4.7, *As built at M9,
+step 3*; `src/core/edit.c`). M9's done-when checks on a card are still
+to come (below).
+
+**The chords** (the Plus 2 W on the probe, the DOS flavour's
+development build from SRAM, the owner pressing keys on the panel while
+Claude captured UART1 with the new RS logging, `out/m9-keys-1.log`, 495
+events): a tap of Alt is a press and a release with no hold between;
+Alt with a letter sends the capital, Alt+I Insert, Alt with an arrow
+the arrow; Ctrl with X, C and V the lower-case letter; no overflow and
+no I²C error. Alt+C and Alt+2 sent nothing and some keys under Alt had
+no release, once, unexplained. Shift with the arrows was not captured;
+the MCU's source swallows it, so **the owner chose** (2026-10-14) Alt
+with the arrows to select and Ctrl+X, C and V to cut, copy and paste,
+in place of the design's Shift keys.
+
+**Checked on the host:**
+
+- All 23 test binaries pass; the UNIX flavour's unchanged, vi's
+  included, after its file code moved to `editor_file.c`.
+- **`test_keys`**: Alt not reported at the prompt (Alt+F is `F`, no
+  tap); reported, a tap, Alt+F, Alt+Left, Alt+I still Insert, Alt+F3
+  still F3, no tap after a key or once held, Ctrl+Right and Ctrl+Home,
+  Ctrl+X still `^X`, Ctrl+Left plain at the prompt; the UART's US and
+  US US.
+- **`test_edit`**, new, over FAT16 and FAT32: the screen (menu bar,
+  title, text, status, 64 columns, the cursor, 40 columns after);
+  typing and Save; the menus by a tap, across and down, Enter, Esc,
+  Alt and a letter; Help and F1; Find's box; Exit asking, No, Cancel,
+  Yes (Enter), the end of input not saving; Alt with the arrows
+  selecting, Ctrl+X and Ctrl+V, Ctrl+C, Alt+Down and Del, typing over
+  a selection, the Edit menu's Cut and Paste; Ctrl+Y in the middle and
+  on the last line, and on an empty file changing nothing; Ctrl with the
+  arrows by words, Ctrl+Home and End; the goal column past a short line
+  and onto a tab; Enter's indentation; overtype and `OVR`; Find in
+  either case, F3, not found; the done-when edit of a CR LF settings
+  file, kept CR LF; Change of three, to nothing, Esc; UNTITLED saved by
+  name, Save As to another directory, Save As over a file asking, Open,
+  a failed Open keeping the text, New asking to save, a new file by
+  name; a read-only file shown and not saved; a directory, two names
+  and a file over 64 KB refused; chords off after EDIT.
+- **Found by the owner** on the panel: the menu bar and menus were
+  black, so their black letters could not be seen. The terminal's
+  256-colour table, from the starter, was wrong: its grey ramp climbed
+  to white at 247 and fell back to black at 248, the bar's grey, and its
+  colour cube was wrong too. `term.c` now works colours 16-255 out by
+  xterm's formula; `test_term` checks the ramp and the cube, and
+  `test_edit` the bar's cells (black on 168 grey, letters white) and the
+  text's blue. With the old table both fail. After the fix the owner
+  saw the menu bar and the File menu drawn correctly on the panel (the
+  Plus 2 W on the probe, the DOS flavour's development build from SRAM,
+  2026-10-14).
+- **Planted bugs**, each caught: a splice of nothing marking the file
+  changed (2 failures), Alt with an arrow restarting the selection (2),
+  Exit not asking (too many to list), a held Alt counted as a tap (1).
+
+**Checked on the board:** the Plus 2 W on the probe, by Claude, the DOS
+flavour's development build from SRAM over SWD (`tools/swd-ram.sh`),
+on the test card, typed over UART1 with US for Alt
+(`out/m9-keys-1.log`): EDIT typed and saved a file; a tap of Alt opened
+the File menu, drawn with its box; Alt+Right five times and Ctrl+X cut
+five letters; Brk asked to save and No left the file as it was; a new
+file typed, saved, a Change and Exit with Yes, then TYPE showed it. A
+41,573-byte file (three Lua files joined with TYPE `>>`) opened. The
+card's own files were only read; `\EDTEST` and the two files made in
+the root were removed after.
+
+**Measured:**
+
+| | Estimate | Measured |
+|---|---|---|
+| EDIT opening a 41 KB file | under a second, as vi (M3) | 0.247 s, 0.247 s, 0.248 s from the Enter to the status row on the UART (Plus 2 W, development build, 2026-10-14). About 0.245 s of it is the 2,823 bytes mirrored at 115,200 baud, so the release build is faster; not timed there |
+| The DOS flavour's RAM (release, `__end__`) | — | 422,100 B, 100,872 B more than step 2: EDIT's 64 KB buffer, 8 KB clipboard, two 4 KB cell screens, and its code |
+| The UNIX flavour's RAM (release) | unchanged | 434,708 B, 772 B less than step 2 |
+
+**Not checked:**
+
+- All of steps 1's and 2's lists, which stand.
+- **M9's done-when on a card:** the DOS flavour as `/BOOT2350.UF2`,
+  started by the loader; running a program by name and coming back;
+  `AUTOEXEC.BAT` at a real start; EDIT changing `/atom/pico-atom.cfg`
+  and pico-atom reading it (the owner, on the panel).
+- **Keys pressed on the panel inside EDIT**: Ctrl with the arrows, Home
+  and End (Ctrl+Shift+Tab, Ctrl+Shift+Del) were neither captured nor
+  typed (the UART cannot send Ctrl with them); Alt with the arrows and
+  a tap of Alt only through the UART's US.
+- A quick Alt+`,` or Alt+`.` (the backlights) opening the menu as a tap
+  would: expected from the source, not tried.
+- EDIT's opening time in the release build, and EDIT's deepest stack.
+- Options, Display's phosphor colours on the panel; the menus were
+  seen, not each box and dialog.
+
 ## M9 — the DOS flavour, step 2 (branch `m9-dos`, 2026-10-14)
 
 **In progress.** Step 2 of three is built: batch files and

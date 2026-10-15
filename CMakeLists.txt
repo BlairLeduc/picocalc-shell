@@ -17,6 +17,7 @@ option(PICO_SHELL_HOST "Build the portable core and its host tests, with no Pico
 set(SHELL_CORE_SOURCES
     src/core/bininfo.c
     src/core/displaytest.c
+    src/core/editor_file.c
     src/core/editor_pattern.c
     src/core/files.c
     src/core/font-5x10.c
@@ -54,6 +55,8 @@ set(SHELL_DOS_SOURCES
     src/core/dos_parse.c
     src/core/dos_path.c
     src/core/dos_text.c
+    src/core/edit.c
+    src/core/editor_lines.c
 )
 
 set(SHELL_WARNINGS -Wall -Wextra -Werror)

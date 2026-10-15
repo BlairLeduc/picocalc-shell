@@ -3,7 +3,8 @@
 Status: **Draft 9, 2026-10-14.** Feasibility study and first design. M0
 (the skeleton), M1 (files), M2 (run), M3 (vi), M4 (comfort), M6 (USB
 speed) and M8 (the rest of v1) are done ([milestones.md](milestones.md));
-of M9 (the DOS flavour), steps 1 and 2 are built. The commands are explained for users
+of M9 (the DOS flavour), steps 1 to 3 are built, and its done-when
+checks on a card are to come. The commands are explained for users
 in [user-guide.md](user-guide.md).
 
 The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
@@ -30,6 +31,7 @@ questions are open; the design is ready for M0.
 | 2026-10-12 | `include/picocalc_shell.h` is offered under the MIT licence as well as the GPL-3.0. | 9 |
 | 2026-10-13 | A patched stage3 that starts the shell at power-on, and the last program with Up/F1/F5 held, is an optional milestone (M7). Until it is installed, the stock loader's behaviour above stands. | 3.4, 10 |
 | 2026-10-14 | A second flavour, built from the same tree, feels like DOS and has an EDIT modelled on MS-DOS 5's, in place of vi. It is a separate `BOOT2350.UF2`; the user copies the one they want to the card, and neither flavour installs the other. The card is `C:`. EDIT covers the core look and keys, not all of MS-DOS 5's. It is never called MS-DOS. | 4.7, 10 |
+| 2026-10-14 | EDIT selects with Alt and the arrows, and cuts, copies and pastes with Ctrl+X, Ctrl+C and Ctrl+V: the keyboard cannot send Shift with the arrows, and Shift+Del is End (HW §6.3). | 4.7 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -381,9 +383,11 @@ Key codes come from the starter's `keyboard.h`, checked against HW §6.2.
 
 Keys come from the southbridge FIFO. In the development build, UART1
 mirrors the screen and its received bytes are typed as keys (EL §13.1,
-§13.2), so a scripted run needs nobody at the keyboard. Two bytes are not
-keys: FS (`0x1C`) dumps the grid as text, and GS (`0x1D`) logs the start
-time and the counters (`tools/uart-screen.sh`). The mirror writes to the
+§13.2), so a scripted run needs nobody at the keyboard. Three bytes are
+not keys: FS (`0x1C`) dumps the grid as text, GS (`0x1D`) logs the start
+time and the counters (`tools/uart-screen.sh`), and RS (`0x1E`) starts or
+stops logging each key event as `key <state> <code>`, as the southbridge
+sent it (*from M9*, to capture chords, HW §6.3). The mirror writes to the
 UART as the output happens, so a long output in the development build
 runs at 115,200 baud; measure display speed in the release build.
 
@@ -791,14 +795,17 @@ rules for size, CR LF and safe save (§4.6).
   (Find, Repeat Last Find, Change), Options (Display, the phosphor), Help
   (the keys, one screen). No Print and no mouse.
 - **Keys.** The arrows, Home, End and the page keys; Ctrl with the arrows
-  for words; Insert toggles overtype; Shift with the movement keys
-  selects; Shift+Del cuts, Ctrl+Ins copies, Shift+Ins pastes, Del clears;
-  Ctrl+Y deletes the line; F3 finds again; Esc closes a menu or a dialog.
-  The clipboard is vi's 8 KB register.
-- **Before the key layer is fixed**, check on the board which Alt chords
-  reach the shell as Alt and a letter: the keyboard's MCU turns some into
-  other keys (Alt+I is Insert, HW §6.3), and tapping Alt alone must be
-  seen as a press and a release.
+  for words; Insert toggles overtype; *(changed 2026-10-14, after the
+  chords were measured, HW §6.3)* Alt with the arrows selects, since
+  the keyboard swallows Shift with Left and Right and turns Shift with
+  Up and Down into the page keys; Ctrl+X cuts, Ctrl+C copies, Ctrl+V
+  pastes, since Shift+Del is End and Insert is only Shift+Enter or
+  Alt+I; Del clears; Ctrl+Y deletes the line; F3 finds again; Esc closes
+  a menu or a dialog. The clipboard is vi's 8 KB register.
+- **The chords were checked on the board** before the key layer was
+  fixed (HW §6.3): Alt with a letter arrives as the capital beside Alt's
+  events, Alt with an arrow as the arrow, and a tap of Alt as a press
+  and a release with no hold between.
 
 *As built at M9, step 1* (2026-10-14; `src/core/dos*.c`, `flavour.h`):
 
@@ -921,7 +928,6 @@ rules for size, CR LF and safe save (§4.6).
   with `\` after a directory and puts nothing before a space, since DOS
   has no escapes. Up and Down work as in the UNIX flavour; `history` is
   not a command here. The history file is shared.
-- **Not yet:** EDIT (step 3).
 
 *As built at M9, step 2* (2026-10-14; `src/core/dos_batch.c`):
 
@@ -985,6 +991,52 @@ rules for size, CR LF and safe save (§4.6).
 - **`AUTOEXEC.BAT`** at the card's root runs after the banner, at level
   1, opened as `/etc/profile` is (`files_open_startup`, so a `.new` left
   by a cut write is used). Missing, it is nothing.
+
+*As built at M9, step 3* (2026-10-14; `src/core/edit.c`,
+`editor_file.c`, `keys.c`):
+
+- **Chords.** `keys_event` reports chords only while EDIT asks
+  (`keys_report_chords`), so the prompt and vi are as they were: Alt with
+  a letter or an arrow is `KEYS_ALT` with the lower-case letter or the
+  arrow; a tap of Alt, pressed and let go with no key and no hold event
+  between, is `KEYS_ALT_TAP`; Ctrl with an arrow, Home or End is
+  `KEYS_CTRL` with it. Alt+I stays Insert. A quick Alt+`,` (the MCU's
+  backlight) looks like a tap and opens the menu; it was not worth a
+  timer to tell them apart. On the UART, US (`0x1F`) puts Alt on the
+  next byte, and US US is a tap; RS (`0x1E`) logs the key events (§4.1).
+- **The file.** vi's reading and writing moved to `editor_file.c`
+  unchanged, and both editors use it: the whole file in one buffer of
+  `VI_BUF_SIZE`, CR LF kept if every break is one, the last line break
+  kept, read-only from FAT's bit, saved through `name.new`. A new file
+  gets LF, as in vi. A failed Open leaves the text as it was. EDIT has
+  its own 64 KB buffer and 8 KB clipboard; the DOS build has no vi, so
+  nothing is held twice.
+- **Not used from vi:** the undo journal (no key in the design asks for
+  undo, as MS-DOS 5's EDIT had none) and the pattern matcher: Find and
+  Change match the text as typed, in either case, as EDIT did. Change
+  changes every match at once and says how many; EDIT's Find and Verify
+  is not there. `editor_lines.c` (the line memo and word moves) is
+  shared.
+- **The screen.** The 64-column font while EDIT runs, and back after if
+  it was 40. Row 0 is the menu bar, black on grey with each menu's
+  letter in white; row 1 the name, in capitals, centred in a line;
+  rows 2-30 the text, white on blue (`EDIT_TEXT_ROWS`); row 31 the
+  status, black on cyan: `F1=Help  Alt=Menu` or a message, `OVR` when
+  typing over, and `Line:n Col:n`. Boxes and menus use the DEC line
+  glyphs (`ESC ( 0`). The screen is built as cells and only the rows
+  that changed are sent, as in vi; the status row's last cell is erased,
+  not written, so the terminal never scrolls. Options, Display swaps the
+  colours for the phosphor on black, in reverse video. The bar's grey is
+  xterm's 248; the starter's 256-colour table had it nearly black, so
+  `term.c` now works colours 16-255 out by xterm's formula (§4.1).
+- **Menus and boxes.** A menu or a box draws over the text and takes
+  keys until it closes: menus with Left, Right, Up, Down, Enter, the
+  item's letter, Alt and a menu's letter, or Esc; a box asking for a
+  name or text offers the last one, replaced by the first letter typed;
+  a question takes its buttons' letters, Enter for the first, Esc to
+  cancel. Exit, New and Open ask to save a change first; Save As asks
+  before writing over another file. Brk is Exit; the end of input
+  leaves without saving, as vi does.
 
 ## 5. Architecture
 
@@ -1138,6 +1190,16 @@ the deepest stack, a typed line CALLing three levels down through IF
 and FOR to a COPY, is about 5.8 KB of the 8 KB: about 720 B a level
 and step 1's 3 KB for COPY.
 
+**Measured at M9, step 3** (the same tools, 2026-10-14, release builds,
+`__end__` from the link map): the DOS flavour 422,100 B, 100,872 B more
+than step 2's 321,228 B: EDIT's 64 KB buffer, 8 KB clipboard and two
+4 KB screens of cells (shown and built), its code and `editor_lines.c`.
+12,608 B less than the UNIX flavour, so it leaves a little more room.
+The UNIX flavour 434,708 B, 772 B less than step 2's, in code, after
+vi's file code moved to `editor_file.c`. EDIT keeps its large state static; its
+own frames are small, and it runs at the prompt's depth or a batch
+file's.
+
 **The stack** (*corrected at M3*). Core 0's stack starts at the top of
 scratch Y and may run down to `__StackLimit` at the bottom of scratch X:
 8 KB, because core 1 never starts and nothing is linked into scratch X.
@@ -1266,7 +1328,7 @@ in [milestones.md](milestones.md).
   2. Batch files and `AUTOEXEC.BAT`. *Built 2026-10-14* (§4.7,
      milestones.md).
   3. The Alt chords measured on a Plus 2 W and written in HW §6.3, then
-     EDIT.
+     EDIT. *Built 2026-10-14* (§4.7, milestones.md).
 
   Both flavours build with `tools/build.sh` and on the host, and the
   UNIX flavour's tests still pass unchanged. Done when, on the board, the DOS

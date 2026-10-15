@@ -8,7 +8,8 @@
 # The development build takes each received byte as a key (keys_uart in
 # src/core/keys.c): characters type as themselves, CR and LF are Enter,
 # BS and DEL Backspace, ESC is Esc, ^C is Ctrl-C, and \x81-\x85 are F1-F5.
-# FS (\x1c) and GS (\x1d) are not keys: uart-screen.sh sends the first.
+# FS (\x1c), GS (\x1d) and RS (\x1e) are not keys: uart-screen.sh sends the
+# first, and RS turns the logging of key events on and off.
 #
 # One character every 0.05 s: the UART's receive FIFO holds 32 bytes, and
 # the shell reads it between commands, so a faster sender can lose

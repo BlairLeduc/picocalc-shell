@@ -16,11 +16,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "editor_file.h"
 #include "editor_lines.h"
 #include "editor_pattern.h"
 #include "editor_undo.h"
 #include "editor_vi.h"
-#include "files.h"
 #include "keycodes.h"
 #include "path.h"
 
@@ -41,10 +41,7 @@ typedef struct {
     EditorLineIndex lines;
     EditorUndo  undo;
     ViState     vi;
-    bool        readonly;
-    bool        crlf;       /* every line break in the file was CR LF */
-    bool        eol;        /* a line break follows the last line */
-    bool        was_empty;  /* the file was empty or new */
+    editor_file_t file;     /* its line breaks, and read-only */
     int         top;        /* the first line on screen */
     unsigned    left;       /* the first column on screen */
     const char *msg;        /* the status row's message, until the next key */
@@ -59,10 +56,7 @@ static uint8_t s_shown[TERM_ROWS][TERM_COLS_MAX];   /* what the screen shows */
 static uint8_t s_row[TERM_COLS_MAX];
 static char    s_out[TERM_COLS_MAX * 6 + 32];       /* one row's escape sequences */
 static char    s_msg[TERM_COLS_MAX + 1];
-static char    s_text[512];                          /* a file's bytes on their way */
-static FIL     s_fil;
-static FILINFO s_fno;
-static files_safe_t s_save;
+static char    s_text[512];                          /* a line's indentation */
 
 /* ---- the buffer --------------------------------------------------------- */
 
@@ -285,7 +279,7 @@ static void scroll_view(char how) {
 /* ---- the file ----------------------------------------------------------- */
 
 static int count_lines(void) {
-    if (ed.len == 0) return ed.was_empty ? 0 : 1;
+    if (ed.len == 0) return ed.file.was_empty ? 0 : 1;
     int n = 1;
     for (size_t i = 0; i < ed.len; i++) n += s_buf[i] == '\n';
     return n;
@@ -294,98 +288,40 @@ static int count_lines(void) {
 /* `"name" [flags] 3L, 52B` and what follows, on the status row. */
 static void report(unsigned long bytes, const char *then) {
     snprintf(s_msg, sizeof s_msg, "\"%s\" %s%s%s%dL, %luB%s", ed.name,
-             ed.readonly ? "[readonly] " : "", ed.crlf ? "[CRLF] " : "",
-             ed.eol || ed.len == 0 ? "" : "[noeol] ", count_lines(), bytes, then);
+             ed.file.readonly ? "[readonly] " : "", ed.file.crlf ? "[CRLF] " : "",
+             ed.file.eol || ed.len == 0 ? "" : "[noeol] ", count_lines(), bytes, then);
     ed.msg = s_msg;
 }
 
-/* Read the file into the buffer: NULL, or why it cannot be edited, with
- * s_msg holding the words when they need a number. */
+/* Read the file into the buffer: NULL, or why it cannot be edited. */
 static const char *load(void) {
-    ed.len = 0;
-    s_buf[0] = '\0';
-    FRESULT r = files_stat(ed.path, &s_fno);
-    if (r == FR_NO_FILE) {
-        ed.eol = ed.was_empty = true;
+    unsigned long bytes;
+    const char *why = editor_file_load(ed.path, s_buf, sizeof s_buf, &ed.len, &ed.file, &bytes,
+                                       s_msg, sizeof s_msg);
+    if (why) return why;
+    if (ed.file.is_new) {
         snprintf(s_msg, sizeof s_msg, "\"%s\" [New]", ed.name);
         ed.msg = s_msg;
-        return NULL;
+    } else {
+        report(bytes, "");
     }
-    if (r != FR_OK) return files_why(r);
-    if (s_fno.fattrib & AM_DIR) return "is a directory";
-    if (s_fno.fsize > VI_BUF_SIZE - 1) {
-        snprintf(s_msg, sizeof s_msg, "too large: %lu bytes, %u at most",
-                 (unsigned long)s_fno.fsize, VI_BUF_SIZE - 1);
-        return s_msg;
-    }
-    if (s_fno.fattrib & AM_RDO) ed.readonly = true;
-
-    r = f_open(&s_fil, ed.path, FA_READ);
-    if (r != FR_OK) return files_why(r);
-    UINT got = 0;
-    r = f_read(&s_fil, s_buf, (UINT)s_fno.fsize, &got);
-    f_close(&s_fil);
-    if (r != FR_OK) return files_why(r);
-    if (got != s_fno.fsize) return "card I/O error";
-    size_t n = got;
-
-    /* CR LF if every line break is one; then the CRs come off. */
-    size_t lfs = 0, crlfs = 0;
-    for (size_t i = 0; i < n; i++) {
-        if (s_buf[i] != '\n') continue;
-        lfs++;
-        crlfs += i > 0 && s_buf[i - 1] == '\r';
-    }
-    ed.crlf = lfs > 0 && crlfs == lfs;
-    if (ed.crlf) {
-        size_t o = 0;
-        for (size_t i = 0; i < n; i++)
-            if (!(s_buf[i] == '\r' && i + 1 < n && s_buf[i + 1] == '\n')) s_buf[o++] = s_buf[i];
-        n = o;
-    }
-    ed.was_empty = n == 0;
-    ed.eol = n == 0 || s_buf[n - 1] == '\n';
-    if (n > 0 && s_buf[n - 1] == '\n') n--;
-    ed.len = n;
-    s_buf[n] = '\0';
-    report((unsigned long)s_fno.fsize, "");
     return NULL;
 }
 
 /* Write the buffer back, through name.new. */
 static bool save(void) {
-    if (ed.readonly) {
+    if (ed.file.readonly) {
         ed.msg = "E45: read-only; not written";
         return false;
     }
-    const char *why = files_safe_open(&s_save, ed.path);
-    unsigned long bytes = 0;
-    if (!why) {
-        size_t n = 0;
-        bool last = ed.eol && !(ed.len == 0 && ed.was_empty);
-        for (size_t i = 0; i <= ed.len; i++) {
-            if (n + 2 > sizeof s_text || (i == ed.len && n)) {
-                files_safe_write(&s_save, s_text, n);
-                bytes += n;
-                n = 0;
-            }
-            if (i == ed.len) break;
-            if (s_buf[i] == '\n' && ed.crlf) s_text[n++] = '\r';
-            s_text[n++] = s_buf[i];
-        }
-        if (last) {
-            files_safe_write(&s_save, ed.crlf ? "\r\n" : "\n", ed.crlf ? 2 : 1);
-            bytes += ed.crlf ? 2 : 1;
-        }
-        why = files_safe_commit(&s_save);
-    }
+    unsigned long bytes;
+    const char *why = editor_file_save(ed.path, s_buf, ed.len, &ed.file, &bytes);
     if (why) {
         snprintf(s_msg, sizeof s_msg, "E212: not written: %s", why);
         ed.msg = s_msg;
         return false;
     }
     ed.vi.modified = false;
-    ed.was_empty = ed.len == 0 && ed.was_empty;
     report(bytes, " written");
     return true;
 }
@@ -817,7 +753,7 @@ static int edit(shell_t *sh, const char *arg, bool readonly) {
     memset(&ed, 0, sizeof ed);
     ed.sh = sh;
     ed.name = arg;
-    ed.readonly = readonly;
+    ed.file.readonly = readonly;
     if (!path_resolve(ed.path, sh->cwd, arg)) {
         shell_error(sh, "vi: %s: name too long\n", arg);
         return 1;

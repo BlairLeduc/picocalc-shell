@@ -8,8 +8,9 @@
  * the keyboard and card detect at about 30 Hz, takes the UART's bytes as
  * keys, and blinks the cursor.
  *
- * Two UART bytes are not keys (EL §13.1): FS (0x1C) dumps the grid as
- * text, and GS (0x1D) logs the start time and the counters.
+ * Three UART bytes are not keys (EL §13.1): FS (0x1C) dumps the grid as
+ * text, GS (0x1D) logs the start time and the counters, and RS (0x1E)
+ * starts or stops logging each key event as the southbridge sent it.
  */
 
 #include <stdbool.h>
@@ -39,6 +40,7 @@
 
 #define UART_DUMP_SCREEN 0x1C
 #define UART_LOG_STATS   0x1D
+#define UART_LOG_KEYS    0x1E
 
 static term_t       g_term;
 static shell_t      g_shell;
@@ -50,6 +52,9 @@ static sb_status_t     g_sb;           /* the version's read at bring-up */
 static uint8_t         g_sb_ver[2];
 
 static uint64_t s_next_poll;
+#if PICO_SHELL_UART
+static bool s_log_keys;   /* RS on the UART toggles it */
+#endif
 /* volatile, so the release build keeps them for a read over SWD. */
 static volatile uint64_t s_main_us, s_lcd_us, s_prompt_us;
 
@@ -91,7 +96,7 @@ static bool interrupted(void *ctx) {
 #if PICO_SHELL_UART
     int c;
     while ((c = getchar_timeout_us(0)) >= 0) {
-        int k = keys_uart((uint8_t)c);
+        int k = keys_uart(&g_keys, (uint8_t)c);
         if (k == KEY_BREAK || k == 0x1B || k == 0x03) hit = true;
     }
 #endif
@@ -215,14 +220,17 @@ static void log_stats(void) {
 #endif
 
 /* The next input byte, from the keyboard or, in the development build,
- * the UART, with the cursor blinking while it waits. FS and GS on the
- * UART are acted on here and never returned. */
+ * the UART, with the cursor blinking while it waits. FS, GS and RS on
+ * the UART are acted on here and never returned. */
 static int getkey(void *ctx) {
     (void)ctx;
     for (;;) {
         poll_keys();
         uint8_t state, code;
         while (kbd_pop(&state, &code)) {
+#if PICO_SHELL_UART
+            if (s_log_keys) printf("key %u 0x%02x\n", state, code);
+#endif
             int k = keys_event(&g_keys, state, code);
             if (k != KEYS_NONE) return k;
         }
@@ -231,7 +239,11 @@ static int getkey(void *ctx) {
         while ((c = getchar_timeout_us(0)) >= 0) {
             if (c == UART_DUMP_SCREEN) dump_screen();
             else if (c == UART_LOG_STATS) log_stats();
-            else return keys_uart((uint8_t)c);
+            else if (c == UART_LOG_KEYS) s_log_keys = !s_log_keys;
+            else {
+                int k = keys_uart(&g_keys, (uint8_t)c);
+                if (k != KEYS_NONE) return k;
+            }
         }
 #endif
         screen_tick(&g_term, time_us_64());

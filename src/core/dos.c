@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "dos.h"
+#include "edit.h"
 #include "files.h"
 #include "flavour.h"
 #include "keycodes.h"
@@ -274,6 +275,7 @@ const shell_builtin_t flavour_builtins[] = {
     { "DELTREE",   dos_deltree,   "DELTREE [/Y] path...", "delete a directory and all in it" },
     { "DIR",       dos_dir,       "DIR [path] [/W] [/P] [/S] [/A] [/B]", "list files" },
     { "ECHO",      dos_echo,      "ECHO [ON|OFF|message]", "show a message, or the prompt" },
+    { "EDIT",      cmd_edit,      "EDIT [file]", "edit a text file" },
     { "ERASE",     dos_del,       "ERASE [/P] path", "delete files" },
     { "EXIT",      cmd_menu,      "EXIT", "UF2 Loader's own menu" },
     { "FIND",      dos_find,      "FIND [/V] [/C] [/N] [/I] \"text\" [file...]", "lines that contain text" },

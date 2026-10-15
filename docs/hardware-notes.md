@@ -1142,6 +1142,34 @@ Shift+Del, PgUp/PgDn are Shift+Up/Down, Break is Shift+Esc, Insert is
 Shift+Enter or Alt+I. And Alt+`,`/`.`/Space/`B` are consumed by the MCU itself
 for the backlights and battery display.
 
+**Alt chords, measured** (a Plus 2 W, keyboard firmware version `0x00`,
+2026-10-14, 495 events captured over UART1 from the keys pressed on the
+panel; the shell's ring and the bus reported no overflow and no I²C
+error):
+
+- **A tap of Alt is a press and a release** of `0xa1`, with nothing
+  between. Held past about 300 ms, Alt sends **hold** events (`2 0xa1`)
+  about every 100 ms until it is let go, so a host can tell a tap from a
+  hold: a tap has no hold between its press and its release.
+- **Alt with a letter sends the capital** (`0x46` for Alt+F) beside
+  Alt's own events: in the source, the MCU's Alt branch comes before its
+  lower-casing. Alt+I is Insert, `0xd1`, pressed and
+  released. Alt+B, Alt+`,`, Alt+`.` and Alt+Space are the MCU's own
+  (backlights, battery) and send nothing, so a quick one looks like a
+  tap of Alt to the host.
+- **Alt with an arrow sends the arrow's own code** (`0xb4`-`0xb7`)
+  beside Alt's hold events. Alt+digit sends the digit.
+- **Ctrl with a letter sends the lower-case letter** beside Ctrl's
+  events (`0xa5`): Ctrl+X, C and V arrived as `0x78`, `0x63`, `0x76`.
+- In the same capture, Alt+C and Alt+2 sent nothing, and some keys
+  pressed under Alt (1, 3, 5, 8, Z, D) had no release. The MCU's source
+  has no reason for either; the operator may have rolled the keys. It
+  was seen once and is not explained. Accept a press with no release
+  (§6.2).
+- Not captured: Ctrl with the arrows, Home and End, and Shift with the
+  arrows (which the source says are swallowed or turned into PgUp and
+  PgDn, above).
+
 **Read the keymap before designing a binding.** The full register map, event
 cadence, matrix tables and the list of swallowed chords are in
 [official keyboard MCU source](https://github.com/clockworkpi/PicoCalc/blob/master/Code/picocalc_keyboard/keyboard.ino).

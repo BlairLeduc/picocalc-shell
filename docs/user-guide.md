@@ -587,9 +587,8 @@ better than UNIX. It manages the same card and runs the same programs,
 but its commands are DOS's: `DIR`, `COPY`, `DEL`, `CD`. It has its own
 `BOOT2350.UF2`. To use it, copy that file to the card's root in place of
 the UNIX one; to go back, copy the UNIX one there again. Neither flavour
-installs the other.
-
-*Still to come in this flavour:* the EDIT editor in place of vi.
+installs the other. In place of vi it has EDIT, an editor like the
+one DOS had (below).
 
 ### The prompt and paths
 
@@ -644,6 +643,7 @@ files; give the name in full to reach one. `DIR NAME` lists `NAME.*`.
 | `PROMPT [text]` | sets the prompt: `$P` the path, `$G` `>`, `$_` a new line, `$N` the drive. `PROMPT` alone puts back `$P$G` |
 | `ECHO [ON\|OFF\|message]` | prints a message; `ECHO.` prints a blank line; `ECHO OFF` hides the prompt |
 | `PAUSE` | waits for a key |
+| `EDIT [file]` | edits a text file (below) |
 | `CALL`, `FOR`, `GOTO`, `IF`, `REM`, `SHIFT` | for batch files (below); `FOR` and `IF` work at the prompt too |
 | `CLS` | clears the screen |
 | `VER`, `VOL`, `MEM` | the shell's version; the card's label and serial number; the memory in use and free |
@@ -712,6 +712,57 @@ before the first prompt: it is the place for `PATH`, `PROMPT` and `SET`.
 A program run from it would run at every start, so keep that to a
 program you can leave; if the shell can no longer be reached, take the
 card out and edit the file on a computer.
+
+### EDIT
+
+`EDIT NAME.TXT` opens a file to edit, or a new one by that name; `EDIT`
+alone starts an untitled one. EDIT switches to the 64-column font while
+it runs and back when it ends. The top row is the menu bar, the next the
+file's name, and the bottom row says `F1=Help` and where the cursor is.
+
+**Menus.** Tap Alt on its own to open the File menu, or hold Alt and
+press a menu's letter: Alt+F, Alt+E, Alt+S, Alt+O, Alt+H. In a menu,
+Left and Right go to the next menu, Up and Down choose, and Enter or an
+item's highlighted letter carries it out. Esc closes the menu.
+
+| Menu | Items |
+|---|---|
+| File | New, Open, Save, Save As, Exit |
+| Edit | Cut, Copy, Paste, Clear |
+| Search | Find, Repeat Last Find, Change (every match, at once) |
+| Options | Display: white on blue, or your phosphor on black |
+| Help | Keys: this table, on the screen |
+
+**Keys.** The PicoCalc's keyboard cannot send Shift with the arrows, so
+Alt does what Shift did in DOS's EDIT:
+
+| Key | Does |
+|---|---|
+| Arrows | move |
+| Ctrl+Left, Ctrl+Right | a word left or right |
+| Shift+Tab, Shift+Del | Home and End: the start and end of the line |
+| Ctrl+Shift+Tab, Ctrl+Shift+Del | the start and end of the file |
+| Shift+Up, Shift+Down | a page up or down |
+| Alt with the arrows | select |
+| Ctrl+X, Ctrl+C, Ctrl+V | cut, copy, paste |
+| Del | clears the selection, or the letter under the cursor |
+| Ctrl+Y | cuts the line |
+| Alt+I | Insert: switches between inserting and typing over (`OVR`) |
+| F1 | the keys |
+| F3 | finds the same text again |
+| Esc | closes a menu or a box |
+| Brk (Shift+Esc) | File, Exit |
+
+Typing over a selection replaces it. The clipboard holds 8 KB. Find
+and Change match the text as typed, in either case. A box that asks for
+text offers what was typed last: type to replace it, or Backspace to
+change it.
+
+**Saving.** Save writes the file through `NAME.TXT.new`, as vi does, so a
+cut in the power leaves the old file or the new one. Exit and New ask
+before they lose a change. EDIT keeps the file's line endings, `CR LF`
+or `LF`; a new file gets `LF`. A file larger than 64 KB is not opened.
+A read-only file opens, but must be saved under another name.
 
 ### Keys at the prompt
 
