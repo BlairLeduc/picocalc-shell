@@ -38,9 +38,12 @@ static uint64_t now(void *ctx) {
     return 0;
 }
 
+/* Break after this many more polls; never if negative. */
+static int break_after = -1;
+
 static bool interrupted(void *ctx) {
     (void)ctx;
-    return false;
+    return break_after >= 0 && break_after-- == 0;
 }
 
 static int getkey(void *ctx) {
@@ -151,10 +154,10 @@ static int unit_tests(void) {
 
     vars_set("FOO", 3, "bar");
     char line[64];
-    CHECK(dos_expand(line, sizeof line, "%foo%-%%-%NOPE%-50% %") &&
+    CHECK(dos_expand(line, sizeof line, "%foo%-%%-%NOPE%-50% %", NULL) &&
               strcmp(line, "bar-%--50% %") == 0,
           "expand '%s'", line);
-    CHECK(!dos_expand(line, 8, "%FOO%%FOO%%FOO%"), "expansion too long");
+    CHECK(!dos_expand(line, 8, "%FOO%%FOO%%FOO%", NULL), "expansion too long");
 
     static dos_parse_t p;
     CHECK(dos_parse(&p, "DIR/W/P") && p.ncmds == 1 && p.cmds[0].argc == 2 &&
@@ -184,6 +187,150 @@ static int unit_tests(void) {
     CHECK(!dos_parse(&p, "| X") && !dos_parse(&p, "X |") && !dos_parse(&p, "X >") &&
               !dos_parse(&p, "> f"),
           "syntax errors");
+    return 0;
+}
+
+/* ---- batch files (step 2) --------------------------------------------- */
+
+/* In \HOME, with HERE.UF2 there and the prompt $P$G. */
+static int batch_tests(void) {
+    CHECK(run("CD \\HOME") == 0 && run("PROMPT $P$G") == 0 && run("ECHO ON") == 0, "set up");
+
+    /* Parameters, @, ECHO OFF for the file alone, REM. */
+    CHECK(put("/HOME/T1.BAT", "@ECHO OFF\r\nECHO one %1 [%2] %3.\r\nREM nothing > X.TXT\r\n"
+                              "ECHO %0 %%\r\n"),
+          "T1");
+    CHECK(run("t1 a,b") == 0 && strcmp(con, "one a [b] .\nt1 %\n") == 0, "'%s'", con);
+    CHECK(!exists("/HOME/X.TXT"), "REM makes no file");
+    CHECK(run("ECHO") == 0 && strcmp(con, "ECHO is on\n") == 0, "echo back on: '%s'", con);
+    CHECK(run("T1.BAT \"a b\" c") == 0 && has("one \"a b\" [c] ."), "quotes kept: '%s'", con);
+    CHECK(run("ECHO %1 %0") == 0 && strcmp(con, "%1 %0\n") == 0, "at the prompt: '%s'", con);
+
+    /* ECHO ON shows each line after the prompt. */
+    CHECK(put("/HOME/T2.BAT", "ECHO hi\r\n:LABEL\r\n@ECHO quiet\r\n"), "T2");
+    CHECK(run("T2") == 0 && strcmp(con, "\nC:\\HOME>ECHO hi\nhi\nquiet\n") == 0, "'%s'", con);
+
+    /* GOTO, labels, SHIFT and IF a==b. */
+    CHECK(put("/HOME/LOOP.BAT", "@ECHO OFF\r\n:LOOP\r\nIF \"%1\"==\"\" GOTO END\r\n"
+                                "ECHO [%1]\r\nSHIFT\r\nGOTO :loop\r\n:END extra\r\nECHO done\r\n"),
+          "LOOP");
+    CHECK(run("LOOP a b c d e f g h i j k") == 0 &&
+              strcmp(con, "[a]\n[b]\n[c]\n[d]\n[e]\n[f]\n[g]\n[h]\n[i]\n[j]\n[k]\ndone\n") == 0,
+          "'%s'", con);
+    CHECK(put("/HOME/NOLABEL.BAT", "@ECHO OFF\r\nGOTO NOWHERE\r\nECHO never\r\n"), "NOLABEL");
+    CHECK(run("NOLABEL") == 1 && strcmp(con, "Label not found\n") == 0, "'%s'", con);
+    CHECK(run("GOTO X") == 0 && strcmp(con, "") == 0, "GOTO at the prompt");
+
+    /* IF's three tests, NOT, and IF after IF. */
+    CHECK(put("/HOME/IFS.BAT", "@ECHO OFF\r\nIF EXIST t1.bat ECHO e1\r\n"
+                               "IF NOT EXIST NOPE.TXT ECHO e2\r\nIF EXIST *.BAT ECHO e3\r\n"
+                               "IF EXIST *.ZZZ ECHO bad1\r\nIF EXIST \\PICO2-APPS ECHO e4\r\n"
+                               "TYPE NOPE.TXT\r\nIF NOT ERRORLEVEL 1 ECHO bad2\r\n"
+                               "IF ERRORLEVEL 2 ECHO bad3\r\nIF ERRORLEVEL 1 ECHO e5\r\n"
+                               "IF a==a IF NOT b == c ECHO e6\r\nIF \"a b\"==\"a b\" ECHO e7\r\n"
+                               "IF A==a ECHO bad4\r\n"),
+          "IFS");
+    run("IFS");
+    CHECK(has("e1\ne2\ne3\ne4\nFile not found - NOPE.TXT\ne5\ne6\ne7\n") && !has("bad"), "'%s'",
+          con);
+    CHECK(run("IF ==x ECHO y") == 2 && strcmp(con, "Syntax error\n") == 0, "'%s'", con);
+    CHECK(run("IF a==a") == 2 && has("Syntax error"), "no command: '%s'", con);
+    CHECK(run("IF ERRORLEVEL x ECHO y") == 2 && has("Syntax error"), "'%s'", con);
+    CHECK(run("ECHO x | IF a==a ECHO y") == 2 && has("Syntax error"), "after a pipe: '%s'", con);
+
+    /* FOR, at the prompt with %x and in a file with %%x; a wildcard as
+     * typed before each name; echoed with ECHO ON, not after @. */
+    CHECK(run("FOR %x IN (a b,c) DO ECHO [%x]") == 0 &&
+              strcmp(con, "\nC:\\HOME>ECHO [a]\n[a]\n\nC:\\HOME>ECHO [b]\n[b]\n"
+                          "\nC:\\HOME>ECHO [c]\n[c]\n") == 0,
+          "'%s'", con);
+    CHECK(f_mkdir("/HOME/FT") == FR_OK && put("/HOME/FT/A.TXT", "alpha\r\n") &&
+              put("/HOME/FT/B.TXT", "beta\r\n") && put("/HOME/FT/C.DAT", "gamma\r\n") &&
+              put("/HOME/FT/D.TXT", "hidden\r\n") && f_chmod("/HOME/FT/D.TXT", AM_HID, AM_HID) == FR_OK,
+          "FT");
+    CHECK(run("@FOR %f IN (FT\\*.TXT) DO ECHO %f") == 0 && strcmp(con, "FT\\A.TXT\nFT\\B.TXT\n") == 0,
+          "'%s'", con);
+    CHECK(put("/HOME/FORT.BAT", "@ECHO OFF\r\nFOR %%f IN (FT\\*.TXT FT\\C.DAT) DO TYPE %%f\r\n"), "FORT");
+    CHECK(run("FORT") == 0 && strcmp(con, "alpha\nbeta\ngamma\n") == 0, "'%s'", con);
+    CHECK(run("@FOR %x IN (a) DO FOR %y IN (b) DO ECHO x") == 2 && has("FOR cannot be nested"),
+          "'%s'", con);
+    CHECK(run("FOR x IN (a) DO ECHO") == 2 && has("Syntax error") &&
+              run("FOR %x IN a DO ECHO") == 2 && run("FOR %x IN (a) ECHO") == 2 &&
+              run("FOR %x IN (a) DO") == 2,
+          "FOR's syntax");
+    run("@FOR %x IN () DO ECHO x");
+    CHECK(strcmp(con, "") == 0, "an empty set");
+
+    /* CALL comes back; another batch file without it does not. */
+    CHECK(put("/HOME/INNER.BAT", "@ECHO inner %1\r\n") &&
+              put("/HOME/OUTER.BAT", "@ECHO OFF\r\nCALL INNER x\r\nECHO back\r\nINNER y\r\n"
+                                     "ECHO never\r\n"),
+          "INNER, OUTER");
+    CHECK(run("OUTER") == 0 && strcmp(con, "inner x\nback\ninner y\n") == 0, "'%s'", con);
+    CHECK(run("CALL ECHO  hi") == 0 && strcmp(con, "hi\n") == 0, "CALL a builtin: '%s'", con);
+    CHECK(run("CALL INNER z > OUT.TXT") == 0 && strcmp(con, "") == 0 &&
+              slurp("/HOME/OUT.TXT") && strstr(slurp("/HOME/OUT.TXT"), "inner z"),
+          "CALL with >: '%s'", con);
+    CHECK(run("INNER > O.TXT") == 1 && has("Cannot redirect a batch file") &&
+              !exists("/HOME/O.TXT"),
+          "'%s'", con);
+    CHECK(run("ECHO x | INNER") == 1 && has("Cannot redirect a batch file"), "'%s'", con);
+    CHECK(put("/HOME/FORCHAIN.BAT", "@ECHO OFF\r\nFOR %%x IN (1 2 3) DO INNER %%x\r\n"
+                                    "ECHO never\r\n"),
+          "FORCHAIN");
+    CHECK(run("FORCHAIN") == 0 && strcmp(con, "inner 1\n") == 0, "chained from FOR: '%s'", con);
+
+    /* Break stops an endless loop, and a FOR, though nothing in them
+     * looks for it. */
+    CHECK(put("/HOME/ENDLESS.BAT", "@ECHO OFF\r\n:A\r\nECHO x\r\nGOTO A\r\n"), "ENDLESS");
+    break_after = 20;
+    CHECK(run("ENDLESS") == 130 && has("x\nx\n") && has("^C\n") && break_after < 0, "'%s'", con);
+    break_after = 2;
+    CHECK(run("@FOR %x IN (1 2 3 4 5) DO ECHO %x") == 130 && !has("4"), "'%s'", con);
+    break_after = -1;
+
+    /* A batch file taking its own place runs on with no limit; CALLs
+     * nest three deep. */
+    CHECK(put("/HOME/COUNT.BAT", "@ECHO OFF\r\nSET N=%N%x\r\nIF NOT \"%N%\"==\"xxxxxx\" COUNT\r\n"
+                                 "ECHO %N%\r\n"),
+          "COUNT");
+    CHECK(run("COUNT") == 0 && strcmp(con, "xxxxxx\n") == 0 && run("SET N=") == 0, "'%s'", con);
+    CHECK(put("/HOME/SELF.BAT", "@CALL SELF\r\n"), "SELF");
+    CHECK(run("SELF") == 1 && strcmp(con, "Batch files nested more than 3 deep\n") == 0, "'%s'", con);
+    CHECK(run("CALL NOPE") == 127 && has("Bad command or file name"), "'%s'", con);
+
+    /* A batch file ahead of a program of the same name, here or on PATH,
+     * or by its path; not under another extension. */
+    CHECK(put("/HOME/HERE.BAT", "@ECHO the batch\r\n") &&
+              put("/pico2-apps/ONPATH.BAT", "@ECHO on the path\r\n"),
+          "HERE, ONPATH");
+    CHECK(run("here") == 0 && strcmp(con, "the batch\n") == 0, "'%s'", con);
+    CHECK(run("ONPATH") == 0 && strcmp(con, "on the path\n") == 0, "'%s'", con);
+    CHECK(run("\\pico2-apps\\onpath") == 0 && strcmp(con, "on the path\n") == 0, "'%s'", con);
+    CHECK(run("C:\\PICO2-APPS\\ONPATH.BAT") == 0 && has("on the path"), "'%s'", con);
+    CHECK(run("ONPATH.TXT") == 127 && has("Bad command or file name"), "'%s'", con);
+
+    /* A line too long is said, and the next one runs. */
+    static char longer[600];
+    strcpy(longer, "ECHO ");
+    memset(longer + 5, 'y', 300);
+    strcpy(longer + 305, "\r\n@ECHO after\r\n");
+    CHECK(put("/HOME/LONG.BAT", longer), "LONG");
+    CHECK(run("LONG") == 0 && strcmp(con, "Line too long\nafter\n") == 0, "'%s'", con);
+
+    /* AUTOEXEC.BAT at start, its ECHO OFF its own. */
+    CHECK(put("/AUTOEXEC.BAT", "@ECHO OFF\r\nSET FROM=autoexec\r\nECHO started\r\n"), "AUTOEXEC");
+    clear();
+    flavour_start(&sh);
+    CHECK(has("(DOS)\n\nstarted\n") && vars_get("FROM", 4) &&
+              strcmp(vars_get("FROM", 4), "autoexec") == 0 && dos_echo_on,
+          "'%s'", con);
+    CHECK(f_unlink("/AUTOEXEC.BAT") == FR_OK, "unlink");
+    clear();
+    flavour_start(&sh);
+    CHECK(!has("started"), "no AUTOEXEC.BAT: '%s'", con);
+
+    CHECK(run("HELP") == 0 && has("CALL") && has("SHIFT") && has("GOTO"), "'%s'", con);
     return 0;
 }
 
@@ -488,6 +635,8 @@ static int dos_tests(bool fat32) {
     for (const char *s = "xc\t"; *s; s++) shell_input(&sh, (unsigned char)*s);
     CHECK(strcmp(sh.line.text, "XCOPY ") == 0, "a command: '%s'", sh.line.text);
     shell_input(&sh, 0x1B);
+
+    if (batch_tests()) return 1;
 
     /* A copy that fails part way leaves the old file. */
     CHECK(put("/HOME/OLD.TXT", "the old text"), "old");

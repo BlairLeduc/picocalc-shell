@@ -9,13 +9,17 @@ static char upper(char c) {
     return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
 }
 
-bool dos_expand(char *out, size_t size, const char *line) {
+bool dos_expand(char *out, size_t size, const char *line, const char *const *params) {
     size_t n = 0;
     for (const char *s = line; *s; s++) {
         const char *value = NULL;
         size_t len = 1;
         if (*s == '%' && s[1] == '%') {
             value = "%";
+            s++;
+        } else if (*s == '%' && params && s[1] >= '0' && s[1] <= '9') {
+            value = params[s[1] - '0'];
+            if (!value) value = "";
             s++;
         } else if (*s == '%') {
             const char *end = strchr(s + 1, '%');

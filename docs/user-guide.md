@@ -589,8 +589,7 @@ but its commands are DOS's: `DIR`, `COPY`, `DEL`, `CD`. It has its own
 the UNIX one; to go back, copy the UNIX one there again. Neither flavour
 installs the other.
 
-*Still to come in this flavour:* batch files with `AUTOEXEC.BAT`, and the
-EDIT editor in place of vi.
+*Still to come in this flavour:* the EDIT editor in place of vi.
 
 ### The prompt and paths
 
@@ -645,6 +644,7 @@ files; give the name in full to reach one. `DIR NAME` lists `NAME.*`.
 | `PROMPT [text]` | sets the prompt: `$P` the path, `$G` `>`, `$_` a new line, `$N` the drive. `PROMPT` alone puts back `$P$G` |
 | `ECHO [ON\|OFF\|message]` | prints a message; `ECHO.` prints a blank line; `ECHO OFF` hides the prompt |
 | `PAUSE` | waits for a key |
+| `CALL`, `FOR`, `GOTO`, `IF`, `REM`, `SHIFT` | for batch files (below); `FOR` and `IF` work at the prompt too |
 | `CLS` | clears the screen |
 | `VER`, `VOL`, `MEM` | the shell's version; the card's label and serial number; the memory in use and free |
 | `HELP [command]` | lists the commands, or explains one |
@@ -663,7 +663,55 @@ A command can read a file with `<`, and `|` joins commands:
 
 Type a program's name to run it, as in the UNIX flavour: `PICO-ATOM`
 runs `PICO-ATOM.UF2`. The shell looks in the current directory first,
-then in each directory of `PATH`, which starts as `C:\PICO2-APPS`.
+then in each directory of `PATH`, which starts as `C:\PICO2-APPS`. A
+batch file of the same name, `PICO-ATOM.BAT`, anywhere it looks, runs
+in its place.
+
+### Batch files
+
+A batch file is a text file of commands, one to a line, whose name ends
+`.BAT`. Type its name, with or without `.BAT`, to run it; the shell
+looks for it where it looks for programs.
+
+```
+@ECHO OFF
+REM BACKUP.BAT: copy the text files given, or say how
+IF "%1"=="" GOTO USAGE
+:NEXT
+IF "%1"=="" GOTO END
+COPY %1 \BACKUP
+SHIFT
+GOTO NEXT
+:USAGE
+ECHO Usage: BACKUP file...
+:END
+```
+
+| In a batch file | Does |
+|---|---|
+| `%0` to `%9` | the name it was run by, and the words after it. Words are split at blanks, commas and semicolons; quotes are kept |
+| `SHIFT` | moves the words down one: `%2` becomes `%1`, and a word past `%9` comes in |
+| `:LABEL` and `GOTO LABEL` | carries on from the line after the label. `Label not found` ends the batch file |
+| `IF [NOT] EXIST name command` | runs the command if the file or directory is there; with a wildcard, if any file matches |
+| `IF [NOT] ERRORLEVEL n command` | runs it if the last command's status is `n` or more. Every command sets it: 0 if it worked, 1 or more if not |
+| `IF [NOT] a==b command` | runs it if the two are the same, in the same case. Put both in quotes, `"%1"==""`, in case one is empty |
+| `FOR %%X IN (set) DO command` | runs the command once for each word of the set, with `%%X` replaced by it; a wildcard in the set is each file it matches. At the prompt, write `%X` |
+| `CALL name [words]` | runs another batch file and comes back. Without `CALL`, the other one takes this one's place, and this one does not go on |
+| `REM text` | a comment |
+| `ECHO OFF`, `@` | `ECHO OFF` stops the shell showing each line before running it; `@` at a line's start hides that line. At the end of the batch file, ECHO is as it was at the prompt |
+| `PAUSE` | waits for a key |
+
+Break, Esc or Ctrl-C stops a batch file, even one that loops for ever.
+`%NAME%` is a variable, as at the prompt. Lines can be up to 255
+characters long, and batch files can `CALL` one another three deep. A
+batch file's output cannot be redirected or piped as `NAME > FILE`, but
+`CALL NAME > FILE` works.
+
+`C:\AUTOEXEC.BAT`, if the card has one, runs each time the shell starts,
+before the first prompt: it is the place for `PATH`, `PROMPT` and `SET`.
+A program run from it would run at every start, so keep that to a
+program you can leave; if the shell can no longer be reached, take the
+card out and edit the file on a computer.
 
 ### Keys at the prompt
 

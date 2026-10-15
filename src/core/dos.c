@@ -1,6 +1,6 @@
 /* dos.c — the DOS flavour (flavour.h, dos.h; design.md §4.7): its
- * builtins, the prompt, running a line, and CLS, VER, MEM, SET, PATH,
- * PROMPT, ECHO and PAUSE. */
+ * builtins, the prompt, running a parsed line, and CLS, VER, MEM, SET,
+ * PATH, PROMPT, ECHO and PAUSE. */
 
 #include <stdio.h>
 #include <string.h>
@@ -16,12 +16,8 @@
 #include "text.h"
 #include "vars.h"
 
-/* ECHO OFF at the prompt hides the prompt, as in DOS. */
-static bool s_echo = true;
-
-/* The command running: what followed its name, as typed, for ECHO,
- * SET, PATH and PROMPT. */
-static const char *s_tail = "";
+bool dos_echo_on = true;
+const char *dos_tail = "";
 
 static char upper(char c) {
     return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
@@ -166,7 +162,7 @@ static int set_var(shell_t *sh, const char *name, const char *value) {
 static int dos_set(shell_t *sh, int argc, char **argv) {
     (void)argc;
     (void)argv;
-    const char *t = skip_blanks(s_tail);
+    const char *t = skip_blanks(dos_tail);
     if (!*t) {
         const char *v;
         for (unsigned i = 0; (v = vars_at(i)) != NULL; i++) out_printf(&sh->out, "%s\n", v);
@@ -186,7 +182,7 @@ static int dos_set(shell_t *sh, int argc, char **argv) {
 static int dos_path(shell_t *sh, int argc, char **argv) {
     (void)argc;
     (void)argv;
-    const char *t = skip_blanks(s_tail);
+    const char *t = skip_blanks(dos_tail);
     if (*t == '=') t = skip_blanks(t + 1);
     if (!*t) {
         const char *v = vars_get("PATH", 4);
@@ -211,7 +207,7 @@ static int dos_path(shell_t *sh, int argc, char **argv) {
 static int dos_prompt(shell_t *sh, int argc, char **argv) {
     (void)argc;
     (void)argv;
-    const char *t = skip_blanks(s_tail);
+    const char *t = skip_blanks(dos_tail);
     if (*t == '=') t++;
     return set_var(sh, "PROMPT", *t ? t : DEFAULT_PROMPT);
 }
@@ -221,15 +217,15 @@ static int dos_prompt(shell_t *sh, int argc, char **argv) {
 static int dos_echo(shell_t *sh, int argc, char **argv) {
     (void)argc;
     (void)argv;
-    if (*s_tail == '.') {
-        out_printf(&sh->out, "%s\n", s_tail + 1);
+    if (*dos_tail == '.') {
+        out_printf(&sh->out, "%s\n", dos_tail + 1);
         return 0;
     }
-    const char *t = skip_blanks(s_tail);
+    const char *t = skip_blanks(dos_tail);
     if (!*t) {
-        out_printf(&sh->out, "ECHO is %s\n", s_echo ? "on" : "off");
+        out_printf(&sh->out, "ECHO is %s\n", dos_echo_on ? "on" : "off");
     } else if (path_same(t, "ON") || path_same(t, "OFF")) {
-        s_echo = path_same(t, "ON");
+        dos_echo_on = path_same(t, "ON");
     } else {
         out_printf(&sh->out, "%s\n", t);
     }
@@ -269,6 +265,7 @@ const shell_builtin_t flavour_builtins[] = {
     { "BACKLIGHT", dos_backlight, "BACKLIGHT [lcd|kbd] [0-255]", "show or set a backlight" },
     { "BATTERY",   cmd_battery,   "BATTERY", "the battery's charge" },
     { "BOOTSEL",   cmd_bootsel,   "BOOTSEL", "reboot into BOOTSEL, as a USB drive" },
+    { "CALL",      dos_call,      "CALL file [parameters]", "run a batch file and come back" },
     { "CD",        dos_cd,        "CD [path]", "show or change the directory" },
     { "CHDIR",     dos_cd,        "CHDIR [path]", "show or change the directory" },
     { "CLS",       dos_cls,       "CLS", "clear the screen" },
@@ -280,8 +277,11 @@ const shell_builtin_t flavour_builtins[] = {
     { "ERASE",     dos_del,       "ERASE [/P] path", "delete files" },
     { "EXIT",      cmd_menu,      "EXIT", "UF2 Loader's own menu" },
     { "FIND",      dos_find,      "FIND [/V] [/C] [/N] [/I] \"text\" [file...]", "lines that contain text" },
+    { "FOR",       dos_control,   "FOR %x IN (set) DO command", "a command for each in a set" },
     { "FONT",      dos_font,      "FONT [8x10|5x10]", "40 or 64 columns; swap with none" },
+    { "GOTO",      dos_goto,      "GOTO label", "go on at :label in a batch file" },
     { "HELP",      cmd_help,      "HELP [command]", "list the commands, or explain one" },
+    { "IF",        dos_control,   "IF [NOT] EXIST f|ERRORLEVEL n|a==b command", "a command if..." },
     { "INFO",      cmd_info,      "INFO", "the shell, board, loader and card" },
     { "MD",        dos_md,        "MD path", "make a directory" },
     { "MEM",       dos_mem,       "MEM", "the memory used and free" },
@@ -295,10 +295,12 @@ const shell_builtin_t flavour_builtins[] = {
     { "PROMPT",    dos_prompt,    "PROMPT [text] ($P path, $G >, $_ line)", "set the prompt" },
     { "RD",        dos_rd,        "RD path", "remove an empty directory" },
     { "REBOOT",    cmd_reboot,    "REBOOT", "restart the shell" },
+    { "REM",       dos_rem,       "REM [comment]", "a comment in a batch file" },
     { "REN",       dos_ren,       "REN path name", "rename files" },
     { "RENAME",    dos_ren,       "RENAME path name", "rename files" },
     { "RMDIR",     dos_rd,        "RMDIR path", "remove an empty directory" },
     { "SET",       dos_set,       "SET [name=[value]]", "show, set or clear variables" },
+    { "SHIFT",     dos_shift,     "SHIFT", "move a batch file's %1-%9 down one" },
     { "TYPE",      dos_type,      "TYPE file", "show a text file" },
     { "USBDISK",   cmd_usbdisk,   "USBDISK", "offer the card to a computer" },
     { "VER",       dos_ver,       "VER", "the shell's version" },
@@ -310,11 +312,8 @@ const unsigned flavour_nbuiltins = sizeof flavour_builtins / sizeof flavour_buil
 
 /* ---- running a line --------------------------------------------------- */
 
-/* Each level's line, expanded and parsed. */
-static struct {
-    char        line[SHELL_LINE_MAX + 1];
-    dos_parse_t parse;
-} s_frames[SHELL_DEPTH];
+/* Each level's line, parsed. */
+static dos_parse_t s_parse[SHELL_DEPTH];
 
 static void discard(void *ctx, const char *buf, size_t n) {
     (void)ctx;
@@ -333,7 +332,16 @@ static int stage(shell_t *sh, int k, pipe_t *from, pipe_t *to, void *ctx) {
         }
         return 0;
     }
-    s_tail = c->tail;
+    dos_tail = c->tail;
+    /* A batch file, ahead of a program of the same name. */
+    const char *bat = shell_is_builtin(name) ? NULL : dos_batch_find(sh, name);
+    if (bat) {
+        if (c->in || c->out || from || to) {
+            shell_error(sh, "Cannot redirect a batch file; CALL it\n");
+            return 1;
+        }
+        return dos_batch_run(sh, bat, name, c->tail, false);
+    }
     /* > NUL throws the output away, as DOS's NUL device did. */
     const char *out = c->out;
     if (!out || !path_same(out, "NUL"))
@@ -348,19 +356,18 @@ static int stage(shell_t *sh, int k, pipe_t *from, pipe_t *to, void *ctx) {
     return status;
 }
 
-int flavour_run_line(shell_t *sh, const char *line) {
-    char *text = s_frames[sh->depth].line;
-    dos_parse_t *p = &s_frames[sh->depth].parse;
-    if (!dos_expand(text, sizeof s_frames[0].line, line)) {
-        shell_error(sh, "Line too long\n");
-        return sh->status = 2;
-    }
+int dos_commands(shell_t *sh, const char *text) {
+    dos_parse_t *p = &s_parse[sh->depth];
     if (!dos_parse(p, text)) {
         shell_error(sh, "%s\n", p->error);
         return sh->status = 2;
     }
     if (p->ncmds > 0) sh->status = shell_pipeline(sh, p->ncmds, stage, p);
     return sh->status;
+}
+
+int flavour_run_line(shell_t *sh, const char *line) {
+    return dos_line(sh, line, false);
 }
 
 /* ---- the rest of flavour.h -------------------------------------------- */
@@ -372,13 +379,14 @@ void flavour_init(shell_t *sh) {
     for (char *s = path; *s; s++) *s = upper(*s);
     vars_set("PATH", 4, path);
     vars_set("PROMPT", 6, DEFAULT_PROMPT);
-    s_echo = true;
+    dos_echo_on = true;
 }
 
 void flavour_start(shell_t *sh) {
     /* $P shows each name as the card spells it: C:\HOME, not C:\home. */
     files_chdir(sh, sh->cwd);
     out_printf(&sh->con, "\033[1mPicoCalc shell\033[0m %s (DOS)\n\n", sh->version);
+    dos_autoexec(sh);
 }
 
 /* PROMPT's codes: $P the drive and directory, $G >, $L <, $B |, $Q =,
@@ -388,7 +396,7 @@ void flavour_start(shell_t *sh) {
 void flavour_prompt(shell_t *sh, char *buf, size_t size) {
     size_t n = 0;
     buf[0] = '\0';
-    if (!s_echo) return;
+    if (!dos_echo_on) return;
     const char *p = vars_get("PROMPT", 6);
     if (!p) p = "$N$G";
     char piece[SHELL_PATH_MAX + 48];

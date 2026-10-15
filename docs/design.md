@@ -3,7 +3,7 @@
 Status: **Draft 9, 2026-10-14.** Feasibility study and first design. M0
 (the skeleton), M1 (files), M2 (run), M3 (vi), M4 (comfort), M6 (USB
 speed) and M8 (the rest of v1) are done ([milestones.md](milestones.md));
-of M9 (the DOS flavour), step 1 is built. The commands are explained for users
+of M9 (the DOS flavour), steps 1 and 2 are built. The commands are explained for users
 in [user-guide.md](user-guide.md).
 
 The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
@@ -818,8 +818,8 @@ rules for size, CR LF and safe save (§4.6).
   lines, the builtins' case). The UNIX flavour's tests pass unchanged.
 - **Start.** The banner is `PicoCalc shell <version> (DOS)`. The shell
   starts in `\HOME` if the card has it, spelled as the card has it, so
-  the prompt is `C:\HOME>`; otherwise in `C:\`. There is no startup
-  script until step 2.
+  the prompt is `C:\HOME>`; otherwise in `C:\`. `AUTOEXEC.BAT` runs
+  after the banner (*from step 2*).
 - **The line.** `%NAME%` is replaced over the whole line before it is
   parsed, at the prompt as well as in batch files (DOS 5 did it only in
   batch files; the design asks for variables, so the prompt has them
@@ -921,7 +921,70 @@ rules for size, CR LF and safe save (§4.6).
   with `\` after a directory and puts nothing before a space, since DOS
   has no escapes. Up and Down work as in the UNIX flavour; `history` is
   not a command here. The history file is shared.
-- **Not yet:** batch files and `AUTOEXEC.BAT` (step 2), and EDIT (step 3).
+- **Not yet:** EDIT (step 3).
+
+*As built at M9, step 2* (2026-10-14; `src/core/dos_batch.c`):
+
+- **Levels.** A batch file runs a line at a time at the level below the
+  command that ran it, as `sh` does (§4.4), up to `SHELL_DEPTH - 1` (3)
+  deep. Each level has its file and reader, its parameters, its
+  expanded line and its FOR (a directory, its word and pattern, and a
+  line), 3,104 B; the four are 12,416 B. Buffers a function is done with
+  before anything it runs could need them again (IF's two words, the
+  echoed prompt, a path being searched) are file-scope statics, not on
+  the stack, and IF after IF is taken in a loop, not by recursion, so a
+  CALL level costs about 720 B of stack (`-fstack-usage`). `dos.c` keeps the parser's output per level, and
+  `dos_batch.c` everything above it: a line, typed or read, goes through
+  `dos_line`, which expands it, takes REM, IF and FOR from its start, and
+  hands the rest to the parser (`dos_commands`).
+- **Finding one.** A name that is not a builtin is looked for as
+  `NAME.BAT` in the current directory, then along `PATH`, before
+  `NAME.UF2` is looked for at all: a batch file anywhere on the search
+  beats a program of the same name, which is the design's rule rather
+  than DOS's per-directory order. `NAME.BAT` typed in full, and a path,
+  work too; another extension is never a batch file. A batch file in a
+  pipe or with a redirection is refused (`Cannot redirect a batch file;
+  CALL it`), since its lines have their own; `CALL NAME > FILE` runs it
+  under CALL's redirection.
+- **Parameters.** `%0` is the name as typed; `%1`… are the words after
+  it, split at blanks, `,`, `;` and `=` outside `"…"`, with the quotes
+  kept, as DOS kept them, so `IF "%1"==""` works. Up to
+  `SHELL_WORDS_MAX` are kept, and SHIFT brings those past `%9` in. They
+  are replaced in the same pass as `%NAME%` (`dos_expand`), so `%%`
+  becomes `%` first; at the prompt `%1` is left as it is, as in DOS.
+- **The line.** With ECHO ON, each line but a label is shown after a
+  blank line and the prompt, expanded, as DOS did; `@` at its start
+  hides it. Leaving a batch file for the prompt puts ECHO back as it was
+  there, so `@ECHO OFF` in `AUTOEXEC.BAT` does not hide the prompt.
+  A line over 255 characters is `Line too long`, and the next runs.
+  Break, Esc or Ctrl-C is looked for before each line and each turn of a
+  FOR (`shell_interrupted`), so a loop of commands that never look for
+  it still stops; the line ends with `^C` and status 130, as any stopped
+  line does. DOS's `Terminate batch job (Y/N)?` is not asked.
+- **IF** takes `NOT`, then `EXIST name` (a file or a directory, or with
+  a wildcard any file that matches), `ERRORLEVEL n` (status `n` or
+  more), or `a==b` (exactly, case included, quotes and all; blanks may
+  stand round `==`), then a command, which may be another IF or a FOR.
+  Every builtin sets the status (0, or 1 and more on failure), not only
+  programs as in DOS, since a program never comes back to report one; a
+  false IF, REM, an empty FOR and a label leave it as it was.
+- **FOR %x IN (set) DO command**: the set is split as parameters are;
+  a word with a wildcard is each file it matches, in the card's order,
+  hidden ones left out, each with the path typed before it
+  (`SUB\*.TXT` gives `SUB\A.TXT`). `%x` is one character, matched in
+  its case; in a batch file it is written `%%x`. FOR cannot be nested
+  in a line, as in DOS, though a CALLed file has its own. With ECHO ON
+  each command is shown, at the prompt too, as DOS did.
+- **GOTO** reads the file again from its start for `:label` (the label's
+  word, in either case); not found, it says `Label not found` and the
+  batch file ends. At the prompt it does nothing. **CALL** runs a batch
+  file at the level below and comes back, or anything else as if typed.
+  Without CALL, a batch file run from another takes its level, file and
+  parameters, so a file may run itself without limit, as in DOS; GOTO
+  and this both end a FOR running at that level.
+- **`AUTOEXEC.BAT`** at the card's root runs after the banner, at level
+  1, opened as `/etc/profile` is (`files_open_startup`, so a `.new` left
+  by a cut write is used). Missing, it is nothing.
 
 ## 5. Architecture
 
@@ -1066,6 +1129,15 @@ come. The DOS commands' deepest call, COPY down into FatFs, is about
 3 KB of the 8 KB stack (`-fstack-usage`): each command keeps two paths
 on the stack.
 
+**Measured at M9, step 2** (the same tools, 2026-10-14, release builds,
+the linker's RAM figure): the DOS flavour 321,228 B, 19,600 B more than
+step 1's 301,628 B: 12,416 B for the batch files' four levels, about
+1.7 KB of buffers kept off the stack, the rest their code. The UNIX
+flavour is unchanged at 435,480 B. *Estimated from `-fstack-usage`:*
+the deepest stack, a typed line CALLing three levels down through IF
+and FOR to a COPY, is about 5.8 KB of the 8 KB: about 720 B a level
+and step 1's 3 KB for COPY.
+
 **The stack** (*corrected at M3*). Core 0's stack starts at the top of
 scratch Y and may run down to `__StackLimit` at the bottom of scratch X:
 8 KB, because core 1 never starts and nothing is linked into scratch X.
@@ -1191,7 +1263,8 @@ in [milestones.md](milestones.md).
   1. The build option, the parser, `C:` paths and the prompt, and the
      commands, sharing `files.c` and `text.c` with the UNIX flavour.
      *Built 2026-10-14* (§4.7, milestones.md).
-  2. Batch files and `AUTOEXEC.BAT`.
+  2. Batch files and `AUTOEXEC.BAT`. *Built 2026-10-14* (§4.7,
+     milestones.md).
   3. The Alt chords measured on a Plus 2 W and written in HW §6.3, then
      EDIT.
 

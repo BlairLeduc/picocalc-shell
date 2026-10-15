@@ -9,6 +9,8 @@
  *   dos_files.c  CD, MD, RD, DIR, COPY, XCOPY, DEL, DELTREE, REN, MOVE,
  *                ATTRIB and VOL
  *   dos_text.c   TYPE, MORE and FIND
+ *   dos_batch.c  batch files and AUTOEXEC.BAT: %0-%9, REM, IF, FOR,
+ *                GOTO, SHIFT and CALL
  *
  * Underneath, the card is the UNIX flavour's: absolute paths with '/'
  * (path.h), resolved from what is typed by dos_resolve. */
@@ -84,9 +86,10 @@ typedef struct {
 
 /* `line` with each %NAME% replaced by the variable's value, the name
  * taken without regard to case, and empty if it is not set; %% is one
- * %, and any other % is itself. False if the result does not fit
- * `size`. */
-bool dos_expand(char *out, size_t size, const char *line);
+ * %, and any other % is itself. In a batch file, `params` are %0 to %9,
+ * each NULL if it was not given, and so empty; NULL at the prompt,
+ * where %1 is itself. False if the result does not fit `size`. */
+bool dos_expand(char *out, size_t size, const char *line, const char *const *params);
 
 /* Parse `line` (already expanded) into commands joined by '|'. Words
  * are split at blanks; "..." keeps blanks in a word and is removed. `\`
@@ -96,6 +99,39 @@ bool dos_expand(char *out, size_t size, const char *line);
  * `CD..` and `CD\` work as in DOS. True, with p->ncmds commands (none
  * for a blank line); false with p->error. */
 bool dos_parse(dos_parse_t *p, const char *line);
+
+/* ---- running a line (dos.c, dos_batch.c) ------------------------------- */
+
+/* ECHO's state: ON shows the prompt, and in a batch file each line. */
+extern bool dos_echo_on;
+
+/* What followed the running command's name, as typed, less any
+ * redirection: for ECHO, SET, PATH, PROMPT and CALL. */
+extern const char *dos_tail;
+
+/* A line at sh->depth, typed or from a batch file: %0-%9 (in a batch
+ * file) and %NAME% replaced, then REM, IF and FOR, and the rest through
+ * the parser. With `echo`, the line is shown after the prompt first, as
+ * a batch file does with ECHO ON. The last command's status. */
+int dos_line(shell_t *sh, const char *line, bool echo);
+
+/* A line already expanded, through the parser and its pipeline (dos.c). */
+int dos_commands(shell_t *sh, const char *text);
+
+/* The batch file `name` runs as, if it is one: NAME.BAT, or NAME as
+ * typed if it ends .BAT, in the current directory, then each of PATH's;
+ * a name with a path is looked for there alone. Its absolute path, or
+ * NULL. */
+const char *dos_batch_find(shell_t *sh, const char *name);
+
+/* Run the batch file at `path`, typed as `name`, with the parameters in
+ * `tail`, split at blanks, ',', ';' and '=' outside "...". From a batch
+ * file, without `call`, it takes the place of the one running, as in
+ * DOS; otherwise it runs at the level below and comes back. */
+int dos_batch_run(shell_t *sh, const char *path, const char *name, const char *tail, bool call);
+
+/* At start: C:\AUTOEXEC.BAT, if the card has it. */
+void dos_autoexec(shell_t *sh);
 
 /* ---- for the commands (dos.c) ------------------------------------------ */
 
@@ -139,5 +175,10 @@ int dos_vol(shell_t *sh, int argc, char **argv);
 int dos_type(shell_t *sh, int argc, char **argv);
 int dos_more(shell_t *sh, int argc, char **argv);
 int dos_find(shell_t *sh, int argc, char **argv);
+int dos_call(shell_t *sh, int argc, char **argv);
+int dos_goto(shell_t *sh, int argc, char **argv);
+int dos_shift(shell_t *sh, int argc, char **argv);
+int dos_rem(shell_t *sh, int argc, char **argv);
+int dos_control(shell_t *sh, int argc, char **argv);
 
 #endif /* SHELL_DOS_H */

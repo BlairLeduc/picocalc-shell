@@ -16,6 +16,76 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M9 — the DOS flavour, step 2 (branch `m9-dos`, 2026-10-14)
+
+**In progress.** Step 2 of three is built: batch files and
+`AUTOEXEC.BAT` (design.md §4.7, *As built at M9, step 2*;
+`src/core/dos_batch.c`). EDIT (step 3) is to come, and M9's done-when
+checks on the board with it.
+
+**Checked on the host** (the same tools as step 1):
+
+- All 22 test binaries pass; the UNIX flavour's unchanged.
+- **`test_dos`**, new, over FAT16 and FAT32: `%0`–`%3` with `,` between
+  words and a missing one empty, `%%`, quotes kept in a parameter, `%1`
+  left alone at the prompt; `@ECHO OFF` and ECHO back on after; REM with
+  a `>` making no file; ECHO ON showing each line after the prompt, a
+  label not shown, `@` hiding one; a SHIFT loop over eleven words with
+  GOTO `:label` in another case and a label with words after it; a
+  missing label; GOTO at the prompt; IF EXIST of a file, a directory, a
+  wildcard with and without a match, IF NOT EXIST, ERRORLEVEL after a
+  failed TYPE (and not after a false IF), `a == b` with blanks, quoted
+  words, a case difference, IF after IF; IF's four syntax errors, and IF
+  after a `|`; FOR at the prompt with `%x` (shown with ECHO ON, hidden by
+  `@`) and in a file with `%%x`, over a wildcard with a path, a hidden
+  file left out, nested, an empty set, four syntax errors; CALL coming
+  back, a batch file without CALL taking the caller's place, and from
+  inside a FOR; CALL of a builtin, CALL with `>`; a batch file with `>`
+  or in a pipe refused; a file running itself six times without CALL;
+  CALL nested past three; a batch file ahead of a program here, on PATH,
+  by path and as `NAME.BAT`, and not as `NAME.TXT`; a 300-character line
+  and the line after it; `AUTOEXEC.BAT` at start and its absence;
+  Break stopping an endless GOTO loop and a FOR.
+- **Planted bugs**, each caught: ECHO not put back after a batch file
+  (8 failures), a batch file run from another coming back instead of
+  taking its place (8), IF NOT inverted (6).
+
+**Checked on the board:** the Plus 2 W on the probe, by Claude, the DOS
+flavour's release build run from SRAM over SWD (`tools/swd-ram.sh`),
+on the test card, typed with `tools/swd-drive.py`: a batch file written
+line by line with `ECHO … >>` in a new `\DOSTEST`, then run as `T a,b c`,
+with SHIFT, GOTO, IF `"%1"==""` and a FOR over `*.BAT`, all as on the
+host; an endless `GOTO` loop stopped by Esc (`^C`, the screen still
+after); CALL coming back and a second batch file taking the first's
+place; `IF EXIST *.BAT`; a `C:\AUTOEXEC.BAT` (the card had none) setting
+PROMPT and CD at the next start, with ECHO on after. After the stack
+change below: a FOR CALLing a batch file and three IFs on one line.
+`AUTOEXEC.BAT` and `\DOSTEST` were removed after. **Found on the board:**
+a batch file looping through quick builtins could not be stopped, since
+nothing in the loop looked for Break; the batch file and FOR loops now
+look before each line and each turn. (It was found because typing more
+than the tool's 64-key ring at once mangled the file into a loop: the
+tool's limit, not the shell's.)
+
+**Measured** (link map, release builds): the DOS flavour 321,228 B of
+RAM (step 1: 301,628 B), 12,416 B of it the four batch levels; the UNIX
+flavour unchanged at 435,480 B. `-fstack-usage` first showed about
+2.6 KB of stack per CALL level (IF's and FOR's buffers), so about 11 KB
+three levels deep with a COPY under them, over the 8 KB stack; with
+those buffers made static and IF after IF a loop, about 720 B a level,
+and *estimated* 5.8 KB at the deepest. The prompt came up 501 ms after
+the SWD reset with a four-line `AUTOEXEC.BAT`, 496 ms without.
+
+**Not checked:**
+
+- All of step 1's list, which stands.
+- A batch file that runs a program: it leaves the shell, as a typed
+  name does, but no program was run from the SRAM build.
+- A program in `AUTOEXEC.BAT` running at every start; the user guide
+  says to take the card out to edit it.
+- The deepest stack on the board: the 5.8 KB is a sum of
+  `-fstack-usage` frames, not a measurement.
+
 ## M9 — the DOS flavour, step 1 (branch `m9-dos`, 2026-10-14)
 
 **In progress.** Step 1 of three (design.md §10) is built: the build

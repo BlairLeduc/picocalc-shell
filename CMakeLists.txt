@@ -49,6 +49,7 @@ set(SHELL_UNIX_SOURCES
 # ...and the DOS flavour's.
 set(SHELL_DOS_SOURCES
     src/core/dos.c
+    src/core/dos_batch.c
     src/core/dos_files.c
     src/core/dos_parse.c
     src/core/dos_path.c
