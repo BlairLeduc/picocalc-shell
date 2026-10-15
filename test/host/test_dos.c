@@ -96,6 +96,24 @@ static bool put(const char *path, const char *text) {
     return f_close(&f) == FR_OK && r == FR_OK && n == strlen(text);
 }
 
+/* A line of DIR as it is in 40 columns: the name, then the size at the
+ * right, short of the last column. */
+static const char *dir_line(const char *name, const char *size) {
+    static char buf[128];
+    snprintf(buf, sizeof buf, "\n%s%*s\n", name, (int)(39 - strlen(name)), size);
+    return buf;
+}
+
+/* The column of `word` in the line of con that holds `line`, or -1. */
+static int column_of(const char *line, const char *word) {
+    const char *l = strstr(con, line);
+    if (!l) return -1;
+    while (l > con && l[-1] != '\n') l--;
+    const char *w = strstr(l, word);
+    const char *end = strchr(l, '\n');
+    return w && (!end || w < end) ? (int)(w - l) : -1;
+}
+
 /* ---- on their own ----------------------------------------------------- */
 
 static int unit_tests(void) {
@@ -399,8 +417,10 @@ static int dos_tests(bool fat32) {
     CHECK(has(" Volume in drive C is PICOCALC\n Volume Serial Number is ") &&
               has(" Directory of C:\\HOME\n\n"),
           "header: '%s'", con);
-    CHECK(has("\nA        TXT         26\n") && has("\nDOCS         <DIR>\n") &&
-              has("        4 file(s)        104 bytes\n") && has(" bytes free\n"),
+    CHECK(has(dir_line("A        TXT", "26")) && has("\nDOCS           <DIR>\n") &&
+              has("\n    4 file(s)            104 bytes\n") && has(" bytes free\n") &&
+              column_of("file(s)", " bytes") == column_of("bytes free", " bytes free") &&
+              column_of("file(s)", " bytes") == 28,
           "lines: '%s'", con);
     CHECK(run("dir *.bak /b") == 0 && strcmp(con, "A.BAK\nB.BAK\n") == 0, "/B: '%s'", con);
     CHECK(run("DIR A /B") == 0 && strcmp(con, "A.TXT\nA.BAK\n") == 0, "NAME is NAME.*: '%s'", con);
@@ -416,9 +436,40 @@ static int dos_tests(bool fat32) {
               !has("C:\\\\"),
           "/S /B: '%s'", con);
     CHECK(run("DIR /S") == 0 && has(" Directory of C:\\HOME\\DOCS\n") &&
-              has("Total files listed:\n        6 file(s) "),
+              has("Total files listed:\n    6 file(s) "),
           "/S: '%s'", con);
     CHECK(run("DIR | FIND /C \"TXT\"") == 0 && strcmp(con, "2\n") == 0, "a pipe: '%s'", con);
+
+    /* Long names: the size at the right when the name leaves room for
+     * it, on the next line when it does not; no line reaches the last
+     * column. */
+    static char huge[1234567];
+    memset(huge, 'x', sizeof huge - 1);
+    CHECK(put("/HOME/BIG.DAT", huge) && f_mkdir("/HOME/a directory with a long name") == FR_OK, "big");
+    CHECK(run("DIR") == 0 && has(dir_line("BIG      DAT", "1,234,566")) &&
+              has("\na directory with a long name <DIR>\n") && has("1,234,670 bytes\n") && strstr(con, "file(s)      1,234,670 bytes\n") &&
+              has(",") && !has(" ,"),
+          "separators, a long directory: '%s'", con);
+    CHECK(run("DEL BIG.DAT") == 0 && run("RD \"a directory with a long name\"") == 0, "gone");
+    CHECK(f_mkdir("/HOME/a directory with a name much, much too long") == FR_OK, "longer");
+    CHECK(run("DIR") == 0 && has("\na directory with a name much, much too long\n               <DIR>\n"),
+          "<DIR> on the next line: '%s'", con);
+    CHECK(run("RD \"a directory with a name much, much too long\"") == 0, "gone");
+    CHECK(put("/HOME/asteroids-deluxe.lua", "123456") &&
+              put("/HOME/4D1F8172 - MacPlus v3 with a long name.ROM", "1234567"),
+          "long names");
+    CHECK(run("DIR") == 0 && has(dir_line("asteroids-deluxe.lua", "6")) &&
+              has("\n4D1F8172 - MacPlus v3 with a long name.ROM\n                                      7\n"),
+          "long names: '%s'", con);
+    sh.wide = true;
+    CHECK(run("DIR *.lua") == 0 && has(dir_line("asteroids-deluxe.lua", "6")),
+          "64 columns, laid out to 40: '%s'", con);
+    CHECK(run("DIR *.ROM") == 0 &&
+              has("\n4D1F8172 - MacPlus v3 with a long name.ROM\n                                      7\n"),
+          "and a long name's size on the next line: '%s'", con);
+    sh.wide = false;
+    CHECK(run("DEL asteroids-deluxe.lua") == 0 && run("DEL \"4D1F8172 - MacPlus v3 with a long name.ROM\"") == 0,
+          "long names gone");
 
     /* /P pauses a full screen; Esc stops it. */
     CHECK(f_mkdir("/MANY") == FR_OK, "many");
@@ -428,7 +479,9 @@ static int dos_tests(bool fat32) {
         CHECK(put(name, "x"), "%s", name);
     }
     keys = " ";
-    CHECK(run("DIR \\MANY /P") == 0 && has("F26      TXT          1\nPress any key to continue . . .\nF27") &&
+    char f26[64];
+    snprintf(f26, sizeof f26, "F26      TXT%27s\nPress any key to continue . . .\nF27", "1");
+    CHECK(run("DIR \\MANY /P") == 0 && has(f26) &&
               has("bytes free"),
           "pauses: '%s'", con);
     keys = "\x1b";

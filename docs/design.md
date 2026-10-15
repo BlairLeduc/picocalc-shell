@@ -31,6 +31,7 @@ questions are open; the design is ready for M0.
 | 2026-10-12 | `include/picocalc_shell.h` is offered under the MIT licence as well as the GPL-3.0. | 9 |
 | 2026-10-13 | A patched stage3 that starts the shell at power-on, and the last program with Up/F1/F5 held, is an optional milestone (M7). Until it is installed, the stock loader's behaviour above stands. | 3.4, 10 |
 | 2026-10-14 | A second flavour, built from the same tree, feels like DOS and has an EDIT modelled on MS-DOS 5's, in place of vi. It is a separate `BOOT2350.UF2`; the user copies the one they want to the card, and neither flavour installs the other. The card is `C:`. EDIT covers the core look and keys, not all of MS-DOS 5's. It is never called MS-DOS. | 4.7, 10 |
+| 2026-10-14 | The DOS flavour's 40-column font is IBM's PC BIOS 8x8, from VileR's Ultimate Oldschool PC Font Pack (CC BY-SA 4.0), drawn in the 8x10 cell so the grid stays 40 x 32. The UNIX flavour keeps the owner's VT100-like font, and both keep the owner's 5x10 for 64 columns. This narrows the 2026-10-12 decision on fonts for the DOS flavour only. | 4.1, 4.7 |
 | 2026-10-14 | EDIT selects with Alt and the arrows, and cuts, copies and pastes with Ctrl+X, Ctrl+C and Ctrl+V: the keyboard cannot send Shift with the arrows, and Shift+Del is End (HW §6.3). | 4.7 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
@@ -860,8 +861,17 @@ rules for size, CR LF and safe save (§4.6).
   - **DIR** prints the volume line and serial number (`f_getlabel`, so
     `FF_USE_LABEL` is on), then the entries in the card's order, as DOS
     did. With no clock (§4.2) there are no date and time columns: a name
-    that fits 8.3 is `NAME     EXT`, another is as it is, then `<DIR>` or
-    the size, 23 columns. Then the count, the bytes, and the bytes free.
+    that fits 8.3 is `NAME     EXT`, another is as it is. *(Changed
+    2026-10-14, at the owner's asking: it was 23 columns, and a long name
+    pushed the size off the line.)* `<DIR>` has its own column, 15, after
+    the name, as in DOS; a size, with a comma every three digits, ends at
+    column 39, short of the 40th, where the terminal wraps in the
+    40-column font. In the 64-column font the lines keep to 40 columns
+    too, so the sizes stay near their names. A name too long to leave
+    room puts either on the next line.
+    Then the count, the bytes, and the bytes free, their numbers ending
+    in the same column so `bytes` lines up (the count has 5 digits, as a
+    FAT directory holds at most 65,535 entries).
     `/W` gives names 13 columns apart, `[DIR]` for directories; `/P`
     waits at `Press any key to continue . . .` each screenful, only on
     the screen, and Esc, Break or Ctrl-C there stops; `/S` lists each
@@ -994,6 +1004,16 @@ rules for size, CR LF and safe save (§4.6).
 
 *As built at M9, step 3* (2026-10-14; `src/core/edit.c`,
 `editor_file.c`, `keys.c`):
+
+- **The font** *(decided 2026-10-14)*. In 40 columns the DOS flavour
+  draws IBM's PC BIOS 8x8 glyphs (`font-ibm-8x10.c`, made by
+  `tools/mkfont-ibm.py` from VileR's font pack, CC BY-SA 4.0,
+  THIRD-PARTY.md) in rows 1-8 of the 8x10 cell. The DEC line-drawing
+  glyphs EDIT's boxes use come from the same font where code page 437
+  has them, their lines carried to the cell's edges so they join;
+  `screen.c` picks the font by `SHELL_DOS`, so each flavour links only
+  its own. In 64 columns, and so in EDIT, both use the owner's 5x10:
+  IBM made no font that narrow.
 
 - **Chords.** `keys_event` reports chords only while EDIT asks
   (`keys_report_chords`), so the prompt and vi are as they were: Alt with

@@ -588,7 +588,9 @@ but its commands are DOS's: `DIR`, `COPY`, `DEL`, `CD`. It has its own
 `BOOT2350.UF2`. To use it, copy that file to the card's root in place of
 the UNIX one; to go back, copy the UNIX one there again. Neither flavour
 installs the other. In place of vi it has EDIT, an editor like the
-one DOS had (below).
+one DOS had (below). In 40 columns it uses IBM's PC font, as DOS
+showed it; in 64 columns, and in EDIT, it uses the same narrow font as
+the UNIX flavour.
 
 ### The prompt and paths
 

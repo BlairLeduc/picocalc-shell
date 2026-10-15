@@ -71,6 +71,32 @@ in place of the design's Shift keys.
   saw the menu bar and the File menu drawn correctly on the panel (the
   Plus 2 W on the probe, the DOS flavour's development build from SRAM,
   2026-10-14).
+- **Found by the owner**: DIR's lines were 23 columns, so a long name
+  pushed its size past the end of the line. The size is now at the
+  right of the screen, short of the last column (39 or 63), and a name
+  too long to leave room puts its size on the next line. `test_dos`
+  checks the lines in 40 columns, a long name, one too long, and one in
+  64 columns. On the Plus 2 W (the DOS development build from SRAM,
+  2026-10-14), `DIR \LUA\LUA` fitted every line, `asteroids.lua` and
+  `mandelbrot.lua` included. Then, at the owner's asking, as DOS showed
+  them: `<DIR>` in its own column, 15, apart from the sizes, and sizes
+  and totals with a comma every three digits (`1,234,566`); the totals'
+  field grew to 14. `test_dos` checks both, a long directory's name,
+  and one too long for `<DIR>`; `DIR \` on the Plus 2 W fitted every
+  line (`20,971,520`, `31,766,970,368 bytes free`). Last, at the
+  owner's asking, the lines keep to 40 columns in the 64-column font
+  too, so the sizes stay near their names: checked by `test_dos` and,
+  with `FONT 5x10`, by `DIR \LUA\LUA` on the Plus 2 W. The two totals
+  lines' numbers end in one column, so `bytes` lines up: `test_dos`
+  checks the columns (a planted misalignment failed 4 checks), and
+  `DIR \` on the Plus 2 W showed them lined up.
+- **The DOS flavour's font**, at the owner's asking: IBM's PC BIOS 8x8
+  from VileR's font pack (CC BY-SA 4.0), drawn in the 8x10 cell by
+  `tools/mkfont-ibm.py`, for 40 columns only. The link maps show each
+  flavour links only its own 40-column font; RAM (release, `__end__`):
+  DOS 422,196 B (+96), UNIX 434,364 B (-344, the 256-colour table now
+  code). Shown on the Plus 2 W from SRAM with `DIR \LUA\LUA`; the owner
+  saw it on the panel and approved it.
 - **Planted bugs**, each caught: a splice of nothing marking the file
   changed (2 failures), Alt with an arrow restarting the selection (2),
   Exit not asking (too many to list), a held Alt counted as a tap (1).

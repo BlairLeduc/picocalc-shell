@@ -57,6 +57,7 @@ set(SHELL_DOS_SOURCES
     src/core/dos_text.c
     src/core/edit.c
     src/core/editor_lines.c
+    src/core/font-ibm-8x10.c
 )
 
 set(SHELL_WARNINGS -Wall -Wextra -Werror)

@@ -1,4 +1,5 @@
-// From references/fonts/font.h, the owner's own font, copied unchanged (design.md §4.1).
+// From references/fonts/font.h, the owner's own font, copied unchanged (design.md §4.1),
+// but for font_ibm_8x10's declaration, the DOS flavour's (§4.7, font-ibm-8x10.c).
 #pragma once
 
 #include <stdint.h>
@@ -12,3 +13,4 @@ typedef struct {
 
 extern const font_t font_8x10; // 8x10 pixel font
 extern const font_t font_5x10; // 5x10 pixel font
+extern const font_t font_ibm_8x10; // the DOS flavour's 8x10: IBM's 8x8 (font-ibm-8x10.c)

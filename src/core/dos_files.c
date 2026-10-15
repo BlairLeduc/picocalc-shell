@@ -35,15 +35,19 @@ static const char *show(const char *path) {
     return b;
 }
 
-/* 64 bits in decimal, which the board's printf may not do. */
+/* 64 bits in decimal with a comma every three digits, as DIR shows
+ * them (the board's printf may not do 64 bits). */
 static const char *num(uint64_t v) {
-    static char bufs[2][24];
+    static char bufs[2][32];
     static unsigned next;
-    char *b = bufs[next++ & 1u] + 23;
+    char *b = bufs[next++ & 1u] + 31;
+    unsigned digits = 0;
     *b = '\0';
     do {
+        if (digits && digits % 3u == 0) *--b = ',';
         *--b = (char)('0' + v % 10u);
         v /= 10u;
+        digits++;
     } while (v);
     return b;
 }
@@ -212,6 +216,11 @@ int dos_rd(shell_t *sh, int argc, char **argv) {
 
 /* ---- DIR -------------------------------------------------------------- */
 
+#define DIR_COL   15u   /* where <DIR> starts, after a name of 8.3 */
+#define DIR_TOTAL "%5u file(s) %14s bytes"   /* its number ends where "%28s bytes free"'s does */
+#define DIR_WIDTH 40u   /* a line's columns in either font: in 64, the
+                         * sizes would be too far from their names */
+
 enum { DIR_W = 1u << 0, DIR_P = 1u << 1, DIR_S = 1u << 2, DIR_A = 1u << 3, DIR_B = 1u << 4 };
 
 typedef struct {
@@ -303,11 +312,21 @@ static bool dir_list(shell_t *sh, dir_t *d, const char *dir, bool header) {
                 for (; w < cell; w++) out_puts(&sh->out, " ");
             }
         } else {
+            /* <DIR> in its own column after the name, as DOS had it; the
+             * size at the right of 40 columns, short of the 40th, where
+             * the terminal wraps in the 40-column font. A name too long
+             * for the line leaves either to the next. */
             const char *name = dir_name(s_ent.fname, true);
-            size_t w = strlen(name);
-            out_printf(&sh->out, "%s%*s", name, w < 12u ? (int)(12u - w) : 0, "");
-            if (sub) out_puts(&sh->out, " <DIR>");
-            else out_printf(&sh->out, " %10s", num(s_ent.fsize));
+            const char *what = sub ? "<DIR>" : num(s_ent.fsize);
+            size_t w = strlen(name), n = strlen(what), width = DIR_WIDTH - 1u;
+            size_t at = sub ? (w < DIR_COL ? DIR_COL : w + 1u) : width - n;
+            out_puts(&sh->out, name);
+            if (at < w + 1u || at + n > width) {
+                dir_row(sh, d);
+                w = 0;
+                at = sub ? DIR_COL : width - n;
+            }
+            out_printf(&sh->out, "%*s%s", (int)(at - w), "", what);
             dir_row(sh, d);
         }
         if (shell_interrupted(sh)) d->stopped = true;
@@ -316,7 +335,7 @@ static bool dir_list(shell_t *sh, dir_t *d, const char *dir, bool header) {
     if (d->col > 0) dir_row(sh, d);
     if (r != FR_OK) dos_error(sh, dos_why(r), show(dir));
     if (any && !(d->flags & DIR_B) && !d->stopped) {
-        out_printf(&sh->out, "%9u file(s) %10s bytes", d->files, num(d->bytes));
+        out_printf(&sh->out, DIR_TOTAL, d->files, num(d->bytes));
         dir_row(sh, d);
         if (d->flags & DIR_S) dir_row(sh, d);
     }
@@ -387,7 +406,7 @@ int dos_dir(shell_t *sh, int argc, char **argv) {
         files_walk_end();
         if (any && !brief && !d.stopped) {
             dir_text(sh, &d, "Total files listed:");
-            out_printf(&sh->out, "%9u file(s) %10s bytes", d.all_files, num(d.all_bytes));
+            out_printf(&sh->out, DIR_TOTAL, d.all_files, num(d.all_bytes));
             dir_row(sh, &d);
         }
     }
