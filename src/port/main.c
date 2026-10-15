@@ -307,6 +307,8 @@ int main(void) {
     shell_set_loader(&g_shell, &g_loader);
     const shell_system_t sys = { battery, backlight, phosphor, info, power, NULL };
     shell_set_system(&g_shell, &sys);
+    shell_set_memory(&g_shell, (unsigned long)((uintptr_t)&__end__ - SRAM_BASE),
+                     (unsigned long)(SRAM_END - SRAM_BASE));
     shell_start(&g_shell);
     s_prompt_us = time_us_64();
 

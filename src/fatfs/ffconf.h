@@ -16,6 +16,8 @@
  *                                redirections, and every pipe (files.c)
  *   FF_USE_MKFS                  the host build only, to format test images
  *   FF_USE_CHMOD 1               the read-only bit (design.md §4.2)
+ *   FF_USE_LABEL 1               the volume's label and serial number, for
+ *                                the DOS flavour's VOL and DIR (§4.7)
  *   FF_USE_FIND 0, STRFUNC 0     not needed
  *   FF_USE_LFN 1                 long names, static buffer, not reentrant
  */
@@ -91,7 +93,7 @@
 /  (0:Disable or 1:Enable) Also FF_FS_READONLY needs to be 0 to enable this option. */
 
 
-#define FF_USE_LABEL	0
+#define FF_USE_LABEL	1
 /* This option switches volume label functions, f_getlabel() and f_setlabel().
 /  (0:Disable or 1:Enable) */
 

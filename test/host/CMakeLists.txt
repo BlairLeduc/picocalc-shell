@@ -33,6 +33,13 @@ foreach(t ${SHELL_HOST_TESTS})
     set_tests_properties(${t} PROPERTIES SKIP_RETURN_CODE 77)
 endforeach()
 
+# The DOS flavour's command line, over its own core (design.md §4.7).
+add_executable(test_dos test_dos.c)
+target_link_libraries(test_dos PRIVATE shell_core_dos shell_host_disk)
+target_include_directories(test_dos PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(test_dos PRIVATE ${SHELL_WARNINGS})
+add_test(NAME test_dos COMMAND test_dos)
+
 # The port's renderer has no SDK header, so it is tested here on its own
 # source, against a model of the panel in place of lcd.c.
 add_executable(test_screen test_screen.c fake_lcd.c ${CMAKE_SOURCE_DIR}/src/port/screen.c)

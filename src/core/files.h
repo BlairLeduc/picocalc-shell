@@ -13,6 +13,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "shell.h"
 
@@ -87,6 +88,44 @@ FRESULT files_open_read(shell_t *sh, const char *cmd, const char *arg, FIL *f);
  * index of the first operand, or -1 after printing the usage. */
 int files_options(shell_t *sh, int argc, char **argv, const char *allowed, unsigned *flags,
                   const char *usage);
+
+/* The volume's type, size and free space, as df, info and DIR show them. */
+FRESULT files_space(const char **type, uint64_t *total, uint64_t *avail);
+
+/* Make `path` (absolute, a directory) the current directory, each name
+ * spelled as the card has it: NULL, or why not. */
+const char *files_chdir(shell_t *sh, const char *path);
+
+/* Copy the file `src` to `dst`, both absolute, through dst.new: NULL,
+ * or why not, with *which the one of the two it is about; or
+ * FILES_STOPPED if Break, Esc or Ctrl-C stopped it, and nothing was put
+ * in place. */
+extern const char FILES_STOPPED[];
+const char *files_copy(shell_t *sh, const char *src, const char *dst, const char **which);
+
+/* A walk down the tree under a directory, for the DOS flavour's /S,
+ * XCOPY and DELTREE: depth first, in the card's order, one directory
+ * open at each level (SHELL_TREE_DEPTH of them). files_walk opens the
+ * root: FR_OK, or why not. Each files_walk_next gives one of:
+ *   WALK_FILE   a file: *path, and its entry in *fno;
+ *   WALK_DIR    a directory, entered if *r is FR_OK; otherwise not, *r
+ *               saying why (FILES_TOO_DEEP: more levels than there are);
+ *   WALK_LEAVE  a directory entered before, root included, now closed,
+ *               after everything below it; *r is FR_OK, or why its
+ *               listing ended early;
+ *   WALK_DONE   the end.
+ * A name too long for a path comes as WALK_FILE or WALK_DIR with *r
+ * FR_INVALID_NAME, *path its directory's. *path is good until the next
+ * step. One walk at a time; it shares cp -r's and rm -r's stack. */
+typedef enum { WALK_FILE, WALK_DIR, WALK_LEAVE, WALK_DONE } walk_t;
+#define FILES_TOO_DEEP FR_INT_ERR
+FRESULT files_walk(const char *root);
+walk_t files_walk_next(const char **path, const FILINFO **fno, FRESULT *r);
+/* Right after WALK_DIR entered one: go no further down it, and have no
+ * WALK_LEAVE for it. */
+void files_walk_skip(void);
+/* Stop: close every directory open. */
+void files_walk_end(void);
 
 /* The card in a few words, for `info`: "FAT32, 30G, 12G free". */
 FRESULT files_card(char *buf, size_t size);

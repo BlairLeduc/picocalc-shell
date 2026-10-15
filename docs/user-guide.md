@@ -3,7 +3,8 @@
 The shell is a small UNIX-like command line for the ClockworkPi PicoCalc
 with an RP2350 board. From it you manage the files on the SD card, edit
 text files in vi, and run programs by name. This guide covers every
-command and the command line itself. To install the shell, see the
+command and the command line itself. Section 9 covers the DOS flavour,
+a second build with DOS's commands. To install the shell, see the
 [README](../README.md).
 
 ## Contents
@@ -16,6 +17,7 @@ command and the command line itself. To install the shell, see the
 6. [vi](#6-vi)
 7. [The card](#7-the-card)
 8. [Messages and limits](#8-messages-and-limits)
+9. [The DOS flavour](#9-the-dos-flavour)
 
 ## 1. Getting started
 
@@ -577,3 +579,104 @@ Limits:
 | A file in vi | 64 KB |
 | Scripts within scripts | 3 deep |
 | A path | 255 characters |
+
+## 9. The DOS flavour
+
+The shell also comes in a second flavour, for anyone who knows DOS
+better than UNIX. It manages the same card and runs the same programs,
+but its commands are DOS's: `DIR`, `COPY`, `DEL`, `CD`. It has its own
+`BOOT2350.UF2`. To use it, copy that file to the card's root in place of
+the UNIX one; to go back, copy the UNIX one there again. Neither flavour
+installs the other.
+
+*Still to come in this flavour:* batch files with `AUTOEXEC.BAT`, and the
+EDIT editor in place of vi.
+
+### The prompt and paths
+
+The card is drive `C:`, and the prompt is the drive and directory
+followed by `>`:
+
+```
+C:\HOME>DIR /B
+TODO.TXT
+NOTES
+C:\HOME>CD ..
+C:\>
+```
+
+- Paths use `\`: `C:\ORIC\KEYMAPS`. `/` works as well, except at the
+  start of a word for a command that takes switches, where `/W` is a
+  switch, as in DOS.
+- Commands and switches can be typed in either case: `dir /w` is `DIR /W`.
+- `CD..`, `CD\` and `DIR/W` work with no space, as in DOS.
+- Put a name with spaces in quotes: `TYPE "my notes.txt"`.
+- The shell starts in `C:\HOME` if the card has one, and otherwise in
+  `C:\`.
+
+### Wildcards
+
+`*` stands for any characters and `?` for one, before or after the
+name's last dot: `*.TXT` is every name ending `.TXT`, `*.*` is every
+name, `*.` is every name with no extension, and `REPORT?.TXT` matches
+`REPORT.TXT` and `REPORT1.TXT`. Wildcards leave out hidden and system
+files; give the name in full to reach one. `DIR NAME` lists `NAME.*`.
+
+### Commands
+
+| Command | Does |
+|---|---|
+| `DIR [path] [/W] [/P] [/S] [/A] [/B]` | lists files: `/W` wide, `/P` a screen at a time, `/S` in every directory below, `/A` hidden files too, `/B` names only |
+| `CD [path]`, `CHDIR` | changes directory; with none, shows the current one |
+| `MD path`, `MKDIR` | makes a directory |
+| `RD path`, `RMDIR` | removes an empty directory |
+| `COPY source [destination]` | copies files: `COPY A.TXT B.TXT`, `COPY *.TXT \BACKUP`, `COPY *.TXT *.BAK` |
+| `XCOPY source [destination] [/S]` | copies files and, with `/S`, every directory below |
+| `DEL path`, `ERASE` | deletes files. `DEL *.*` asks first; `/P` asks for each. **There is no undo** |
+| `DELTREE [/Y] path...` | deletes a directory and everything in it, after asking (not with `/Y`) |
+| `REN path name`, `RENAME` | renames files: `REN *.TXT *.OLD` |
+| `MOVE source... destination` | moves files into a directory, or renames a file or directory |
+| `TYPE file` | shows a text file |
+| `MORE < file`, `command \| MORE` | shows text a screen at a time |
+| `FIND [/V] [/C] [/N] [/I] "text" [file...]` | lines that contain the text: `/V` those that do not, `/C` how many, `/N` with numbers, `/I` in either case |
+| `ATTRIB [+R\|-R] [+A\|-A] [+S\|-S] [+H\|-H] [path]` | shows or changes a file's attributes: read-only, archive, system, hidden |
+| `SET [name=[value]]` | lists the variables, sets one, or with nothing after `=`, clears it. Use one as `%NAME%` |
+| `PATH [dir;dir...]` | shows or sets where programs are found; `PATH ;` clears it |
+| `PROMPT [text]` | sets the prompt: `$P` the path, `$G` `>`, `$_` a new line, `$N` the drive. `PROMPT` alone puts back `$P$G` |
+| `ECHO [ON\|OFF\|message]` | prints a message; `ECHO.` prints a blank line; `ECHO OFF` hides the prompt |
+| `PAUSE` | waits for a key |
+| `CLS` | clears the screen |
+| `VER`, `VOL`, `MEM` | the shell's version; the card's label and serial number; the memory in use and free |
+| `HELP [command]` | lists the commands, or explains one |
+| `EXIT` | UF2 Loader's own menu, as `menu` in the UNIX flavour |
+
+The PicoCalc's own commands keep their names in this flavour: `BATTERY`,
+`BACKLIGHT`, `PHOSPHOR`, `FONT`, `INFO`, `USBDISK`, `POWEROFF`, `REBOOT`
+and `BOOTSEL` (section 4). There is no `DATE` or `TIME`: the PicoCalc has
+no clock.
+
+Output can go to a file with `>` or `>>`, or be thrown away with `> NUL`.
+A command can read a file with `<`, and `|` joins commands:
+`DIR /B | FIND "TXT"`.
+
+### Programs
+
+Type a program's name to run it, as in the UNIX flavour: `PICO-ATOM`
+runs `PICO-ATOM.UF2`. The shell looks in the current directory first,
+then in each directory of `PATH`, which starts as `C:\PICO2-APPS`.
+
+### Keys at the prompt
+
+The keys of section 2 work here too, and as in DOS:
+
+| Key | Does |
+|---|---|
+| F3 | types the rest of the last line from where the cursor is |
+| Esc | clears the line |
+| Tab | completes a command or a path, with `\` after a directory |
+
+### Messages
+
+Errors are DOS's: `Bad command or file name`, `File not found - X.TXT`,
+`Access denied`, `Invalid directory`, `Required parameter missing`,
+`Invalid switch - /X`.

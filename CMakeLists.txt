@@ -1,7 +1,9 @@
 # shell — one source tree, two targets (design.md §6):
-#   - BOOT2350.UF2, the shell as a no_flash RAM program (default)
+#   - BOOT2350.UF2, the shell as a no_flash RAM program (default), in the
+#     flavour PICO_SHELL_FLAVOUR names: unix (default) or dos (§4.7)
 #   - a host build of src/core/ and its tests with the system compiler and
-#     no Pico SDK, behind -DPICO_SHELL_HOST=ON, run under CTest.
+#     no Pico SDK, behind -DPICO_SHELL_HOST=ON, run under CTest; it builds
+#     both flavours.
 #
 # The core building clean under -Wall -Wextra -Werror on both toolchains
 # is what keeps SDK dependencies out of it (EL §2.1).
@@ -11,14 +13,11 @@ cmake_minimum_required(VERSION 3.18)
 option(PICO_SHELL_HOST "Build the portable core and its host tests, with no Pico SDK" OFF)
 
 # Every fixed capacity lives in src/core/config.h; nothing here duplicates one.
+# What both flavours share (design.md §4.7)...
 set(SHELL_CORE_SOURCES
     src/core/bininfo.c
     src/core/displaytest.c
-    src/core/editor_lines.c
     src/core/editor_pattern.c
-    src/core/editor_undo.c
-    src/core/editor_vi.c
-    src/core/expand.c
     src/core/files.c
     src/core/font-5x10.c
     src/core/font-8x10.c
@@ -27,7 +26,6 @@ set(SHELL_CORE_SOURCES
     src/core/keys.c
     src/core/line.c
     src/core/out.c
-    src/core/parse.c
     src/core/path.c
     src/core/pipe.c
     src/core/run.c
@@ -37,20 +35,45 @@ set(SHELL_CORE_SOURCES
     src/core/text.c
     src/core/uf2.c
     src/core/vars.c
+)
+# ...the UNIX flavour's command language and vi...
+set(SHELL_UNIX_SOURCES
+    src/core/editor_lines.c
+    src/core/editor_undo.c
+    src/core/editor_vi.c
+    src/core/expand.c
+    src/core/parse.c
+    src/core/unix.c
     src/core/vi.c
+)
+# ...and the DOS flavour's.
+set(SHELL_DOS_SOURCES
+    src/core/dos.c
+    src/core/dos_files.c
+    src/core/dos_parse.c
+    src/core/dos_path.c
+    src/core/dos_text.c
 )
 
 set(SHELL_WARNINGS -Wall -Wextra -Werror)
 
 include(cmake/fatfs.cmake)
 
-# The core uses FatFs's API for files (design.md §5); the disk under it is
-# the port's (the SD card) or the host's (an image file).
-function(shell_core_library)
-    shell_fatfs_library()
-    add_library(shell_core STATIC ${SHELL_CORE_SOURCES})
-    target_include_directories(shell_core PUBLIC src/core)
-    target_compile_options(shell_core PRIVATE ${SHELL_WARNINGS})
+# The core in one flavour, unix or dos, as the library `name`. It uses
+# FatFs's API for files (design.md §5); the disk under it is the port's
+# (the SD card) or the host's (an image file).
+function(shell_core_library name flavour)
+    if (flavour STREQUAL "unix")
+        add_library(${name} STATIC ${SHELL_CORE_SOURCES} ${SHELL_UNIX_SOURCES})
+        target_compile_definitions(${name} PUBLIC SHELL_DOS=0)
+    elseif (flavour STREQUAL "dos")
+        add_library(${name} STATIC ${SHELL_CORE_SOURCES} ${SHELL_DOS_SOURCES})
+        target_compile_definitions(${name} PUBLIC SHELL_DOS=1)
+    else()
+        message(FATAL_ERROR "shell: PICO_SHELL_FLAVOUR is unix or dos, not ${flavour}")
+    endif()
+    target_include_directories(${name} PUBLIC src/core)
+    target_compile_options(${name} PRIVATE ${SHELL_WARNINGS})
     # Pico Logo's key layer cuts its Ctrl-G report to the status row on
     # purpose (its limits.h says so); GCC's truncation warning is off for
     # that file alone.
@@ -58,7 +81,7 @@ function(shell_core_library)
         set_source_files_properties(src/core/editor_vi.c PROPERTIES
             COMPILE_OPTIONS -Wno-format-truncation)
     endif()
-    target_link_libraries(shell_core PUBLIC shell_fatfs)
+    target_link_libraries(${name} PUBLIC shell_fatfs)
 endfunction()
 
 if (PICO_SHELL_HOST)
@@ -72,7 +95,9 @@ if (PICO_SHELL_HOST)
         add_link_options(LINKER:-no_warn_duplicate_libraries)
     endif()
 
-    shell_core_library()
+    shell_fatfs_library()
+    shell_core_library(shell_core unix)
+    shell_core_library(shell_core_dos dos)
     # Only the host formats disks: the tests' FAT16 and FAT32 images.
     target_compile_definitions(shell_fatfs PUBLIC SHELL_FATFS_MKFS=1)
 
@@ -89,6 +114,9 @@ if (PICO_SHELL_HOST)
     add_executable(shell src/host/main.c)
     target_compile_options(shell PRIVATE ${SHELL_WARNINGS})
     target_link_libraries(shell PRIVATE shell_core shell_host_disk)
+    add_executable(shell-dos src/host/main.c)
+    target_compile_options(shell-dos PRIVATE ${SHELL_WARNINGS})
+    target_link_libraries(shell-dos PRIVATE shell_core_dos shell_host_disk)
 
     enable_testing()
     add_subdirectory(test/host)
@@ -113,7 +141,11 @@ else()
         message(FATAL_ERROR "shell: RP2350 boards only (design.md §1), not ${PICO_PLATFORM}")
     endif()
 
-    shell_core_library()
+    # The flavour (design.md §4.7): each is its own BOOT2350.UF2, built in
+    # its own directory.
+    set(PICO_SHELL_FLAVOUR unix CACHE STRING "The command line's flavour: unix or dos")
+    shell_fatfs_library()
+    shell_core_library(shell_core ${PICO_SHELL_FLAVOUR})
 
     # The version for the banner, git describe --always --dirty, taken at
     # build time; the header only changes when the text does.
@@ -163,7 +195,11 @@ else()
     set_target_properties(shell PROPERTIES OUTPUT_NAME BOOT2350)
     pico_set_binary_type(shell no_flash)
     pico_set_program_name(shell "shell")
-    pico_set_program_description(shell "UNIX-like command line for the PicoCalc")
+    if (PICO_SHELL_FLAVOUR STREQUAL "dos")
+        pico_set_program_description(shell "DOS-like command line for the PicoCalc")
+    else()
+        pico_set_program_description(shell "UNIX-like command line for the PicoCalc")
+    endif()
 
     # include/: the header programs use to return to the shell, which
     # loader.c checks against its own idea of the protocol. src/port has

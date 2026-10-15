@@ -16,6 +16,90 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M9 — the DOS flavour, step 1 (branch `m9-dos`, 2026-10-14)
+
+**In progress.** Step 1 of three (design.md §10) is built: the build
+option, the DOS flavour's parser, `C:` paths, the prompt and its
+commands (design.md §4.7, *As built at M9, step 1*). Batch files and
+`AUTOEXEC.BAT` (step 2) and EDIT (step 3) are to come, and M9's
+done-when checks on the board with them.
+
+**Checked on the host** (macOS, Apple clang 21, `-Wall -Wextra -Werror`,
+C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):
+
+- The UNIX flavour's 21 test binaries pass unchanged after `shell.c`'s
+  command language moved to `unix.c`; 22 with `test_dos`.
+- All four firmware builds compile clean: each flavour, development and
+  release. The host builds `shell` and `shell-dos`.
+- **`test_dos`**, on its own: `dos_match` (17 patterns: `*.*`, `*.`,
+  `?` matching none at a part's end, long names with several dots),
+  `dos_rename` (7 masks), `dos_resolve` (`C:\`, `C:X`, `..\`, `/`, other
+  drives), `dos_show`, `dos_expand` (`%name%` in either case, `%%`, an
+  unset one, a lone `%`, too long), and `dos_parse` (`DIR/W/P`, `cd..`,
+  `CD\`, `ECHO.`, a program's name with a `-`, a `.BAT` name not cut,
+  quotes in words and redirections, `>>`, pipes with `|` inside quotes,
+  blank lines, four syntax errors).
+- **`test_dos`** over FAT16 and FAT32 images, each command as typed: the
+  banner and `C:\HOME>` as the card spells HOME; CD (alone, `..`, `\`,
+  `C:\`, `/HOME`, a missing one); MD over one there; `A:` and `C:`; `Bad
+  command or file name`; ECHO with `>`, `>>`, `ECHO.`, and `> NUL`
+  making no file; TYPE of a file, a missing one and a directory; COPY of
+  one, under a mask, into a directory, onto itself, several into one,
+  none, and a directory's files; DIR's header with the label, its lines
+  and totals, `/B`, `NAME` as `NAME.*`, `/W`, `/A` with hidden names, `/S`
+  and `/S /B` from the root, an unknown switch, a pipe into FIND; `/P`
+  over 40 files, going on with Space and stopped by Esc, and not pausing
+  into a pipe; REN by mask, onto another file, a change of case, a path
+  refused, a directory; ATTRIB `+R`, `-R +H`, showing, hidden files
+  included, a bad letter; DEL of a read-only file, `*.*` answered N then
+  Y, `/P` answered N and Y, none, a hidden name in full; RD of a full
+  directory, an empty one and the current one; XCOPY `/S` with a hidden
+  file left out, a cyclic copy, no match, one file; MOVE into a
+  directory, a directory renamed, several into a file, a directory into
+  itself, a list with commas replacing a file; DELTREE answered N then Y
+  with a read-only file inside, `/Y` of a file, the current directory;
+  FIND with `/I /N`, `/V /C`, a pipe, `<`, a missing file, nothing to
+  find; MORE into a file; SET and `%NAME%`, clearing, a syntax error;
+  PATH, `PATH ;`, setting it in capitals; PROMPT's codes, its width for
+  the line editor, the default, ECHO OFF hiding it; programs found in
+  the current directory, on PATH and by path; VER, VOL, `VOL D:`, MEM
+  with and without the port's figures; HELP and `help copy`; PHOSPHOR's
+  word in capitals; F3, Esc and Tab (a directory, then a command) at the
+  prompt; a COPY whose writes fail part way, leaving the old file.
+
+**Checked on the board:** the Plus 2 W on the probe, by Claude, the DOS
+flavour's release build run from SRAM over SWD (`tools/swd-ram.sh`, so
+not through stage3), on the test card, driven by `tools/swd-drive.py`:
+the banner and `C:\>` (the card has no `HOME`), VER, MEM, VOL (the card's
+label `PICOCALC` and serial number), INFO, DIR /W and DIR /B of the root,
+`DIR /B | FIND /V "["`, ATTRIB of the root with its hidden `._` files,
+`DIR PICO2-APPS /B`; then MD, CD, `ECHO hi > A.TXT`, COPY, `REN *.TXT
+*.OLD`, DIR /B and TYPE in a new `\DOSTEST`, removed after with
+`DELTREE /Y`. All as on the host. The banner and VER wrapped at 40
+columns with a long version string and were shortened.
+
+**Measured** (link map, release builds): the UNIX flavour 435,480 B of
+RAM (M8: 432,516 B), the DOS flavour 301,628 B. The DOS commands' deepest
+call, COPY into FatFs, uses about 3 KB of the 8 KB stack
+(`-fstack-usage`).
+
+**Not checked:**
+
+- The DOS flavour's `BOOT2350.UF2` from the card through stage3, and so
+  running a program by name and coming back (M9's done-when, with steps
+  2 and 3).
+- Typing on the PicoCalc's own keyboard: F3, Esc and Tab were tested on
+  the host; on the board, only keys typed over SWD.
+- `FONT`, `USBDISK`, `POWEROFF`, `REBOOT`, `BOOTSEL` and `EXIT` in the
+  DOS flavour on the board; they are the UNIX flavour's commands.
+- The UNIX flavour on the board after the refactor: its host tests pass
+  unchanged, but it was not run there.
+- One name in the test card's root shows as blank in both flavours; it
+  is not `Icon\r`, and was not identified. `ls` printed it the same way
+  before M9.
+- A card formatted by another tool for VOL's label and serial number:
+  only the test card (formatted on a Mac) and FatFs's own images.
+
 ## M8 — the rest of v1 (branch `m8-rest`, 2026-10-14)
 
 **Done.** The twelve commands are built, checked on the host, run by

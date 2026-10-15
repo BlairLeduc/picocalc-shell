@@ -23,6 +23,7 @@
  * parser makes of it (parse.h): words across all its commands, and
  * commands joined by ;, && and ||. */
 #define SHELL_LINE_MAX     255u
+#define SHELL_PROMPT_MAX   320u   /* the prompt as shown: a whole path, or DOS's PROMPT */
 #define SHELL_WORDS_MAX    32u
 #define SHELL_CMDS_MAX     8u
 
