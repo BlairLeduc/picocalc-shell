@@ -1,6 +1,6 @@
-/* system.h — the PicoCalc's own commands (design.md §4.5): `help`,
- * `clear`, `phosphor`, `battery`, `backlight`, `info`, `poweroff`,
- * `reboot` and `bootsel`.
+/* system.h — the PicoCalc's own commands (design.md §4.5): `help`
+ * (`man` in the UNIX flavour), `clear`, `phosphor`, `battery`,
+ * `backlight`, `info`, `poweroff`, `reboot` and `bootsel`.
  *
  * Portable: the southbridge, the terminal's ink and the reboots are the
  * port's, through shell_system_t (shell.h). With a hook missing, as on

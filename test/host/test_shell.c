@@ -91,13 +91,5 @@ int main(void) {
     CHECK(sh.line.len == SHELL_LINE_MAX, "line length %zu", sh.line.len);
     type("\003");
 
-    /* displaytest stops when interrupted, and reports. */
-    term_init(&t);
-    polls_left = 3;
-    type("displaytest\r");
-    CHECK(has_row("Rows processed: 3"), "the rows did not stop at 3");
-    CHECK(has_row("Characters displayed: 0"), "the characters did not stop");
-    CHECK(t.cursor_on, "the cursor is back");
-
     TEST_DONE();
 }

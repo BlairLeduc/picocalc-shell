@@ -18,10 +18,10 @@ static int not_here(shell_t *sh, const char *cmd) {
     return 1;
 }
 
-/* ---- help ------------------------------------------------------------- */
+/* ---- help (man) ------------------------------------------------------ */
 
 int cmd_help(shell_t *sh, int argc, char **argv) {
-    if (argc > 2) return usage(sh, "help [command]");
+    if (argc > 2) return usage(sh, SHELL_DOS ? "help [command]" : "man [command]");
     const char *name;
     if (argc == 2) {
         int i = shell_builtin_index(argv[1]);
@@ -30,7 +30,8 @@ int cmd_help(shell_t *sh, int argc, char **argv) {
                        shell_builtin_about((unsigned)i));
             return 0;
         }
-        shell_error(sh, "help: %s: not a builtin; a program, if one has that name\n", argv[1]);
+        shell_error(sh, "%s: %s: not a builtin; a program, if one has that name\n",
+                    SHELL_DOS ? "help" : "man", argv[1]);
         return 1;
     }
     /* The names in columns as wide as the longest, to the screen's width. */
@@ -52,7 +53,7 @@ int cmd_help(shell_t *sh, int argc, char **argv) {
     }
     out_puts(&sh->out, SHELL_DOS ? "\nHELP name for one. Any other name runs\n"
                                    "a program from PATH, as NAME.UF2.\n"
-                                 : "\n`help name` for one. Any other name runs\n"
+                                 : "\n`man name` for one. Any other name runs\n"
                                    "a program from $PATH, as `name.uf2`.\n");
     return 0;
 }

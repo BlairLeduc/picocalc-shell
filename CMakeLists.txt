@@ -36,7 +36,6 @@ set(SHELL_CORE_SOURCES
 )
 # ...the UNIX flavour's command language, vi and fonts...
 set(SHELL_UNIX_SOURCES
-    src/core/displaytest.c
     src/core/editor_lines.c
     src/core/editor_undo.c
     src/core/editor_vi.c

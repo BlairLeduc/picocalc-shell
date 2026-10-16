@@ -2,7 +2,6 @@
 # compiler and no Pico SDK. One binary per area; exit 77 is a skip.
 
 set(SHELL_HOST_TESTS
-    test_displaytest
     test_editor_lines
     test_editor_pattern
     test_editor_undo

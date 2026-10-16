@@ -144,29 +144,29 @@ int main(void) {
     const shell_system_t sys = { battery, backlight, phosphor, info, power, NULL };
     shell_set_system(&sh, &sys);
 
-    /* ---- help ---- */
-    CHECK(run("help") == 0, "help");
-    CHECK(strncmp(con, "backlight    battery      bootsel\ncat", 37) == 0, "columns: '%.60s'", con);
-    CHECK(strstr(con, "\n`help name` for one.") && strstr(con, "\nwc\n") && strstr(con, "tail"),
-          "help: '%s'", con);
+    /* ---- man ---- */
+    CHECK(run("man") == 0, "man");
+    CHECK(strncmp(con, "backlight  battery    bootsel\ncat", 33) == 0, "columns: '%.60s'", con);
+    CHECK(strstr(con, "\n`man name` for one.") && strstr(con, " wc\n") && strstr(con, "tail"),
+          "man: '%s'", con);
     for (unsigned i = 0; shell_builtin_at(i); i++) {
         char line[32];
-        snprintf(line, sizeof line, "help %s", shell_builtin_at(i));
+        snprintf(line, sizeof line, "man %s", shell_builtin_at(i));
         CHECK(run(line) == 0 && strncmp(con, "usage: ", 7) == 0 &&
                   strncmp(con + 7, shell_builtin_at(i), strlen(shell_builtin_at(i))) == 0,
               "%s: '%s'", line, con);
         /* The about line fits the narrow screen. */
         CHECK(strlen(shell_builtin_about(i)) < TERM_COLS_8X10, "%s: too wide", line);
     }
-    CHECK(run("help head") == 0 &&
-              strcmp(con, "usage: head [-n N] [file...]\nthe first lines, 10 by default\n") == 0,
-          "help head: '%s'", con);
-    CHECK(run("help pico-oric") == 1 && strstr(con, "not a builtin"), "a program: '%s'", con);
-    CHECK(run("help a b") == 1 && strstr(con, "usage: help"), "two");
-    CHECK(run("help | grep -c tail") == 0 && strcmp(con, "1\n") == 0, "help |: '%s'", con);
+    CHECK(run("man head") == 0 &&
+              strcmp(con, "usage: head [-n N] [file...]\nDisplays the first lines of a file\n") == 0,
+          "man head: '%s'", con);
+    CHECK(run("man pico-oric") == 1 && strstr(con, "man: pico-oric: not a builtin"), "a program: '%s'", con);
+    CHECK(run("man a b") == 1 && strstr(con, "usage: man"), "two");
+    CHECK(run("man | grep -c tail") == 0 && strcmp(con, "1\n") == 0, "man |: '%s'", con);
     run("font 5x10");
-    CHECK(run("help") == 0 && strncmp(con, "backlight    battery      bootsel      cat\ncd ",
-                                      46) == 0,
+    CHECK(run("man") == 0 && strncmp(con, "backlight  battery    bootsel    cat        cd\nclear",
+                                     52) == 0,
           "64 columns: '%.70s'", con);
     run("font 8x10");
 

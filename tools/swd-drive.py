@@ -2,7 +2,7 @@
 """swd-drive.py — drive the running shell over SWD, with no UART, so the
 release build can be scripted (EL §13.2; hardware-notes.md §2.7).
 
-  tools/swd-drive.py build/pico-release/BOOT2350.elf type 'displaytest\r'
+  tools/swd-drive.py build/pico-release/BOOT2350.elf type 'ls\r'
   tools/swd-drive.py build/pico-release/BOOT2350.elf screen
   tools/swd-drive.py build/pico-release/BOOT2350.elf stats
 
