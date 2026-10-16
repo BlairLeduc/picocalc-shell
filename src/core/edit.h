@@ -5,7 +5,7 @@
  * bytes, its line breaks kept, a read-only file opened read-only, and
  * saving through name.new and a rename.
  *
- *   - The screen: the 64-column font while EDIT runs; a menu bar, the
+ *   - The screen: 40 columns in IBM's font; a menu bar, the
  *     file's name in the title row, EDIT_TEXT_ROWS of text, white on
  *     blue, and a status row. Long lines scroll sideways, as in vi.
  *   - Menus: tap Alt, or Alt and a menu's letter; in a menu, an item's
