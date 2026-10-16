@@ -46,9 +46,19 @@ static bool stop(void *ctx) {
     return shell_interrupted(ctx);
 }
 
-/* Keep the keyboard polled while flash is written; a stop is ignored. */
+typedef struct {
+    shell_t          *sh;
+    const uf2_info_t *info;
+} progress_t;
+
+/* Before each sector is written: count it on the line, which has no
+ * name so it stays short of the width and CR can rewrite it, and keep
+ * the keyboard polled; a stop is ignored. */
 static void tick(void *ctx) {
-    shell_t *sh = ctx;
+    progress_t *p = ctx;
+    shell_t *sh = p->sh;
+    out_printf(&sh->con, "\rwriting %lu of %lu sectors", (unsigned long)p->info->written + 1,
+               (unsigned long)p->info->to_write);
     if (sh->hooks.interrupted) sh->hooks.interrupted(sh->hooks.ctx);
 }
 
@@ -80,11 +90,11 @@ static int run_path(shell_t *sh, const char *name, const char *path, bool ram_on
         return 1;
     }
     if (r == UF2_FLASH && info.differ) {
-        out_printf(&sh->con, "%s: writing %lu of %lu sectors\n", name,
-                   (unsigned long)info.to_write, (unsigned long)info.sectors);
+        progress_t p = { sh, &info };
         t0 = sh->hooks.now_us(sh->hooks.ctx);
-        r = uf2_write(&s_prog, &ld->flash, &info, tick, sh);
+        r = uf2_write(&s_prog, &ld->flash, &info, tick, &p);
         info.write_us = since(sh, t0);
+        out_puts(&sh->con, "\n");
     }
     f_close(&s_prog);
 

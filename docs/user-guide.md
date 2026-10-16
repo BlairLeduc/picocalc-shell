@@ -431,8 +431,12 @@ directory of `$PATH`, which is `/pico2-apps` unless you change it:
 
 ```
 />pico-oric
-pico-oric: writing 112 of 120 sectors
+writing 112 of 112 sectors
 ```
+
+The count goes up as each sector is written. Only the sectors that
+differ from what flash holds are written, so a program run before
+writes few or none.
 
 A name with a `/` in it is taken as a path: `/games/chess.uf2`.
 
