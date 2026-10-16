@@ -5,7 +5,8 @@ Status: **Draft 10, 2026-10-15.** Feasibility study and first design. M0
 speed), M8 (the rest of v1) and M9 (the DOS flavour) are done
 ([milestones.md](milestones.md)). There is no M5: *Exit to shell* in the
 emulators is done in their own projects (§3.4). The commands are explained
-for users in [user-guide.md](user-guide.md).
+for users in [user-guide-unix.md](user-guide-unix.md), and the DOS flavour's in
+[user-guide-dos.md](user-guide-dos.md).
 
 The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
 and pico-oric). Pico Logo is a special case, because it keeps a filesystem
@@ -35,6 +36,7 @@ questions are open; the design is ready for M0.
 | 2026-10-14 | EDIT selects with Alt and the arrows, and cuts, copies and pastes with Ctrl+X, Ctrl+C and Ctrl+V: the keyboard cannot send Shift with the arrows, and Shift+Del is End (HW §6.3). | 4.7 |
 | 2026-10-15 | The DOS flavour has only 40 columns, always in IBM's font: no `FONT` command and no 64-column mode, and EDIT runs in 40 columns, its boxes in IBM's line glyphs. This narrows the 2026-10-14 font decision: the 5x10 font is the UNIX flavour's alone. | 4.1, 4.7 |
 | 2026-10-15 | The UNIX flavour's `ls` puts `/` after a directory's name, as `ls -F` does, in columns, one per line and `-l`. | 4.2 |
+| 2026-10-16 | A release offers the two flavours' release builds as `shell-unix.uf2` and `shell-dos.uf2`; the user renames the one they want to `BOOT2350.UF2` on the card. | 4.7 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -747,7 +749,8 @@ flavour, chosen at build time with `-DPICO_SHELL_FLAVOUR=dos` (`unix` is
 the default), gives them a command line that feels like DOS and an EDIT
 modelled on MS-DOS 5's. It is never called MS-DOS, which is Microsoft's
 mark; it is "the DOS flavour" of shell. Each flavour is its own
-`BOOT2350.UF2`, and the release ships both. The user copies the one they
+`BOOT2350.UF2`, and the release ships both, as `shell-unix.uf2` and
+`shell-dos.uf2` *(settled 2026-10-16)*. The user copies the one they
 want to the card's root; neither flavour installs the other.
 
 **What is shared.** Everything below the command language: FatFs and the

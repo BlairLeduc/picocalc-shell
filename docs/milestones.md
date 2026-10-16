@@ -372,7 +372,7 @@ call, COPY into FatFs, uses about 3 KB of the 8 KB stack
 **Done.** The twelve commands are built, checked on the host, run by
 Claude on the Plus 2 W, and checked by the owner on a Pico 2 W, the
 phosphors with their new values included.
-`docs/user-guide.md` explains every command for users.
+`docs/user-guide-unix.md` explains every command for users.
 
 **Checked on the host** (macOS, Apple clang 21, `-Wall -Wextra -Werror`,
 C11; firmware with Arm GCC 15.2 and Pico SDK 2.3.1):

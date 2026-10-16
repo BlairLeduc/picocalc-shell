@@ -12,7 +12,7 @@
 | [docs/design.md](docs/design.md) | the shell: boot chain, commands, architecture, budgets, settled decisions, milestones' scope and done-when criteria |
 | [docs/hardware-notes.md](docs/hardware-notes.md) (**HW §N**) | the PicoCalc: wiring, protocols, timing, measured costs, quirks. A new hardware fact goes here, written to stand alone |
 | [docs/milestones.md](docs/milestones.md) | what each milestone verified, on which board and date, and what it did not check, newest first |
-| [docs/user-guide.md](docs/user-guide.md) | every command and the command line, for users. Keep it in step with the builtins and their `help` text |
+| [docs/user-guide-unix.md](docs/user-guide-unix.md), [docs/user-guide-dos.md](docs/user-guide-dos.md) | every command and the command line, for users: the UNIX flavour and the DOS flavour, one guide each. Keep them in step with the builtins and their `man`/`HELP` text |
 
 Read docs/design.md before starting work. **EL §N** refers to `references/pico-oric/docs/emulator-lessons.md`. Its architecture (§2.1), testing (§11), hardware workflow (§13) and process (§14) chapters apply to this project.
 
