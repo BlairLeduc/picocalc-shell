@@ -611,6 +611,10 @@ static int menu(int m) {
         } else if (k == '\r') {
             return mu->items[pick].cmd;
         } else if (k & KEYS_ALT) {
+            /* Alt still held from opening the menu: an item's letter
+             * first, then another menu's. */
+            for (int i = 0; i < mu->n; i++)
+                if (label_key(mu->items[i].label) == (char)(k & 0xFF)) return mu->items[i].cmd;
             for (int i = 0; i < MENUS; i++)
                 if (lower(s_menus[i].name[0]) == (char)(k & 0xFF)) m = i, pick = 0;
         } else if (k < 0x80) {

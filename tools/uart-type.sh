@@ -3,7 +3,7 @@
 # Copied from pico-oric, with the shell's keys and pacing.
 #
 #   tools/uart-type.sh 'font 5x10\r'
-#   tools/uart-type.sh $'displaytest\r'
+#   tools/uart-type.sh $'ls\r'
 #
 # The development build takes each received byte as a key (keys_uart in
 # src/core/keys.c): characters type as themselves, CR and LF are Enter,

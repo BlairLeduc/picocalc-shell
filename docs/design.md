@@ -622,8 +622,8 @@ port through `shell_system_t` (`shell_set_system`), a second set of
 hooks beside `shell_hooks_t`, so the host tests fake them and the host
 shell, with none, says `not on this machine`:
 
-- `help` lists the builtins in columns as wide as the longest name, to
-  the screen's width; `help name` prints its usage and one line on what
+- `help` (`man` in the UNIX flavour) lists the builtins in columns as
+  wide as the longest name, to the screen's width; `man name` prints its usage and one line on what
   it does, both from the builtin table in `shell.c`.
 - `clear` writes `ESC [ H ESC [ 2 J` to the output. `phosphor` calls the
   port's `term_set_phosphor`, then sends SGR 39 so the new ink applies
@@ -654,13 +654,13 @@ shell, with none, says `not on this machine`:
 | `echo` `head` `tail` `wc` `grep` | `sort` `uniq` `diff` `hexdump` |
 | `df` | `fsck`-lite (check only) |
 | `vi` `view` | |
-| `help` `history` `clear` `set` `export` `font` `phosphor` | `alias` `date` |
+| `man` `history` `clear` `set` `export` `font` `phosphor` | `alias` `date` |
 | `battery` `backlight` `poweroff` (southbridge; HW §6) | |
 | `info` (shell version, board, chip, flash, loader version, card, battery) `reboot` `bootsel` `menu` `usbdisk` | `which` `uf2info` (name, version, size from binary info) |
 
-`displaytest` is a development command, not a builtin: the starter's
-display stress test (M0), which reports rows and characters per second.
-Break, Esc or Ctrl-C stops it.
+*(Changed 2026-10-15:)* the UNIX flavour's `help` is called `man`, as
+on UNIX; the DOS flavour keeps `HELP`. `displaytest`, the starter's
+display stress test kept from M0 as a development command, is gone.
 
 ### 4.6 vi
 
@@ -1022,8 +1022,7 @@ rules for size, CR LF and safe save (§4.6).
   64-column mode (4264). The terminal's grid, the panel's shadow and
   EDIT's screens are 40 columns wide (`TERM_COLS_MAX` is 40 when
   `SHELL_DOS` is 1, and `TERM_COLS_5X10` is not defined), and the
-  owner's two fonts and `displaytest` are built into the UNIX flavour
-  only.
+  owner's two fonts are built into the UNIX flavour only.
 
 - **Chords.** `keys_event` reports chords only while EDIT asks
   (`keys_report_chords`), so the prompt and vi are as they were: Alt with
@@ -1061,7 +1060,10 @@ rules for size, CR LF and safe save (§4.6).
   `term.c` now works colours 16-255 out by xterm's formula (§4.1).
 - **Menus and boxes.** A menu or a box draws over the text and takes
   keys until it closes: menus with Left, Right, Up, Down, Enter, the
-  item's letter, Alt and a menu's letter, or Esc; a box asking for a
+  item's letter, Alt and a menu's letter, or Esc; *(changed
+  2026-10-15)* Alt and an item's letter carries the item out, before
+  any menu's, so Alt held from opening the menu works (Alt+F, Alt+X
+  exits; Alt+S in File is Save); a box asking for a
   name or text offers the last one, replaced by the first letter typed;
   a question takes its buttons' letters, drawn in red as in MS-DOS's
   EDIT (underlined in the phosphor colours), Enter for the first, Esc to

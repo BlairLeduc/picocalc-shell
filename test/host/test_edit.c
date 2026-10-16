@@ -196,6 +196,10 @@ static int edit_tests(bool fat32) {
           "Help, Keys");
     CHECK(edit("EDIT A.TXT", F1) == 0 && on_screen("Alt+arrows       select"), "F1");
     CHECK(edit("EDIT A.TXT", ALT "s" "f") == 0 && on_screen("Find What:"), "Find's box");
+    /* Alt held: an item's letter picks it before another menu's. */
+    CHECK(edit("EDIT A.TXT", ALT "s" ALT "f") == 0 && on_screen("Find What:"), "Alt+S, Alt+F");
+    CHECK(edit("EDIT A.TXT", ALT "f" ALT "h") == 0 && on_screen("Keys") && !on_screen("Save As..."),
+          "Alt+H from File opens Help");
 
     /* Exit with a change: No keeps the file, Esc stays, Yes saves. */
     CHECK(edit("EDIT A.TXT", "Q" ALT "f" "x") == 0 && on_screen("Save it now?"), "asked");
@@ -214,6 +218,8 @@ static int edit_tests(bool fat32) {
           "C is Cancel: '%s'", row(2));
     CHECK(edit("EDIT A.TXT", "Q" ALT "f" "x" "n") == 0 && is("/HOME/A.TXT", "Xhello\nworld\n"),
           "No");
+    CHECK(edit("EDIT A.TXT", "Q" ALT "f" ALT "x") == 0 && on_screen("Save it now?"),
+          "Alt+F, Alt+X asks");
     CHECK(edit("EDIT A.TXT", "Q" BRK ESC) == 0 && strcmp(row(2), "QXhello") == 0, "Cancel stays");
     CHECK(edit("EDIT A.TXT", DEL BRK "\r") == 0 && is("/HOME/A.TXT", "hello\nworld\n"),
           "Brk, Enter is Yes: '%s'", slurp("/HOME/A.TXT"));

@@ -662,8 +662,11 @@ static int dos_tests(bool fat32) {
           "'%s'", con);
     CHECK(run("HELP") == 0 && has("ATTRIB") && has("XCOPY") && has("HELP name for one"), "'%s'",
           con);
-    CHECK(run("help copy") == 0 && strcmp(con, "usage: COPY source [destination]\ncopy files\n") == 0,
+    CHECK(run("help copy") == 0 && strcmp(con, "usage: COPY source [destination]\nCopy one or more files\n") == 0,
           "'%s'", con);
+    /* Each about line fits the 40-column screen. */
+    for (unsigned i = 0; shell_builtin_at(i); i++)
+        CHECK(strlen(shell_builtin_about(i)) < TERM_COLS_MAX, "%s: too wide", shell_builtin_at(i));
     CHECK(run("PHOSPHOR GREEN") == 1 && has("phosphor: not on this machine"), "lower: '%s'", con);
 
     /* The prompt's keys: F3 the rest of the last line, Esc drops the line,

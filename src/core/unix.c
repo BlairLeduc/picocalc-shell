@@ -3,13 +3,11 @@
  * `||`, NAME=value, `sh` scripts and /etc/profile, and its builtins:
  * the file commands (files.h), `more`, `grep`, `head`, `tail` and `wc`
  * (text.h), the PicoCalc's own (system.h), `echo`, `set`, `unset`,
- * `export`, `sh`, `history`, `menu`, `usbdisk`, `vi` and `view` (vi.h),
- * and the development command `displaytest`. */
+ * `export`, `sh`, `history`, `menu`, `usbdisk`, `vi` and `view` (vi.h). */
 
 #include <stdio.h>
 #include <string.h>
 
-#include "displaytest.h"
 #include "expand.h"
 #include "files.h"
 #include "flavour.h"
@@ -40,18 +38,6 @@ static int cmd_echo(shell_t *sh, int argc, char **argv) {
     return 0;
 }
 
-static bool stop_requested(void *ctx) {
-    return shell_interrupted(ctx);
-}
-
-/* "123.45" for n * 100 / d, without floating point. */
-static void rate(char *buf, size_t size, uint64_t n, uint64_t us) {
-    uint64_t r = us ? n * 100000000u / us : 0;
-    snprintf(buf, size, "%lu.%02lu", (unsigned long)(r / 100u), (unsigned long)(r % 100u));
-}
-
-/* The display test draws on the terminal itself, so it never writes to
- * a redirection. */
 static int cmd_font(shell_t *sh, int argc, char **argv) {
     bool wide = !sh->wide;
     if (argc > 2) {
@@ -68,35 +54,6 @@ static int cmd_font(shell_t *sh, int argc, char **argv) {
     }
     sh->wide = wide;
     out_puts(&sh->con, wide ? "\033[?4264h" : "\033[?4264l");
-    return 0;
-}
-
-static int cmd_displaytest(shell_t *sh, int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-    const out_t *o = &sh->con;
-    uint64_t t0 = sh->hooks.now_us(sh->hooks.ctx);
-    int rows = displaytest_rows(o, sh->wide, stop_requested, sh);
-    uint64_t t1 = sh->hooks.now_us(sh->hooks.ctx);
-    unsigned long bytes;
-    int chars = displaytest_chars(o, stop_requested, sh, &bytes);
-    uint64_t t2 = sh->hooks.now_us(sh->hooks.ctx);
-    displaytest_finish(o);
-
-    char a[24], b[24], c[24];
-    rate(a, sizeof a, (uint64_t)rows, t1 - t0);
-    rate(b, sizeof b, bytes, t2 - t1);
-    rate(c, sizeof c, (uint64_t)chars, t2 - t1);
-    out_puts(o, "Display stress test complete.\n");
-    out_printf(o, "\nRows processed: %d\n", rows);
-    out_printf(o, "Rows time elapsed: %lu us\n", (unsigned long)(t1 - t0));
-    out_printf(o, "Average rows per second: %s\n", a);
-    out_printf(o, "\nCharacters processed: %lu\n", bytes);
-    out_printf(o, "Characters time elapsed: %lu us\n", (unsigned long)(t2 - t1));
-    out_printf(o, "Average characters per second: %s\n", b);
-    out_printf(o, "Characters displayed: %d\n", chars);
-    out_printf(o, "Average displayed cps: %s\n", c);
-    sh->stop = false;   /* stopping it is how it ends, not a reason to drop the line */
     return 0;
 }
 
@@ -165,46 +122,45 @@ static int cmd_sh(shell_t *sh, int argc, char **argv) {
     return script(sh, argv[1]);
 }
 
-/* Each builtin, with its usage and a line on what it does for `help`;
- * in order, as `help` and Tab list them. */
+/* Each builtin, with its usage and a line on what it does for `man`;
+ * in order, as `man` and Tab list them. */
 const shell_builtin_t flavour_builtins[] = {
-    { "backlight",   cmd_backlight,   "backlight [lcd|kbd] [0-255]", "show or set a backlight" },
-    { "battery",     cmd_battery,     "battery", "the battery's charge" },
-    { "bootsel",     cmd_bootsel,     "bootsel", "reboot into BOOTSEL, as a USB drive" },
-    { "cat",         cmd_cat,         "cat file... (or cat < file)", "show or join files" },
-    { "cd",          cmd_cd,          "cd [dir]", "change directory; $HOME with none" },
-    { "clear",       cmd_clear,       "clear", "clear the screen" },
-    { "cp",          cmd_cp,          "cp [-r] from... to", "copy files, -r directories" },
-    { "df",          cmd_df,          "df", "the card's size and free space" },
-    { "displaytest", cmd_displaytest, "displaytest", "the display's stress test" },
-    { "echo",        cmd_echo,        "echo [-n] [word...]", "print words; -n no line break" },
-    { "export",      cmd_export,      "export [NAME=value...]", "set variables, or list them" },
-    { "font",        cmd_font,        "font [8x10|5x10]", "40 or 64 columns; swap with none" },
-    { "grep",        cmd_grep,        "grep [-v] [-n] [-c] [-i] pattern [file...]", "lines that match a pattern" },
-    { "head",        cmd_head,        "head [-n N] [file...]", "the first lines, 10 by default" },
-    { "help",        cmd_help,        "help [command]", "list the commands, or explain one" },
-    { "history",     cmd_history,     "history", "the lines typed before" },
-    { "info",        cmd_info,        "info", "the shell, board, loader and card" },
-    { "ls",          cmd_ls,          "ls [-l] [-a] [path...]", "list a directory" },
-    { "menu",        cmd_menu,        "menu", "UF2 Loader's own menu" },
-    { "mkdir",       cmd_mkdir,       "mkdir [-p] dir...", "make directories" },
-    { "more",        cmd_more,        "more file... (or < file, or | more)", "show text a screen at a time" },
-    { "mv",          cmd_mv,          "mv from... to", "move or rename" },
-    { "phosphor",    cmd_phosphor,    "phosphor [white|green|amber|default]", "the colour of the text" },
-    { "poweroff",    cmd_poweroff,    "poweroff", "switch the PicoCalc off" },
-    { "pwd",         cmd_pwd,         "pwd", "print the current directory" },
-    { "reboot",      cmd_reboot,      "reboot", "restart the shell" },
-    { "rm",          cmd_rm,          "rm [-r] path...", "remove files, -r directories" },
-    { "rmdir",       cmd_rmdir,       "rmdir dir...", "remove empty directories" },
-    { "set",         cmd_set,         "set", "list the variables" },
-    { "sh",          cmd_sh,          "sh file", "run a script" },
-    { "tail",        cmd_tail,        "tail [-n N] [file...]", "the last lines, 10 by default" },
-    { "touch",       cmd_touch,       "touch file...", "make empty files" },
-    { "unset",       cmd_unset,       "unset NAME...", "remove variables" },
-    { "usbdisk",     cmd_usbdisk,     "usbdisk", "offer the card to a computer" },
-    { "vi",          cmd_vi,          "vi [-R] file", "edit a text file" },
-    { "view",        cmd_view,        "view file", "read a text file in vi" },
-    { "wc",          cmd_wc,          "wc [-l] [-w] [-c] [file...]", "count lines, words and bytes" },
+    { "backlight",  cmd_backlight,  "backlight [lcd|kbd] [0-255]", "Shows or sets a backlight" },
+    { "battery",    cmd_battery,    "battery", "Displays the battery's charge" },
+    { "bootsel",    cmd_bootsel,    "bootsel", "Reboot into bootloader mode (BOOTSEL)" },
+    { "cat",        cmd_cat,        "cat file... (or cat < file)", "Concatenate and print files" },
+    { "cd",         cmd_cd,         "cd [dir]", "Change directory; $HOME with none" },
+    { "clear",      cmd_clear,      "clear", "Clears the screen" },
+    { "cp",         cmd_cp,         "cp [-r] from... to", "Copies files, -r directories" },
+    { "df",         cmd_df,         "df", "Displays the card's size and free space" },
+    { "echo",       cmd_echo,       "echo [-n] [word...]", "Print words; -n no line break" },
+    { "export",     cmd_export,     "export [NAME=value...]", "Displays, sets or lists variables" },
+    { "font",       cmd_font,       "font [8x10|5x10]", "40 or 64 columns; swap with none" },
+    { "grep",       cmd_grep,       "grep [-v] [-n] [-c] [-i] pattern [file...]", "File pattern searcher" },
+    { "head",       cmd_head,       "head [-n N] [file...]", "Displays the first lines of a file" },
+    { "history",    cmd_history,    "history", "Displays the lines typed" },
+    { "info",       cmd_info,       "info", "Displays diagnostic information" },
+    { "ls",         cmd_ls,         "ls [-l] [-a] [path...]", "Lists directory contents" },
+    { "man",        cmd_help,       "man [command]", "Display manual pages" },
+    { "menu",       cmd_menu,       "menu", "UF2 Loader's menu" },
+    { "mkdir",      cmd_mkdir,      "mkdir [-p] dir...", "Makes directories" },
+    { "more",       cmd_more,       "more file... (or < file, or | more)", "Displays text a screen at a time" },
+    { "mv",         cmd_mv,         "mv from... to", "Move or rename" },
+    { "phosphor",   cmd_phosphor,   "phosphor [white|green|amber|default]", "Sets the colour of the text" },
+    { "poweroff",   cmd_poweroff,   "poweroff", "Switches the PicoCalc off" },
+    { "pwd",        cmd_pwd,        "pwd", "Print the current directory" },
+    { "reboot",     cmd_reboot,     "reboot", "Restarts the shell" },
+    { "rm",         cmd_rm,         "rm [-r] path...", "Removes files, -r directories" },
+    { "rmdir",      cmd_rmdir,      "rmdir dir...", "Removes empty directories" },
+    { "set",        cmd_set,        "set", "Lists the variables" },
+    { "sh",         cmd_sh,         "sh file", "Runs a script" },
+    { "tail",       cmd_tail,       "tail [-n N] [file...]", "Displays the last lines, 10 by default" },
+    { "touch",      cmd_touch,      "touch file...", "Creates empty files" },
+    { "unset",      cmd_unset,      "unset NAME...", "Removes variables" },
+    { "usbdisk",    cmd_usbdisk,    "usbdisk", "Exposes the SD Card to a computer" },
+    { "vi",         cmd_vi,         "vi [-R] file", "Edits a text file" },
+    { "view",       cmd_view,       "view file", "Reads a text file in vi" },
+    { "wc",         cmd_wc,         "wc [-l] [-w] [-c] [file...]", "Counts lines, words and bytes" },
 };
 
 const unsigned flavour_nbuiltins = sizeof flavour_builtins / sizeof flavour_builtins[0];

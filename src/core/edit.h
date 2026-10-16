@@ -8,8 +8,9 @@
  *   - The screen: the 64-column font while EDIT runs; a menu bar, the
  *     file's name in the title row, EDIT_TEXT_ROWS of text, white on
  *     blue, and a status row. Long lines scroll sideways, as in vi.
- *   - Menus: tap Alt, or Alt and a menu's letter. File (New, Open, Save,
- *     Save As, Exit), Edit (Cut, Copy, Paste, Clear), Search (Find,
+ *   - Menus: tap Alt, or Alt and a menu's letter; in a menu, an item's
+ *     letter, with or without Alt (Alt+F, Alt+X exits). File (New, Open,
+ *     Save, Save As, Exit), Edit (Cut, Copy, Paste, Clear), Search (Find,
  *     Repeat Last Find, Change), Options (Display) and Help.
  *   - Keys: the arrows, Home, End, PgUp and PgDn; Ctrl with the arrows by
  *     words, Ctrl with Home and End to either end of the file; Alt with

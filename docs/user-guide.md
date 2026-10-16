@@ -38,12 +38,12 @@ buy batteries
 
 The shell starts in `/home` if the card has one, and otherwise in `/`.
 
-`help` lists the commands, and `help name` explains one:
+`man` lists the commands, and `man name` explains one:
 
 ```
-/>help cp
+/>man cp
 usage: cp [-r] from... to
-copy files, -r directories
+Copies files, -r directories
 ```
 
 ## 2. Keys
@@ -418,12 +418,6 @@ gone, it moves to `/`.
 | `sh file` | runs a script |
 | `history` | lists the lines typed before |
 
-### For testing
-
-| Command | Does |
-|---|---|
-| `displaytest` | the display's stress test, with timings. Esc stops it |
-
 ## 5. Running programs
 
 Type a program's name to run it. The shell looks for `name.uf2` in each
@@ -725,7 +719,9 @@ file's name, and the bottom row says `F1=Help` and where the cursor is.
 **Menus.** Tap Alt on its own to open the File menu, or hold Alt and
 press a menu's letter: Alt+F, Alt+E, Alt+S, Alt+O, Alt+H. In a menu,
 Left and Right go to the next menu, Up and Down choose, and Enter or an
-item's highlighted letter carries it out. Esc closes the menu.
+item's highlighted letter carries it out, with or without Alt, so
+Alt+F then Alt+X exits. Alt with a letter no item has opens that
+menu instead. Esc closes the menu.
 
 | Menu | Items |
 |---|---|

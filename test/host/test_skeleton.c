@@ -4,7 +4,6 @@
  * and against the fonts. */
 
 #include "config.h"
-#include "displaytest.h"
 #include "files.h"
 #include "font.h"
 #include "keycodes.h"

@@ -31,7 +31,6 @@ Blair Leduc, under the MIT licence, which is compatible with the GPL-3.0.
 | `src/core/term.c`, `term.h` | `drivers/display.c`, `display.h` | draws into a cell grid; the list of departures is at the top of `term.c` |
 | `src/port/screen.c` | `drivers/lcd.c` | its glyph drawing, bold, underline and cursor, over the emulators' `lcd.c` |
 | `src/core/keycodes.h` | `drivers/keyboard.h` | the key code table only |
-| `src/core/displaytest.c` | `tests.c`, `displaytest()` | split into its two phases; timing moved to `shell.c` |
 
 ## Pico Logo — MIT, the owner's
 
