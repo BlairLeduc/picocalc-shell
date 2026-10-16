@@ -672,7 +672,9 @@ static int test_shell(void) {
     CHECK(put("/pico2-apps/prog.uf2", ubuf, ulen), "prog.uf2");
     flash_count_reset();
     CHECK(run("prog") == 0 && boots == 1 && !boot_was_ram, "prog: '%s' boots %d", con, boots);
-    CHECK(strcmp(con, "prog: writing 4 of 4 sectors\n") == 0, "prog: '%s'", con);
+    /* con drops CR: each count rewrites the one line. */
+    CHECK(strcmp(con, "writing 1 of 4 sectorswriting 2 of 4 sectors"
+                      "writing 3 of 4 sectorswriting 4 of 4 sectors\n") == 0, "prog: '%s'", con);
     CHECK(flash_holds(FLASH_BASE, 50, -1, 11), "prog in flash");
     /* Again: no writing, straight to the reboot. */
     flash_count_reset();
