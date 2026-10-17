@@ -1329,6 +1329,18 @@ between, stage3 or the bootrom's `rom_chain_image`, resets the timer.
 Time a whole boot from outside, as with timestamps on the host. Seen on a
 Plus 2 W, 2026-10-13.
 
+**Telling a program started from a partition.** When the RP2350's boot ROM
+starts an image in a partition (at boot, or through `rom_chain_image`, as
+UF2 Loader's stage3 does), it sets the QMI's address translation so the
+partition appears at `0x10000000`. The image's own code can read
+`(qmi_hw->atrans[0] & QMI_ATRANS0_BASE_BITS) >> QMI_ATRANS0_BASE_LSB`: the
+partition's offset in 4 KB sectors, 0 for an image that runs from the
+start of flash, as one copied on in BOOTSEL with no partition table does.
+UF2 Loader's app partition starts after stage3, so a program it started
+reads nonzero. From UF2 Loader 2.5's source (`common/bootloader/
+proginfo.c`, its `flash_size()` example for programs) and the RP2350
+datasheet's address translation; not yet read back on a board.
+
 ---
 
 ## 8. On-chip odds and ends

@@ -37,6 +37,7 @@ questions are open; the design is ready for M0.
 | 2026-10-15 | The DOS flavour has only 40 columns, always in IBM's font: no `FONT` command and no 64-column mode, and EDIT runs in 40 columns, its boxes in IBM's line glyphs. This narrows the 2026-10-14 font decision: the 5x10 font is the UNIX flavour's alone. | 4.1, 4.7 |
 | 2026-10-15 | The UNIX flavour's `ls` puts `/` after a directory's name, as `ls -F` does, in columns, one per line and `-l`. | 4.2 |
 | 2026-10-16 | A release offers the two flavours' release builds as `shell-unix.uf2` and `shell-dos.uf2`; the user renames the one they want to `BOOT2350.UF2` on the card. | 4.7 |
+| 2026-10-17 | `picocalc_shell_exit()` returns false when UF2 Loader did not start the program, as well as with no card, and the program decides what to do then (such as power off by its own means). The header stays independent and does not touch the southbridge; `picocalc_shell_loader_present()` tells a program beforehand. | 3.4 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -252,12 +253,14 @@ back:
 
   ```c
   // Return to the shell: stage3 loads /BOOT2350.UF2 instead of the app.
-  // Returns false, and does nothing, if there is no card to load it from.
+  // Returns false, and does nothing, if UF2 Loader did not start the
+  // program or there is no card to load it from.
   bool picocalc_shell_exit(void);
   ```
 
   It does three things:
-  1. Checks the card is present (GP22). Without a card, stage3 would drop to
+  1. Checks UF2 Loader started the program (below, *Decided 2026-10-17*),
+     and the card is present (GP22). Without a card, stage3 would drop to
      BOOTSEL (§3.1), and the PicoCalc would look dead.
   2. Sets `BOOT_SD` in the scratch registers.
   3. Calls `watchdog_reboot(0, 0, 0)`.
@@ -276,6 +279,23 @@ checks with static asserts that it agrees with the loader's values.
 it does on the panel and calls `picocalc_shell_exit()` when a key is
 pressed, so the card can be taken out first to see the call refuse. It
 checked the round trip on the board.
+
+*Decided 2026-10-17:* `picocalc_shell_exit()` also returns false, and does
+nothing, if UF2 Loader did not start the program, as when it was copied on
+in BOOTSEL; the program can then do something else, such as power off
+through its own southbridge driver. The header stays independent: it does
+not touch i2c1, which the program's keyboard driver owns.
+`picocalc_shell_loader_present()` tells the program beforehand. On RP2350
+the loader leaves no mark in the program (the proginfo words are
+RP2040-only, and both it and the shell erase them), but stage3 starts it
+with `rom_chain_image` from the app partition, which lies after stage3 in
+flash, so the boot ROM maps a nonzero offset at `0x10000000` (QMI
+`ATRANS0`, HW §7.2); a program copied on in BOOTSEL runs from offset 0.
+The loader's own notes for programs (`proginfo.c`) read the same register.
+It shows a partition boot, not stage3 by name; a false yes is harmless,
+since without stage3 the `BOOT_SD` command is ignored and the reboot
+starts the program again. `exit-test` says on the panel whether the
+loader started it.
 
 ### 3.5 Arguments
 
