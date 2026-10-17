@@ -16,11 +16,18 @@
  *     ...
  *     save_settings();              // finish every card write first
  *     if (!picocalc_shell_exit())
- *         show_message("No SD card");
+ *         show_message("Cannot return to the shell");
  *
  * The program must close its files first: the reboot does not wait for
  * them. Holding Up, F1 or F5 at power-on also returns to the shell, for
  * any program.
+ *
+ * A program can also be installed without the loader, straight from
+ * BOOTSEL; the call returns false there too, and the program can do
+ * something else instead, such as power off through its own southbridge
+ * driver. picocalc_shell_loader_present() and
+ * picocalc_shell_card_present() tell it beforehand, to name its menu
+ * item.
  *
  * The values below are UF2 Loader's (common/bootloader/proginfo.c); the
  * shell's src/port/loader.c checks it agrees with them.
@@ -31,6 +38,7 @@
 #include <stdbool.h>
 
 #include "hardware/gpio.h"
+#include "hardware/structs/qmi.h"
 #include "hardware/structs/watchdog.h"
 #include "hardware/watchdog.h"
 #include "pico/time.h"
@@ -53,12 +61,23 @@ static inline bool picocalc_shell_card_present(void) {
     return !gpio_get(PICOCALC_SHELL_CARD_DETECT_PIN);
 }
 
+/* Whether the program was started by UF2 Loader. stage3 starts it from
+ * the app partition, after the loader in flash, so the boot ROM maps a
+ * flash offset other than 0 at 0x10000000; a program copied on in
+ * BOOTSEL runs from offset 0. (It shows a partition boot, not stage3 by
+ * name; without stage3, the reboot below would only start the program
+ * again.) */
+static inline bool picocalc_shell_loader_present(void) {
+    return (qmi_hw->atrans[0] & QMI_ATRANS0_BASE_BITS) != 0;
+}
+
 /* Return to the shell: stage3 loads /BOOT2350.UF2 instead of the app.
- * Returns false, and does nothing, if there is no card to load it from:
- * without one, stage3 would drop to BOOTSEL and the PicoCalc would look
- * dead. Otherwise it does not return. */
+ * Returns false, and does nothing, if UF2 Loader did not start the
+ * program, or there is no card to load the shell from: without one,
+ * stage3 would drop to BOOTSEL and the PicoCalc would look dead.
+ * Otherwise it does not return. */
 static inline bool picocalc_shell_exit(void) {
-    if (!picocalc_shell_card_present()) return false;
+    if (!picocalc_shell_loader_present() || !picocalc_shell_card_present()) return false;
     watchdog_hw->scratch[1] = PICOCALC_SHELL_BOOT_SD;
     watchdog_hw->scratch[2] = 0;
     watchdog_hw->scratch[0] = PICOCALC_SHELL_LOADER_MAGIC;

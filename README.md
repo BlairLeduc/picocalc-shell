@@ -169,12 +169,15 @@ independent header:
 
 save_settings();                 // finish every card write first
 if (!picocalc_shell_exit())      // reboots into the shell
-    show_message("No SD card");
+    show_message("Cannot return to the shell");
 ```
 
 The function returns false, and does nothing, if the SD Card cannot be
-accessed. The header is under the MIT licence as well as the GPL-3.0, 
-so a program under any licence can include it.
+accessed, or if UF2 Loader did not start the program (it was copied on
+in BOOTSEL). The program can then do something else, such as power off.
+`picocalc_shell_loader_present()` and `picocalc_shell_card_present()`
+tell it beforehand, to label its menu item. The header is under the MIT licence as well
+as the GPL-3.0, so a program under any licence can include it.
 
 ## Building
 

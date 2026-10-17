@@ -6,7 +6,9 @@
  * the shell flashes it and reboots, and it says what to do on the
  * panel. Any key calls picocalc_shell_exit(): with the card in, the
  * shell comes back; with it out, the call returns false, the panel says
- * so, and the program waits for the card and another key. A printable
+ * so, and the program waits for the card and another key. Copied on in
+ * BOOTSEL instead, without the loader, the panel says so and the call
+ * returns false, card or not. A printable
  * character or CR on UART1 (GP4/GP5, 115200) counts as a key too, and
  * each step is logged there, so it can be driven over the Debug Probe.
  * GP5 is pulled up, and only those bytes count: with nothing on GP5, as
@@ -97,18 +99,22 @@ int main(void) {
         "Checks picocalc_shell_exit().\n\n"
         "Press any key to return to the\n"
         "shell. Take the card out first\n"
-        "to see the call refuse.\n");
+        "to see the call refuse.\n\n"
+        "UF2 Loader started this: %s.\n",
+        picocalc_shell_loader_present() ? "yes" : "no");
     drain();
     for (;;) {
         wait_key();
+        bool loader = picocalc_shell_loader_present();
         bool card = picocalc_shell_card_present();
         say("The card is %s.\n", card ? "in" : "out");
-        if (card) {
+        if (loader && card) {
             say("Returning to the shell...\n");
             stdio_flush();
             sleep_ms(1500);   /* time to read the panel; the UART drains */
         }
         if (!picocalc_shell_exit())
-            say("picocalc_shell_exit() returned\nfalse: no card. Put it back and\npress a key.\n");
+            say(loader ? "picocalc_shell_exit() returned\nfalse: no card. Put it back and\npress a key.\n"
+                       : "picocalc_shell_exit() returned\nfalse: no UF2 Loader.\n");
     }
 }

@@ -16,6 +16,25 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## After M9 — exit without a loader (2026-10-17, branch `exit-no-loader`)
+
+`picocalc_shell_exit()` returns false when UF2 Loader did not start the
+program, as well as with no card, and `picocalc_shell_loader_present()`
+is new (design.md §3.4). `exit-test` reports it on the panel.
+
+**Checked on the host:** the development, release and DOS builds, and
+`exit-test`, compile clean. All 22 host tests pass (the header has no
+host test: it is SDK-only).
+
+**Not checked:**
+
+- On a board: none of it. No Debug Probe was attached. To do on the
+  Plus 2 W: `exit-test` from the card under the loader says "yes", and a
+  key returns to the shell; copied on in BOOTSEL with no loader (which
+  needs UF2 Loader put back after), it says "no", and a key gets false.
+  That `ATRANS0` reads nonzero under stage3 is from the loader's source,
+  not yet read back (hardware-notes.md §7.2).
+
 ## After M9 — the DOS flavour in 40 columns only (2026-10-15)
 
 **The owner chose** (2026-10-15) to drop 64 columns from the DOS
