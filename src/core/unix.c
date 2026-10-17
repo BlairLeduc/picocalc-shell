@@ -16,6 +16,7 @@
 #include "path.h"
 #include "pipe.h"
 #include "run.h"
+#include "select.h"
 #include "system.h"
 #include "text.h"
 #include "vars.h"
@@ -152,6 +153,7 @@ const shell_builtin_t flavour_builtins[] = {
     { "reboot",     cmd_reboot,     "reboot", "Restarts the shell" },
     { "rm",         cmd_rm,         "rm [-r] path...", "Removes files, -r directories" },
     { "rmdir",      cmd_rmdir,      "rmdir dir...", "Removes empty directories" },
+    { "select",     cmd_select,     "select file", "A one-key menu of programs" },
     { "set",        cmd_set,        "set", "Lists the variables" },
     { "sh",         cmd_sh,         "sh file", "Runs a script" },
     { "tail",       cmd_tail,       "tail [-n N] [file...]", "Displays the last lines, 10 by default" },

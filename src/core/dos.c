@@ -13,6 +13,7 @@
 #include "path.h"
 #include "pipe.h"
 #include "run.h"
+#include "select.h"
 #include "system.h"
 #include "text.h"
 #include "vars.h"
@@ -295,6 +296,7 @@ const shell_builtin_t flavour_builtins[] = {
     { "REN",       dos_ren,       "REN path name", "Renames a file or files" },
     { "RENAME",    dos_ren,       "RENAME path name", "Renames a file or files" },
     { "RMDIR",     dos_rd,        "RMDIR path", "Removes an empty directory" },
+    { "SELECT",    cmd_select,    "SELECT file", "A one-key menu of programs" },
     { "SET",       dos_set,       "SET [name=[value]]", "Displays, sets or clears variables" },
     { "SHIFT",     dos_shift,     "SHIFT", "Change the position of parameters" },
     { "TYPE",      dos_type,      "TYPE file", "Displays the contents of a text file" },
@@ -344,7 +346,7 @@ static int stage(shell_t *sh, int k, pipe_t *from, pipe_t *to, void *ctx) {
      * (shell_command), and what they say before leaving is little. */
     const char *out = c->out;
     shell_cmd_fn fn = shell_builtin(name);
-    bool leaves = !fn || fn == cmd_menu || fn == cmd_usbdisk || system_leaves(fn);
+    bool leaves = !fn || fn == cmd_menu || fn == cmd_select || fn == cmd_usbdisk || system_leaves(fn);
     if (out && path_same(out, "NUL") && leaves) out = NULL;
     if (!out || !path_same(out, "NUL"))
         return shell_command(sh, c->argc, c->argv, c->in, out, c->append, from, to);

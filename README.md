@@ -89,7 +89,7 @@ the shell must keep its data on the SD Card.
 
 **Commands:** `backlight battery bootsel cat cd clear cp df echo export
 font grep head history info ls man menu mkdir more mv phosphor poweroff
-pwd reboot rm rmdir set sh tail touch unset usbdisk vi view wc`.
+pwd reboot rm rmdir select set sh tail touch unset usbdisk vi view wc`.
 All commands are built in. Use `man` to lists the available command and
 `man name` gives a short explaination.
 
@@ -117,7 +117,7 @@ discarding changes.
 
 **Commands:** `ATTRIB BACKLIGHT BATTERY BOOTSEL CALL CD CLS COPY DEL
 DELTREE DIR ECHO EDIT EXIT FIND FOR GOTO HELP IF INFO MD MEM MORE MOVE
-PATH PAUSE PHOSPHOR POWEROFF PROMPT RD REBOOT REM REN SET SHIFT TYPE
+PATH PAUSE PHOSPHOR POWEROFF PROMPT RD REBOOT REM REN SELECT SET SHIFT TYPE
 USBDISK VER VOL XCOPY`, with `CHDIR`, `ERASE`, `MKDIR`, `RENAME` and
 `RMDIR` as DOS had them. Use `HELP` to list availble commands and `HELP name`
 for more detail.

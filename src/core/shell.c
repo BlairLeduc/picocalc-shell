@@ -13,6 +13,7 @@
 #include "path.h"
 #include "pipe.h"
 #include "run.h"
+#include "select.h"
 #include "system.h"
 #include "vars.h"
 
@@ -243,7 +244,7 @@ int shell_command(shell_t *sh, int argc, char **argv, const char *in, const char
     shell_cmd_fn fn = shell_builtin(argv[0]);
     if (!fn) {
         status = run_program(sh, argc, argv, redirected);
-    } else if ((fn == cmd_menu || fn == cmd_usbdisk || system_leaves(fn)) && redirected) {
+    } else if ((fn == cmd_menu || fn == cmd_select || fn == cmd_usbdisk || system_leaves(fn)) && redirected) {
         shell_error(sh, "%s: not with a redirection or a pipe\n", argv[0]);
         status = 1;
     } else if (in && !files_input(sh, in)) {

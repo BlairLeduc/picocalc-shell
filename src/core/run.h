@@ -34,6 +34,15 @@ typedef struct shell_loader {
  * "not found", status 127, if there is none. */
 int run_program(shell_t *sh, int argc, char **argv, bool redirected);
 
+/* Run the program `name` for `select`: looked up along $PATH, with the
+ * same checks as a program typed at the prompt. Either slash may be used,
+ * the .uf2 ending is optional, and a name with folders in front
+ * (games/tetris) is looked for under each $PATH directory; a name that
+ * starts with a slash, a drive, ./ or ../ is used as it is. It does not
+ * return if the program starts; otherwise the error is printed and the
+ * status is non-zero. */
+int run_named(shell_t *sh, const char *name);
+
 int cmd_menu(shell_t *sh, int argc, char **argv);
 
 #endif /* SHELL_RUN_H */

@@ -142,12 +142,32 @@ static bool in_dir(shell_t *sh, const char *dir, const char *file) {
            f_stat(s_path, &s_fno) == FR_OK && !(s_fno.fattrib & AM_DIR);
 }
 
+/* `file` (a name.uf2, perhaps with folders in front) in the first
+ * directory of $PATH that has it, the directories separated by ':' (DOS:
+ * ';', after the current directory, as DOS looked), into s_path. */
+static bool search_path(shell_t *sh, const char *file) {
+    static char dir[SHELL_PATH_MAX + 1];
+    if (SHELL_DOS && in_dir(sh, ".", file)) return true;
+    /* An empty entry is the current directory, as in sh. */
+    for (const char *p = vars_get("PATH", 4); p;) {
+        const char *colon = strchr(p, FLAVOUR_PATH_SEP);
+        size_t len = colon ? (size_t)(colon - p) : strlen(p);
+        if (len < sizeof dir) {
+            memcpy(dir, p, len);
+            dir[len] = '\0';
+            if (len == 0) strcpy(dir, ".");
+            if (in_dir(sh, dir, file)) return true;
+        }
+        p = colon ? colon + 1 : NULL;
+    }
+    return false;
+}
+
 /* `name` as a program: a path if it has a '/' (in DOS, a '\' or a
- * drive), otherwise name.uf2 in the first directory of $PATH that has
- * it, the directories separated by ':' (DOS: ';', after the current
- * directory, as DOS looked). False, with the error printed, if none. */
+ * drive), otherwise name.uf2 along $PATH. False, with the error printed,
+ * if none. */
 static bool find(shell_t *sh, const char *name) {
-    static char file[SHELL_PATH_MAX + 1], dir[SHELL_PATH_MAX + 1];
+    static char file[SHELL_PATH_MAX + 1];
     size_t n = strlen(name);
     FRESULT r;
     if (flavour_is_path(name)) {
@@ -164,19 +184,7 @@ static bool find(shell_t *sh, const char *name) {
     if (n + sizeof SHELL_PROGRAM_EXT <= sizeof file) {
         memcpy(file, name, n);
         memcpy(file + n, SHELL_PROGRAM_EXT, sizeof SHELL_PROGRAM_EXT);
-        if (SHELL_DOS && in_dir(sh, ".", file)) return true;
-        /* An empty entry is the current directory, as in sh. */
-        for (const char *p = vars_get("PATH", 4); p;) {
-            const char *colon = strchr(p, FLAVOUR_PATH_SEP);
-            size_t len = colon ? (size_t)(colon - p) : strlen(p);
-            if (len < sizeof dir) {
-                memcpy(dir, p, len);
-                dir[len] = '\0';
-                if (len == 0) strcpy(dir, ".");
-                if (in_dir(sh, dir, file)) return true;
-            }
-            p = colon ? colon + 1 : NULL;
-        }
+        if (search_path(sh, file)) return true;
     }
     /* A name not found is "not found", whatever stopped the search, as
      * in sh. */
@@ -192,6 +200,45 @@ int run_program(shell_t *sh, int argc, char **argv, bool redirected) {
         return 2;
     }
     return run_path(sh, argv[0], s_path, false);
+}
+
+/* Whether `s` ends in ".uf2", in either case. */
+static bool has_ext(const char *s) {
+    size_t n = strlen(s), e = sizeof SHELL_PROGRAM_EXT - 1;
+    if (n < e) return false;
+    for (size_t i = 0; i < e; i++) {
+        char c = s[n - e + i];
+        if ((c >= 'A' && c <= 'Z' ? c + 'a' - 'A' : c) != SHELL_PROGRAM_EXT[i]) return false;
+    }
+    return true;
+}
+
+int run_named(shell_t *sh, const char *name) {
+    static char file[SHELL_PATH_MAX + 1];
+    size_t n = strlen(name);
+    /* Either slash, and the ending is optional. */
+    if (n + sizeof SHELL_PROGRAM_EXT > sizeof file || !path_slashes(file, sizeof file, name)) {
+        shell_error(sh, "%s: name too long\n", name);
+        return 1;
+    }
+    if (!has_ext(file)) memcpy(file + n, SHELL_PROGRAM_EXT, sizeof SHELL_PROGRAM_EXT);
+    /* From the root, a drive or the current directory, a path is used as
+     * it is; any other name, with or without folders, is looked for along
+     * $PATH. */
+    bool here = file[0] == '/' || (SHELL_DOS && file[1] == ':') ||
+                strncmp(file, "./", 2) == 0 || strncmp(file, "../", 3) == 0;
+    bool found;
+    if (here) {
+        found = flavour_resolve(s_path, sh->cwd, file) && f_stat(s_path, &s_fno) == FR_OK &&
+                !(s_fno.fattrib & AM_DIR);
+    } else {
+        found = search_path(sh, file);
+    }
+    if (!found) {
+        flavour_not_found(sh, name);
+        return 127;
+    }
+    return run_path(sh, name, s_path, false);
 }
 
 int cmd_menu(shell_t *sh, int argc, char **argv) {

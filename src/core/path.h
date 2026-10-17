@@ -25,6 +25,11 @@ const char *path_base(const char *path);
  * does not fit. */
 bool path_join(char out[SHELL_PATH_MAX + 1], const char *dir, const char *name);
 
+/* `s` copied to `out`, which holds `size` bytes, with each '\' made a '/'
+ * (the DOS flavour's separator, typed in a menu file or quoted at the
+ * UNIX prompt). False if it does not fit. */
+bool path_slashes(char *out, size_t size, const char *s);
+
 /* Whether a and b name the same path, as FAT compares names: ASCII
  * letters without regard to case. */
 bool path_same(const char *a, const char *b);

@@ -51,6 +51,13 @@ bool path_join(char out[SHELL_PATH_MAX + 1], const char *dir, const char *name) 
     return true;
 }
 
+bool path_slashes(char *out, size_t size, const char *s) {
+    size_t n = strlen(s);
+    if (n >= size) return false;
+    for (size_t i = 0; i <= n; i++) out[i] = s[i] == '\\' ? '/' : s[i];
+    return true;
+}
+
 static char fold(char c) {
     return (c >= 'a' && c <= 'z') ? (char)(c - 'a' + 'A') : c;
 }

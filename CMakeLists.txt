@@ -27,6 +27,7 @@ set(SHELL_CORE_SOURCES
     src/core/path.c
     src/core/pipe.c
     src/core/run.c
+    src/core/select.c
     src/core/shell.c
     src/core/system.c
     src/core/term.c

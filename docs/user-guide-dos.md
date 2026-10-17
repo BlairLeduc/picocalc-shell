@@ -246,6 +246,7 @@ clock.
 | `REBOOT` | restarts the shell |
 | `BOOTSEL` | restarts the RP2350 in BOOTSEL mode, as a USB drive, to install firmware |
 | `EXIT` | runs UF2 Loader's own menu (`C:\BOOT2350.ORG`) |
+| `SELECT file` | shows a menu of programs read from a file, and runs the one you choose (section 5) |
 | `USBDISK` | offers the SD card to a computer over USB (below) |
 
 Each of these saves the history first. None can be used with a
@@ -310,10 +311,54 @@ from the card without writing flash.
 - **The program's own exit command**, if it has one, such as an *Exit to
   shell* item in its menu.
 
+### SELECT, a menu of programs
+
+`SELECT file` shows a menu read from a text file and starts the program
+for the key you press, so a program is one key away instead of a name
+to type:
+
+```
+C:\>SELECT \MENU.TXT
+```
+
+Each line of the file is a key, a program and a description, separated
+by spaces or tabs:
+
+```
+#TITLE My programs
+T  TETRIS            Tetris
+M  GAMES\MUSIC       Music Maker keyboard
+C  \GAMES\CHESS.UF2  Chess
+```
+
+- The key is one character, either case: `T` and `t` are the same key.
+- The program is found as if you had typed it (above): `TETRIS` is
+  `TETRIS.UF2` in the current directory or a directory of `PATH`. A name
+  with folders in front, such as `GAMES\MUSIC`, is looked for under the
+  current directory and then each directory of `PATH`. A name that
+  starts with a slash, `C:`, `.\` or `..\` is used as it is. The `.UF2`
+  ending is optional, and either slash may be used, in the menu file's
+  name too.
+- The description is the rest of the line, spaces and all. Each row of
+  the menu is cut at 40 columns.
+- Blank lines and lines that start with `#` or `;` are skipped, so a key
+  cannot be `#` or `;`. A first line of `#TITLE words` is the menu's
+  title; without it the title is `SELECT A PROGRAM`.
+- A line with a key of more than one character, a key already used
+  higher up, or no program is shown with a `?` in place of its key, and
+  does nothing when pressed. `?` cannot be a key.
+- Lines end in LF or CR LF, so a file made on another computer works.
+- Up to 29 entries are shown; any after those are ignored.
+- **Esc**, **Ctrl-C** or **Break** leave the menu. If the program cannot
+  be started, the reason is shown and a key brings the menu back.
+
+`SELECT` cannot be used with a redirection or in a pipe.
+
 ### Limits
 
 - **Programs take no arguments yet.** `PICO-ORIC GAME.TAP` is refused,
-  and so is running a program with a redirection or in a pipe.
+  and so is running a program with a redirection or in a pipe. A menu
+  entry is a program's name only, for the same reason.
 - **Programs that keep files in flash.** Running a program rewrites the
   program area of flash, so a program that keeps its own files there,
   after its code, loses them when another program runs. **Pico Logo**

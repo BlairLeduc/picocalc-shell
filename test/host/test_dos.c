@@ -328,6 +328,27 @@ static int batch_tests(void) {
     CHECK(run("C:\\PICO2-APPS\\ONPATH.BAT") == 0 && has("on the path"), "'%s'", con);
     CHECK(run("ONPATH.TXT") == 127 && has("Bad command or file name"), "'%s'", con);
 
+    /* SELECT: either slash and a drive in the menu's name and in its
+     * programs, a folder searched for under PATH, the .uf2 optional. With
+     * no loader here a program that is found says so; one that is not,
+     * does not. */
+    CHECK(f_mkdir("/pico2-apps/games") == FR_OK && put("/pico2-apps/games/g1.uf2", "x") &&
+              put("/HOME/M.TXT", "1 games\\g1 under PATH\r\n2 C:\\pico2-apps\\games\\g1 drive\r\n"
+                                 "3 /pico2-apps/games/g1.UF2 slashes\r\n4 games\\none missing\r\n"),
+          "SELECT files");
+    const char *menus[] = { "M.TXT", "\\HOME\\M.TXT", "C:/HOME/M.TXT" };
+    for (size_t i = 0; i < 3; i++) {
+        char line[40];
+        snprintf(line, sizeof line, "SELECT %s", menus[i]);
+        keys = "1 \x1b";
+        CHECK(run(line) == 0 && has("cannot run programs") && !has("Bad command"), "%s: '%s'", line, con);
+    }
+    keys = "2 3 \x1b";
+    CHECK(run("SELECT M.TXT") == 0 && !has("Bad command"), "drive, slashes: '%s'", con);
+    keys = "4 \x1b";
+    CHECK(run("SELECT M.TXT") == 0 && has("Bad command or file name"), "missing: '%s'", con);
+    keys = "";
+
     /* A line too long is said, and the next one runs. */
     static char longer[600];
     strcpy(longer, "ECHO ");

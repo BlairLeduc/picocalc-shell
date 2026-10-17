@@ -38,6 +38,7 @@ questions are open; the design is ready for M0.
 | 2026-10-15 | The UNIX flavour's `ls` puts `/` after a directory's name, as `ls -F` does, in columns, one per line and `-l`. | 4.2 |
 | 2026-10-16 | A release offers the two flavours' release builds as `shell-unix.uf2` and `shell-dos.uf2`; the user renames the one they want to `BOOT2350.UF2` on the card. | 4.7 |
 | 2026-10-17 | `picocalc_shell_exit()` returns false when UF2 Loader did not start the program, as well as with no card, and the program decides what to do then (such as power off by its own means). The header stays independent and does not touch the southbridge; `picocalc_shell_loader_present()` tells a program beforehand. | 3.4 |
+| 2026-10-17 | `select file` (DOS: `SELECT`) is a builtin that shows a one-key menu read from a text file and runs the program chosen, found as a typed name is (§4.3). It passes no arguments, as a typed program takes none (§3.5). | 4.3 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -511,6 +512,20 @@ copied there shows up in both, and `menu` and the shell never disagree
 about what is installed. `$PATH` can add further directories, but the
 default is this one. Any file with the wrong family is caught by the check
 in §3.3 before flash is touched.
+
+*Added 2026-10-17:* `select file` (DOS: `SELECT`, in `src/core/select.c`)
+turns a text file into a one-key menu of programs. Each line is a key, a
+program and a description, split at spaces and tabs, with LF or CR LF
+line ends; `#` and `;` start a comment line, `#TITLE words` on the first
+line is the title, and a bad or repeated key is shown as `?`. The file is
+never held in RAM: one pass draws the rows (cut at 40 columns, 29 at
+most) and a second finds the key pressed, so the cost is one line
+buffer. The program is found by `run_named()` in `run.c`: along `$PATH`
+as a typed name is, with folders in front of the name kept, either slash,
+and the `.uf2` ending optional; a name from `/`, a drive, `./` or `../` is
+used as it is. A program that cannot be started is reported and the menu
+returns. `select` leaves the shell, so it is refused with a redirection
+or a pipe, as `menu` is.
 
 ### 4.4 Command language
 

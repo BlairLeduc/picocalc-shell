@@ -16,6 +16,40 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## After M9 — `select`, a menu of programs (2026-10-17, branch `select`)
+
+`select file` (DOS: `SELECT`) shows a one-key menu read from a text file
+and runs the chosen program (design.md §4.3). New: `src/core/select.c`,
+`run_named()` in `run.c`, `path_slashes()` in `path.c`; `find()` shares its
+`$PATH` search with the new lookup.
+
+**Checked on the host:** the new `test_select` (LF and CR LF files, tabs,
+comments, `#TITLE`, bad and repeated keys, lines longer than the line
+buffer, 40-column cut in both fonts, more entries than fit, empty files,
+folders and both slashes, `.uf2` optional, a program found and one not,
+refusal with a redirection or a pipe, no keyboard) and new `SELECT` checks
+in `test_dos` (drive, both slashes). The tests found one fault: a row of
+exactly 40 characters followed by a line end left a blank row, because the
+terminal wraps as the last column is written. All host tests pass except
+`test_editor_pattern`, which needs `regex.h` and was not built on Windows.
+
+**Checked on the board:** Thomas Dzubin's runs on a PicoCalc with a
+Raspberry Pi Pico 2 W and UF2 Loader 2.4.1 in flash, release builds of
+both flavours, a card with 19 programs: a clean menu, a messy menu
+(tabs, CR LF, a missing program, a repeated key, a two-letter key, a
+long description and title), a menu in a folder named with either slash,
+programs found in a folder under `/pico2-apps`, and a program started
+from the menu that came back to the shell. Both flavours worked.
+
+**Not checked:**
+
+- Boards other than that PicoCalc (the Plus 2 W and a Pico 2 W).
+- `select` run from `/etc/profile` or `AUTOEXEC.BAT` at power-on.
+- A menu of exactly 29 entries and one of more, on a board (the host test
+  covers both).
+- Programs that keep data in flash, started from the menu (the same limit
+  as when they are typed).
+
 ## After M9 — exit without a loader (2026-10-17, branch `exit-no-loader`)
 
 `picocalc_shell_exit()` returns false when UF2 Loader did not start the
