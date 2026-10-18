@@ -1,6 +1,6 @@
 # PicoCalc Shell — design
 
-Status: **Draft 10, 2026-10-15.** Feasibility study and first design. M0
+Status: **Draft 11, 2026-10-18.** Feasibility study and first design. M0
 (the skeleton), M1 (files), M2 (run), M3 (vi), M4 (comfort), M6 (USB
 speed), M8 (the rest of v1) and M9 (the DOS flavour) are done
 ([milestones.md](milestones.md)). There is no M5: *Exit to shell* in the
@@ -12,8 +12,9 @@ The model programs are the owner's emulators (pico-atom, pico-jupiter-ace
 and pico-oric). Pico Logo is a special case, because it keeps a filesystem
 in the PicoCalc's own flash (§3.6).
 
-The owner's decisions so far are listed below. Do not reopen them. No
-questions are open; the design is ready for M0.
+The owner's decisions so far are listed below. Do not reopen them. The
+only open questions are M10's, a flash filesystem for programs to share
+(§3.7).
 
 | Date | Decision | § |
 |---|---|---|
@@ -315,7 +316,144 @@ Pico Logo keeps a LittleFS filesystem in the app partition, after its code.
 Running any other program reuses that flash, so the filesystem may be
 partly overwritten. The shell cannot tell that such data exists. This is
 documented in the README: a program meant to be run from the shell keeps
-its data on the card. Pico Logo is the known exception.
+its data on the card. Pico Logo is the known exception. M10 would give
+such programs a partition of their own (§3.7).
+
+### 3.7 A flash filesystem for programs to share (M10)
+
+*Proposed 2026-10-17; the questions at the end are open.* An optional
+littlefs filesystem in its own flash partition. The shell creates, sizes
+and formats it; any program may mount it if it is there. Programs get
+storage that works without a card, and Pico Logo a place that running
+other programs does not overwrite.
+
+**Where it lives.** A second partition in UF2 Loader's partition table,
+between stage3 and App:
+
+```
+0         8 KB                       8 KB + fs size                 flash end
+| stage3  | filesystem (blocks 0 →)  | App (the program in flash)    |
+            fixed start               this boundary moves
+```
+
+- The table is stage3's own: a PARTITION_TABLE block after its
+  IMAGE_DEF, in its second 4 KB sector. In v2.2's `bootloader_pico2.uf2`
+  picotool shows it at `0x1a68`–`0x1ac8`, neither hashed nor signed. App
+  stays entry 0, because stage3, the menu and `loader.c` all look up
+  partition 0; the filesystem is entry 1.
+- Nothing in the loader assumes App starts at 8 KB. stage3 chains
+  partition 0 from its start (`stage3/stage3.c`) and works out the flash
+  end from it (`stage3/uf2.c`); the menu and the shell map App to
+  `0x10000000` from any sector (`bl_remap_flash`). Programs run through
+  that mapping as now, and `picocalc_shell_loader_present()` still sees
+  a nonzero offset (§3.4).
+- The partition is not bootable (no `arm_boot` or `riscv_boot`), has a
+  fixed id and name, and accepts only the UF2 family `data`. A littlefs
+  image wrapped as a UF2 can then be copied on in BOOTSEL; a program
+  cannot.
+- *Why a partition, not a region taken from App as Pico Logo's is:* the
+  boot ROM enforces it. The shell writes flash through `rom_flash_op`
+  with the table's permissions (`src/port/loader.c`), and the menu maps
+  only App's size, so neither can write a program over the filesystem.
+  Programs find it with `rom_load_partition_table` and
+  `rom_get_partition_table_info`, by id, and picotool can show and load
+  it. Pico Logo takes the top of flash only because nothing else existed.
+
+**Writing the table.** This is the one exception to "never write flash
+outside the app partition". The shell rewrites stage3's table block, in
+`loader.c`, only for loader versions it knows: it reads the sector,
+replaces the block, keeps the block loop's back-pointer correct, writes
+the sector back and reads it again. One sector is erased and programmed.
+A power cut in that window leaves no image at flash 0. The boot ROM then
+starts BOOTSEL, and reinstalling UF2 Loader from a computer recovers; the
+card and the filesystem's data are untouched. Reinstalling or upgrading
+UF2 Loader writes its own one-partition table back. The shell then finds
+the littlefs superblock at 8 KB and offers to restore the entry, before a
+program run overwrites it.
+
+**Resizing.** The filesystem's start never moves, so resizing moves only
+the boundary. Growing is `lfs_fs_grow`, and keeps every file. Shrinking
+is `lfs_fs_grow` built with `LFS_SHRINKNONRELOCATING`, and works only
+when no block past the new end is in use. Every resize moves App's
+start, so the program in flash is lost. The shell says so and asks
+first, then erases App's new first sector, so that power-on finds no
+image and starts the shell (§3.3); the next run writes the whole
+program. The steps run in an order that keeps the superblock's block
+count no larger than the partition:
+
+- growing: erase App's new first sector, rewrite the table, then grow;
+- shrinking: shrink, rewrite the table, then erase App's new first sector.
+
+A power cut between steps leaves a filesystem that mounts, and the shell
+finishes the resize on its next start. Removing the filesystem gives App
+its 8 KB start back.
+
+**What programs agree to.** These rules belong to a new header,
+`include/picocalc_flashfs.h`, header-only like `picocalc_shell.h`. It
+finds the partition and provides littlefs's read, program and erase
+callbacks; the program brings its own littlefs.
+
+- No partition with the id means no filesystem.
+- littlefs's on-disk version 2.1, 4 KB blocks, mounted with
+  `block_count` 0 so that the superblock gives the size, and the default
+  `name_max`, `file_max` and `attr_max`. A client set smaller fails to
+  mount. `read_size` and `prog_size` are each client's own.
+- A program never formats or resizes. A failed mount means there is no
+  filesystem.
+- One directory per program, `/<program>/`, as on the card (EL §8.6,
+  §8.7).
+- Each erase and program runs with interrupts off. On a Plus 2 W using
+  PSRAM, the XIP cache is cleaned first and invalidated after, as in
+  Pico Logo's `devices/picocalc/picocalc_flash.c`.
+
+**In each flavour.**
+
+| | UNIX | DOS |
+|---|---|---|
+| Name | mounted at `/flash` | drive `D:`, as RAMDRIVE's was |
+| Create or resize | `mkfs /flash SIZE`, which asks before erasing; `resize /flash SIZE`, which keeps the files | `FDISK`: a small 40-column menu to create, resize or delete |
+| Format | `mkfs /flash` | `FORMAT D:` |
+| Remove | `mkfs /flash 0` | `FDISK`, then delete |
+| Space | `df`, card and flash | `DIR`'s bytes free, `CHKDSK D:` |
+| Use | `cp`, `ls`, `vi` and the rest, across `/` and `/flash` | `D:`, `COPY C:\X D:\`, EDIT |
+
+Some limits follow from littlefs:
+
+- It has no dates, so `ls -l` and `DIR` would show none, unless a date
+  attribute is added to the rules above.
+- Its names are case-sensitive. The DOS flavour would store names in
+  capitals and look them up ignoring case.
+- `usbdisk` cannot show it, because a computer sees only FAT. Files go
+  in and out through the card.
+
+*Estimates:* littlefs's code is about 20 KB, with 1–2 KB of buffers, in
+each flavour. A layer that sends each path to FatFs or littlefs comes on
+top. The UNIX flavour has about 69 KB free (504 KB less M9's 435 KB).
+
+**Open questions** (the owner's):
+
+1. The exception to "never write flash outside the app partition", for
+   stage3's table block.
+2. Scope: every command on `/flash` and `D:`, or first only create,
+   resize, `df` and copying in and out, with the mount later.
+3. Shrinking when a block past the new end is in use: refuse, or copy
+   the files to the card and back.
+4. Pico Logo: made a client, or the shell warns before running it.
+   Today it would format over the filesystem, since it formats when its
+   own mount fails.
+5. The DOS flavour's letter: `D:`.
+6. A date attribute in the rules for programs.
+7. `picocalc_flashfs.h` under the MIT licence as well as the GPL-3.0, as
+   `picocalc_shell.h` is (§9).
+
+**To check before building** (RP2350 datasheet, picotool):
+
+- that the boot ROM accepts a table whose entries are not in address
+  order;
+- whether the table can live outside stage3's sector, which would remove
+  the power-cut window;
+- that loader versions 2.3 to 2.5 lay out the table block as 2.2 does;
+- that BOOTSEL writes a `data` UF2 only to the partition that accepts it.
 
 ## 4. The shell
 
@@ -1408,3 +1546,35 @@ in [milestones.md](milestones.md).
   `/atom/pico-atom.cfg` and pico-atom has read it, as M3 did for vi.
   Measure both flavours' RAM from the link map, and EDIT's opening time
   for a 41 KB file.
+- **M10 — A flash filesystem for programs to share (optional; open
+  questions in §3.7).** A littlefs partition between stage3 and App,
+  which the shell creates, resizes, formats and removes, and which
+  programs may mount (§3.7). In steps:
+  1. The datasheet and picotool checks in §3.7. The design is changed
+     where they disagree.
+  2. `loader.c` reads and rewrites stage3's table block, and resizes in
+     the order §3.7 gives. Host tests run over a flash image holding a
+     real stage3 sector, with power lost at every flash operation of
+     create, grow, shrink and remove; each must leave a table the boot
+     ROM would accept and a filesystem that mounts.
+  3. littlefs in both flavours, with each flavour's commands (§3.7). Host
+     tests run over a flash image, beside the FAT16 and FAT32 ones.
+  4. `include/picocalc_flashfs.h`, and `test/pico/flashfs_test.c`, which
+     builds `flashfs-test.uf2`: a program that mounts the filesystem,
+     shows a file the shell wrote, writes one back and exits to the shell.
+
+  Done when, on the board:
+  - each flavour creates the filesystem and copies a file in;
+  - `flashfs-test` reads it and writes one that the shell then shows;
+  - a resize up keeps the files, as does a resize down that leaves them
+    room;
+  - the program in flash is lost on a resize and power-on gives the
+    shell;
+  - `menu` cannot write a program over the filesystem;
+  - a reset in the middle of a resize comes back to a filesystem that
+    mounts;
+  - after UF2 Loader is reinstalled, the shell offers to restore the
+    entry.
+
+  Measure each flavour's RAM, the mount time, and the rate of reading and
+  writing a large file.
