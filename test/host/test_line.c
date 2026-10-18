@@ -44,7 +44,7 @@ static void key(int k) {
 }
 
 static const char *row(unsigned r) {
-    static char buf[TERM_COLS_MAX + 1];
+    static char buf[TERM_COLS + 1];
     term_row_text(&t, r, buf);
     return buf;
 }
@@ -53,7 +53,6 @@ static const char *row(unsigned r) {
 static void fresh(void) {
     if (sh.line.len) key(0x03);
     term_init(&t);
-    if (sh.wide) term_write(&t, "\033[?4264h", 8);
     sh.at_bol = true;
     shell_prompt(&sh);
 }

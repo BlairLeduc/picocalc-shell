@@ -16,9 +16,8 @@
 #define PANEL_MEM_ROWS (SHELL_PANEL_MEM_H / SHELL_GLYPH_H)
 
 typedef struct {
-    term_cell_t mem[PANEL_MEM_ROWS][TERM_COLS_MAX];
+    term_cell_t mem[PANEL_MEM_ROWS][TERM_COLS];
     unsigned    offset;            /* frame memory row shown at the top */
-    unsigned    cols;              /* the font the rows were drawn in */
     bool        ignore_scroll;     /* the control: a renderer that forgets it */
     unsigned long rows_drawn;
 } panel_model_t;
@@ -34,11 +33,6 @@ static void panel_model_flush(panel_model_t *p, term_t *t) {
         int m = (int)PANEL_MEM_ROWS;
         p->offset = (unsigned)((((int)p->offset + scroll) % m + m) % m);
     }
-    /* A change of font redraws everything, as the port's renderer does. */
-    if (p->cols != t->cols) {
-        p->cols = t->cols;
-        dirty = 0xFFFFFFFFu;
-    }
     for (unsigned r = 0; r < TERM_ROWS; r++) {
         if (dirty & (1u << r)) {
             memcpy(p->mem[(p->offset + r) % PANEL_MEM_ROWS], t->cells[r], sizeof t->cells[r]);
@@ -47,12 +41,11 @@ static void panel_model_flush(panel_model_t *p, term_t *t) {
     }
 }
 
-/* The first row where the panel differs from the grid, or -1. Only the
- * columns the font shows are compared. */
+/* The first row where the panel differs from the grid, or -1. */
 static int panel_model_diff(const panel_model_t *p, const term_t *t) {
     for (unsigned r = 0; r < TERM_ROWS; r++) {
         const term_cell_t *a = p->mem[(p->offset + r) % PANEL_MEM_ROWS];
-        if (memcmp(a, t->cells[r], t->cols * sizeof(term_cell_t)) != 0) return (int)r;
+        if (memcmp(a, t->cells[r], sizeof t->cells[r]) != 0) return (int)r;
     }
     return -1;
 }

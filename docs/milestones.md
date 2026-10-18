@@ -16,6 +16,33 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## After M9 — one font, 40 columns, in the UNIX flavour (2026-10-18)
+
+**The owner chose** (2026-10-18) the Master 512's font as the UNIX
+flavour's only font (design.md, the decision table; §4.1). `font` is
+gone, the terminal ignores mode 4264 in both flavours, and the grid, the
+panel's shadow and vi's rows are 40 columns wide: `TERM_COLS` is the only
+width, and `term_t.cols`, `shell_t.wide` and `shell_cols()` are gone. The
+owner's `font-8x10.c` and `font-5x10.c` are out of the build. The Master
+512's font, supplied in code page 437 order, was arranged as the
+terminal's 128 glyphs with the DEC graphics at 0x00-0x1F, as IBM's is.
+
+**Checked on the host:** `test_screen` checks every pixel against the
+Master 512's font; `test_skeleton` its width; `test_shell` that `font`
+is not found. The 64-column cases in `test_term`, `test_text`,
+`test_files`, `test_vi`, `test_system` and `test_edit` are gone. All 22
+host tests pass. The development, release and DOS builds compile clean.
+
+**Measured** (release builds, `__end__`): the UNIX flavour 418,984 B,
+13,868 B less than before; the DOS flavour 407,700 B, 268 B less
+(design.md §7).
+
+**Not checked:**
+
+- On a board: none of it. To do, on the panel: the Master 512's glyphs,
+  bold, the checkerboard for a byte above 0x7F, and line drawing
+  (`echo` of `ESC ( 0 lqk ESC ( B`) joining across rows.
+
 ## After M9 — exit without a loader (2026-10-17, branch `exit-no-loader`)
 
 `picocalc_shell_exit()` returns false when UF2 Loader did not start the

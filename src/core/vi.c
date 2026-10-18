@@ -52,10 +52,10 @@ static vi_t    ed;
 static char    s_buf[VI_BUF_SIZE];
 static char    s_copy[VI_COPY_SIZE];
 static char    s_undo[VI_UNDO_SIZE];
-static uint8_t s_shown[TERM_ROWS][TERM_COLS_MAX];   /* what the screen shows */
-static uint8_t s_row[TERM_COLS_MAX];
-static char    s_out[TERM_COLS_MAX * 6 + 32];       /* one row's escape sequences */
-static char    s_msg[TERM_COLS_MAX + 1];
+static uint8_t s_shown[TERM_ROWS][TERM_COLS];   /* what the screen shows */
+static uint8_t s_row[TERM_COLS];
+static char    s_out[TERM_COLS * 6 + 32];       /* one row's escape sequences */
+static char    s_msg[TERM_COLS + 1];
 static char    s_text[512];                          /* a line's indentation */
 
 /* ---- the buffer --------------------------------------------------------- */
@@ -624,14 +624,14 @@ static unsigned screen_col(size_t pos) {
 }
 
 /* One cell of the row being built, if it is in view. */
-static void put_cell(unsigned col, uint8_t glyph, bool rev, unsigned cols) {
-    if (col < ed.left || col - ed.left >= cols) return;
+static void put_cell(unsigned col, uint8_t glyph, bool rev) {
+    if (col < ed.left || col - ed.left >= TERM_COLS) return;
     s_row[col - ed.left] = (uint8_t)(glyph | (rev ? REVERSE : 0));
 }
 
 /* Line `line` into s_row; [sel0, sel1) is shown reversed. */
-static void build_line(int line, int last, size_t sel0, size_t sel1, unsigned cols) {
-    memset(s_row, ' ', cols);
+static void build_line(int line, int last, size_t sel0, size_t sel1) {
+    memset(s_row, ' ', sizeof s_row);
     if (line > last) {
         s_row[0] = '~';
         return;
@@ -640,17 +640,17 @@ static void build_line(int line, int last, size_t sel0, size_t sel1, unsigned co
     size_t end = line_end_at(p);
     if (p == end && sel0 <= p && p < sel1 && ed.left == 0) s_row[0] |= REVERSE;   /* an empty line selected */
     unsigned col = 0;
-    for (; p < end && col < ed.left + cols; p++) {
+    for (; p < end && col < ed.left + TERM_COLS; p++) {
         unsigned char u = (unsigned char)s_buf[p];
         bool rev = sel0 <= p && p < sel1;
         unsigned w = width_at((char)u, col);
         if (u == '\t') {
-            for (unsigned i = 0; i < w; i++) put_cell(col + i, ' ', rev, cols);
+            for (unsigned i = 0; i < w; i++) put_cell(col + i, ' ', rev);
         } else if (w == 2) {
-            put_cell(col, '^', rev, cols);
-            put_cell(col + 1, u == 0x7F ? '?' : (uint8_t)(u ^ 0x40), rev, cols);
+            put_cell(col, '^', rev);
+            put_cell(col + 1, u == 0x7F ? '?' : (uint8_t)(u ^ 0x40), rev);
         } else {
-            put_cell(col, u >= 0x80 ? NO_GLYPH : u, rev, cols);
+            put_cell(col, u >= 0x80 ? NO_GLYPH : u, rev);
         }
         col += w;
     }
@@ -659,14 +659,14 @@ static void build_line(int line, int last, size_t sel0, size_t sel1, unsigned co
 /* The status row: the command line, a message, or the mode, and on the
  * right the cursor's line and column. Never in the last column, where
  * the terminal would wrap and scroll. */
-static void build_status(int line, unsigned col, unsigned cols) {
-    memset(s_row, ' ', cols);
+static void build_status(int line, unsigned col) {
+    memset(s_row, ' ', sizeof s_row);
     const char *text = ed.vi.mode == VI_CMDLINE ? ed.vi.cmdline
                      : ed.msg                   ? ed.msg
                      : ed.vi.mode != VI_NORMAL  ? editor_vi_status(&ed.vi)
                                                 : "";
     size_t n = strlen(text);
-    if (n > cols - 1) n = cols - 1;
+    if (n > TERM_COLS - 1) n = TERM_COLS - 1;
     for (size_t i = 0; i < n; i++) {
         unsigned char u = (unsigned char)text[i];
         s_row[i] = u >= 0x20 && u < 0x7F ? u : NO_GLYPH;
@@ -674,15 +674,15 @@ static void build_status(int line, unsigned col, unsigned cols) {
     if (ed.vi.mode == VI_CMDLINE) return;
     char ruler[24];
     int r = snprintf(ruler, sizeof ruler, "%d,%u", line + 1, col + 1);
-    unsigned at = cols - 1 - 10;
+    unsigned at = TERM_COLS - 1 - 10;
     if (r > 0 && (size_t)r < 10 && n < at) memcpy(&s_row[at], ruler, (size_t)r);
 }
 
 /* Send row `r` if it differs from what the screen shows. */
-static void send_row(unsigned r, unsigned cols) {
-    if (memcmp(s_shown[r], s_row, cols) == 0) return;
-    memcpy(s_shown[r], s_row, cols);
-    unsigned last = cols;
+static void send_row(unsigned r) {
+    if (memcmp(s_shown[r], s_row, sizeof s_row) == 0) return;
+    memcpy(s_shown[r], s_row, sizeof s_row);
+    unsigned last = TERM_COLS;
     while (last > 0 && s_row[last - 1] == ' ') last--;
     size_t n = (size_t)snprintf(s_out, sizeof s_out, "\033[%u;1H", r + 1);
     bool rev = false;
@@ -700,7 +700,7 @@ static void send_row(unsigned r, unsigned cols) {
         memcpy(s_out + n, "\033[0m", 4);
         n += 4;
     }
-    if (last < cols) {
+    if (last < TERM_COLS) {
         memcpy(s_out + n, "\033[K", 3);
         n += 3;
     }
@@ -708,14 +708,13 @@ static void send_row(unsigned r, unsigned cols) {
 }
 
 static void draw(void) {
-    unsigned cols = shell_cols(ed.sh);
     int line = editor_lines_at_pos(&ed.lines, s_buf, ed.len, ed.cursor);
     int last = editor_lines_at_pos(&ed.lines, s_buf, ed.len, ed.len);
     if (line < ed.top) ed.top = line;
     if (line >= ed.top + VI_TEXT_ROWS) ed.top = line - VI_TEXT_ROWS + 1;
     unsigned col = screen_col(ed.cursor);
     if (col < ed.left) ed.left = col;
-    if (col >= ed.left + cols) ed.left = col - cols + 1;
+    if (col >= ed.left + TERM_COLS) ed.left = col - TERM_COLS + 1;
 
     size_t sel0 = 0, sel1 = 0;
     if (ed.vi.mode == VI_VISUAL || ed.vi.mode == VI_VISUAL_LINE) {
@@ -729,16 +728,16 @@ static void draw(void) {
     }
 
     for (int r = 0; r < VI_TEXT_ROWS; r++) {
-        build_line(ed.top + r, last, sel0, sel1, cols);
-        send_row((unsigned)r, cols);
+        build_line(ed.top + r, last, sel0, sel1);
+        send_row((unsigned)r);
     }
-    build_status(line, col, cols);
-    send_row(STATUS_ROW, cols);
+    build_status(line, col);
+    send_row(STATUS_ROW);
 
     unsigned crow = (unsigned)(line - ed.top), ccol = col - ed.left;
     if (ed.vi.mode == VI_CMDLINE) {
         crow = STATUS_ROW;
-        ccol = ed.vi.cmdline_len < cols - 1 ? (unsigned)ed.vi.cmdline_len : cols - 1;
+        ccol = ed.vi.cmdline_len < TERM_COLS - 1 ? (unsigned)ed.vi.cmdline_len : TERM_COLS - 1;
     }
     out_printf(&ed.sh->con, "\033[%u;%uH", crow + 1, ccol + 1);
 }

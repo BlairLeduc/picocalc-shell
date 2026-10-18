@@ -91,7 +91,7 @@ static int edit(const char *line, const char *script) {
 }
 
 static const char *row(unsigned r) {
-    static char buf[TERM_COLS_MAX + 1];
+    static char buf[TERM_COLS + 1];
     term_row_text(&shot, r, buf);
     return buf;
 }
@@ -146,7 +146,6 @@ static int edit_tests(bool fat32) {
     /* The screen: menu bar, title, text, status, in 40 columns. */
     CHECK(put("/HOME/A.TXT", "hello\nworld\n"), "a.txt");
     CHECK(edit("EDIT a.txt", "") == 0, "%s: edit", fs);
-    CHECK(shot.cols == 40, "40 columns while EDIT runs: %u", shot.cols);
     CHECK(strcmp(row(0), "  File  Edit  Search  Options  Help") == 0, "menu bar '%s'", row(0));
     CHECK(shot.cells[0][2].bg == TERM_RGB(168, 168, 168) && shot.cells[0][3].fg == 0 &&
               shot.cells[0][2].fg == TERM_RGB(255, 255, 255),
@@ -158,11 +157,10 @@ static int edit_tests(bool fat32) {
     CHECK(strstr(row(31), "F1=Help  Alt=Menu") && strstr(row(31), "Line:1 Col:1"), "status '%s'",
           row(31));
     CHECK(shot.row == 2 && shot.col == 0, "cursor at %u,%u", shot.row, shot.col);
-    CHECK(t.cols == 40 && strcmp(sh.cwd, "/HOME") == 0, "40 columns after: %u", t.cols);
+    CHECK(strcmp(sh.cwd, "/HOME") == 0, "in \\HOME after");
 
-    /* Only 40 columns: no FONT, and the 64-column mode is ignored. */
-    CHECK(shell_run(&sh, "FONT 5x10") != 0 && t.cols == 40, "no FONT");
-    CHECK(shell_run(&sh, "ECHO \x1b[?4264h") == 0 && t.cols == 40, "no 64-column mode: %u", t.cols);
+    /* Only 40 columns: no FONT. */
+    CHECK(shell_run(&sh, "FONT 5x10") != 0, "no FONT");
 
     /* 40 columns: a long line scrolls sideways; the boxes fit. */
     CHECK(put("/HOME/W.TXT", "0123456789012345678901234567890123456789ABCDEF\n"), "w.txt");

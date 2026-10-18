@@ -80,14 +80,14 @@ static bool run_ok(const char *line) {
 }
 
 static const char *row(unsigned r) {
-    static char buf[TERM_COLS_MAX + 1];
+    static char buf[TERM_COLS + 1];
     term_row_text(&shot, r, buf);
     return buf;
 }
 
 /* The screen now, after vi has left. */
 static const char *live_row(unsigned r) {
-    static char buf[TERM_COLS_MAX + 1];
+    static char buf[TERM_COLS + 1];
     term_row_text(&t, r, buf);
     return buf;
 }
@@ -133,14 +133,14 @@ static bool put(const char *path, const char *text) {
 /* What vi drew last on the status row, from the log: the text after the
  * last move to row 32, up to the next escape. */
 static const char *last_status(void) {
-    static char buf[TERM_COLS_MAX + 1];
+    static char buf[TERM_COLS + 1];
     const char *p = NULL;
     for (const char *q = log_text; (q = strstr(q, "\033[32;1H")) != NULL; q++) p = q;
     buf[0] = '\0';
     if (!p) return buf;
     p += 7;
     size_t n = 0;
-    while (p[n] && p[n] != '\033' && n < TERM_COLS_MAX) n++;
+    while (p[n] && p[n] != '\033' && n < TERM_COLS) n++;
     memcpy(buf, p, n);
     while (n > 0 && buf[n - 1] == ' ') n--;
     buf[n] = '\0';
@@ -313,13 +313,6 @@ static int screen_tests(void) {
     CHECK(edit("vi /s", "i") == 0 && strstr(last_status(), "-- INSERT --"), "insert mode is said");
     CHECK(edit("vi /s", ":s/x") == 0 && strcmp(row(31), ":s/x") == 0 && shot.row == 31 && shot.col == 4,
           "the command line, with the cursor: '%s' at %u,%u", row(31), shot.row, shot.col);
-
-    /* In 64 columns, a line of 60 fits. */
-    CHECK(run_ok("font 5x10"), "font");
-    CHECK(edit("vi /w", "$") == 0 && shot.cols == 64 && strncmp(row(0), "0123456789", 10) == 0 &&
-              shot.col == 60,
-          "64 columns: '%s' at %u", row(0), shot.col);
-    CHECK(run_ok("font 8x10"), "font");
 
     /* Only what changed is sent: moving the cursor along a line sends
      * the status row and the cursor, not the text. */

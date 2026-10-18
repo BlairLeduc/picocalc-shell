@@ -2,7 +2,7 @@
 # uart-type.sh — type at the shell over UART1 (design.md §4.1; EL §13.1).
 # Copied from pico-oric, with the shell's keys and pacing.
 #
-#   tools/uart-type.sh 'font 5x10\r'
+#   tools/uart-type.sh 'ls -l\r'
 #   tools/uart-type.sh $'ls\r'
 #
 # The development build takes each received byte as a key (keys_uart in

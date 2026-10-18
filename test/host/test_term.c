@@ -16,7 +16,7 @@ static void feed(const char *s) {
 }
 
 static const char *row_text(unsigned row) {
-    static char buf[TERM_COLS_MAX + 1];
+    static char buf[TERM_COLS + 1];
     term_row_text(&t, row, buf);
     return buf;
 }
@@ -48,7 +48,7 @@ static void on_bell(void *ctx) {
 
 static int test_text(void) {
     fresh();
-    CHECK(t.cols == 40 && t.row == 0 && t.col == 0, "init: %u cols at %u,%u", t.cols, t.row, t.col);
+    CHECK(t.row == 0 && t.col == 0, "init: at %u,%u", t.row, t.col);
     CHECK(t.cursor_on, "the cursor starts on");
     int s;
     CHECK(term_take(&t, &s) == 0xFFFFFFFFu && s == 0, "a fresh screen is all dirty");
@@ -307,12 +307,8 @@ static int test_modes(void) {
     feed("\033[?25h");
     CHECK(t.cursor_on, "DECTCEM on");
 
-    feed("\033[1;40H\033[?4264h");
-    CHECK(t.cols == 64 && t.col == 39, "64 columns, cursor kept at %u", t.col);
-    feed("\033[1;60H\033[?4264l");
-    CHECK(t.cols == 40 && t.col == 39, "40 columns, cursor clamped to %u", t.col);
-    feed("\033[?25;4264h");
-    CHECK(t.cols == 64, "every DECSET parameter is applied");
+    feed("\033[?25l\033[?1;25h");
+    CHECK(t.cursor_on, "every DECSET parameter is applied");
 
     /* Reports and the bell. */
     fresh();
@@ -349,7 +345,7 @@ static int test_renderer_contract(void) {
     static const char *pieces[] = {
         "hello ", "\r\n", "\n", "\033M", "\033D", "\033E", "\033[S", "\033[3T", "\033[2;9r",
         "\033[r", "\033[10;20r", "\033[H", "\033[32;1H", "\033[5A", "\033[K", "\033[1J",
-        "\033[J", "\033[2J", "\033[7m", "\033[0m", "\033[33m", "\033[?4264h", "\033[?4264l",
+        "\033[J", "\033[2J", "\033[7m", "\033[0m", "\033[33m",
         "\t", "\b", "0123456789abcdefghijklmnopqrstuvwxyz0123", "\033(0lqk\033(B", "\xC3\xA9",
         "\033[2S", "\033[5;5H", "\033[30;1H",
     };

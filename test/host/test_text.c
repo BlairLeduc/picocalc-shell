@@ -54,7 +54,6 @@ static int run_keys(const char *line, const char *script) {
     keys = script;
     waits = 0;
     term_init(&t);
-    if (sh.wide) term_write(&t, "\033[?4264h", 8);
     return shell_run(&sh, line);
 }
 
@@ -63,7 +62,7 @@ static int run(const char *line) {
 }
 
 static const char *row(const term_t *s, unsigned r) {
-    static char buf[TERM_COLS_MAX + 1];
+    static char buf[TERM_COLS + 1];
     term_row_text(s, r, buf);
     return buf;
 }
@@ -139,12 +138,6 @@ int main(void) {
               strcmp(row(&shots[0], 29), "X") == 0 &&
               strcmp(row(&shots[0], 30), "0123456789012345678901234567890123456789") == 0,
           "wrapped: '%s' '%s'", row(&shots[0], 29), row(&shots[0], 30));
-    /* In 64 columns the same lines take one row each, with room. */
-    run("font 5x10");
-    CHECK(run_keys("more wide", "q") == 0 && waits == 1 &&
-              strcmp(row(&shots[0], 30), "0123456789012345678901234567890123456789X") == 0,
-          "64 columns: '%s'", row(&shots[0], 30));
-    run("font 8x10");
     /* From a pipe or <, and two files with headers. */
     CHECK(run_keys("cat n100 | more", "q") == 0 && waits == 1, "| more");
     CHECK(run_keys("more < n10", "") == 0 && strcmp(con, numbered(10)) == 0, "more <");

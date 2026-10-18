@@ -213,7 +213,6 @@ You can use this file to store your own settings:
 ```
 # /etc/profile
 phosphor amber
-font 5x10
 PATH=/pico2-apps:/games
 cd /home
 ```
@@ -330,12 +329,11 @@ See section 6.
 | Command | Does |
 |---|---|
 | `clear` | clears the screen |
-| `font [8x10\|5x10]` | 40 columns (8x10, the default) or 64 columns (5x10). With no font, switches to the other one |
 | `phosphor [white\|green\|amber\|default]` | the colour of the text, like an old monitor's phosphor. `phosphor` alone shows the current one |
 | `echo [-n] [word...]` | prints its words. `-n` leaves off the line break |
 
-`font` and `phosphor` last until the shell is left. Put them in
-`/etc/profile` to have them every time.
+`phosphor` lasts until the shell is left. Put it in `/etc/profile` to
+have it every time.
 
 ### The PicoCalc
 

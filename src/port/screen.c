@@ -15,10 +15,9 @@
 /* What frame memory holds, cell by cell, indexed by frame memory text row
  * so a hardware scroll moves nothing here. The cursor is not in it: it is
  * drawn over a cell and erased by redrawing the cell from here. */
-static term_cell_t s_shadow[MEM_ROWS][TERM_COLS_MAX];
-static bool        s_valid[MEM_ROWS];      /* drawn in the current font */
+static term_cell_t s_shadow[MEM_ROWS][TERM_COLS];
+static bool        s_valid[MEM_ROWS];      /* drawn since screen_init */
 static unsigned    s_top;                  /* frame memory row at panel row 0 */
-static unsigned    s_cols;                 /* the font the shadow was drawn in */
 
 static bool        s_cursor_shown;
 static unsigned    s_cursor_row, s_cursor_col;
@@ -29,30 +28,28 @@ static uint32_t    s_rows_drawn, s_cells_drawn;
 
 static uint16_t    s_line[2][SHELL_PANEL_W];   /* ping-pong (hardware-notes.md §4.6) */
 
-/* The font for a width: the DOS flavour has only IBM's, in 40 columns
- * (design.md §4.7). */
+/* Each flavour's font (design.md §4.1, §4.7). */
 #if SHELL_DOS
-#define FONT_FOR(cols) (&font_ibm_8x10)
+#define FONT (&font_ibm_8x10)
 #else
-#define FONT_FOR(cols) ((cols) == TERM_COLS_5X10 ? &font_5x10 : &font_8x10)
+#define FONT (&font_bbc_master_512)
 #endif
+#define GLYPH_W (SHELL_PANEL_W / TERM_COLS)
 
 static term_cell_t *shadow_row(unsigned row) {
     return s_shadow[(s_top + row) % MEM_ROWS];
 }
 
 /* One pixel row of a glyph, as the starter draws it: bold smears each
- * set pixel one to the right (8x10 only), and the last row is the
- * underline's, and the cursor's. */
+ * set pixel one to the right, and the last row is the underline's, and
+ * the cursor's. */
 static uint16_t *glyph_line(uint16_t *px, const term_cell_t *c, unsigned i, bool cursor) {
-    const font_t *font = FONT_FOR(s_cols);
-    unsigned w = font->width;
-    uint8_t bits = font->glyphs[c->ch * GLYPH_HEIGHT + i];
+    uint8_t bits = FONT->glyphs[c->ch * GLYPH_HEIGHT + i];
     bool last = i == GLYPH_HEIGHT - 1u;
     bool solid = last && (cursor || (c->attr & TERM_ATTR_UNDERLINE));
-    if (w == 8 && !last && (c->attr & TERM_ATTR_BOLD)) bits |= (uint8_t)(bits >> 1);
-    for (unsigned b = 0; b < w; b++) {
-        bool on = solid || (bits & (1u << (w - 1u - b)));
+    if (!last && (c->attr & TERM_ATTR_BOLD)) bits |= (uint8_t)(bits >> 1);
+    for (unsigned b = 0; b < GLYPH_W; b++) {
+        bool on = solid || (bits & (1u << (GLYPH_W - 1u - b)));
         *px++ = on ? c->fg : c->bg;
     }
     return px;
@@ -62,9 +59,8 @@ static uint16_t *glyph_line(uint16_t *px, const term_cell_t *c, unsigned i, bool
  * `cursor` (or none, if it is outside). */
 static void draw_span(unsigned row, unsigned c0, unsigned c1, unsigned cursor) {
     const term_cell_t *cells = shadow_row(row);
-    unsigned w = SHELL_PANEL_W / s_cols;
-    unsigned n = (c1 - c0 + 1u) * w;
-    lcd_blit_begin(c0 * w, row * SHELL_GLYPH_H, n, SHELL_GLYPH_H);
+    unsigned n = (c1 - c0 + 1u) * GLYPH_W;
+    lcd_blit_begin(c0 * GLYPH_W, row * SHELL_GLYPH_H, n, SHELL_GLYPH_H);
     for (unsigned i = 0; i < GLYPH_HEIGHT; i++) {
         uint16_t *px = s_line[i & 1u];
         for (unsigned c = c0; c <= c1; c++) px = glyph_line(px, &cells[c], i, c == cursor);
@@ -77,17 +73,15 @@ static void draw_span(unsigned row, unsigned c0, unsigned c1, unsigned cursor) {
 void screen_init(void) {
     memset(s_valid, 0, sizeof s_valid);
     s_top = 0;
-    s_cols = TERM_COLS_8X10;
     s_cursor_shown = false;
 }
 
 static void flush(term_t *t) {
     int scroll;
     uint32_t dirty = term_take(t, &scroll);
-    bool font_change = t->cols != s_cols;
     unsigned row = t->row, col = t->col;
     bool want = t->cursor_on && s_blink_on;
-    bool keep = s_cursor_shown && want && !scroll && !font_change &&
+    bool keep = s_cursor_shown && want && !scroll &&
                 s_cursor_row == row && s_cursor_col == col;
 
     /* Erase the cursor before anything moves under it, so it never
@@ -95,11 +89,6 @@ static void flush(term_t *t) {
     if (s_cursor_shown && !keep) draw_span(s_cursor_row, s_cursor_col, s_cursor_col, ~0u);
     s_cursor_shown = keep;
 
-    if (font_change) {
-        s_cols = t->cols;
-        memset(s_valid, 0, sizeof s_valid);
-        dirty = 0xFFFFFFFFu;
-    }
     if (scroll) {
         int m = (int)MEM_ROWS;
         s_top = (unsigned)((((int)s_top + scroll) % m + m) % m);
@@ -110,10 +99,10 @@ static void flush(term_t *t) {
         if (!(dirty & (1u << r))) continue;
         term_cell_t *shadow = shadow_row(r);
         const term_cell_t *cells = t->cells[r];
-        unsigned c0 = 0, c1 = s_cols - 1u;
+        unsigned c0 = 0, c1 = TERM_COLS - 1u;
         if (s_valid[(s_top + r) % MEM_ROWS]) {
-            while (c0 < s_cols && memcmp(&cells[c0], &shadow[c0], sizeof *cells) == 0) c0++;
-            if (c0 == s_cols) continue;   /* marked, but the same as drawn */
+            while (c0 < TERM_COLS && memcmp(&cells[c0], &shadow[c0], sizeof *cells) == 0) c0++;
+            if (c0 == TERM_COLS) continue;   /* marked, but the same as drawn */
             while (memcmp(&cells[c1], &shadow[c1], sizeof *cells) == 0) c1--;
         }
         memcpy(&shadow[c0], &cells[c0], (c1 - c0 + 1u) * sizeof *cells);

@@ -17,7 +17,7 @@ It comes in two flavours, choose one that you are most famiar with:
 | Commands | `ls`, `cd`, `cp`, `mv`, `rm`, `grep`, `more`, … | `DIR`, `CD`, `COPY`, `MOVE`, `DEL`, `FIND`, `MORE`, … |
 | Editor | a simplified **vi** | **EDIT**, with menus |
 | Scripts | `sh file` and `/etc/profile` | batch files and `C:\AUTOEXEC.BAT` |
-| Screen | 40 or 64 columns, in VT-100 font | 40 columns, in IBM's PC font |
+| Screen | 40 columns, in the Master 512's font | 40 columns, in IBM's PC font |
 | Guide | [docs/user-guide-unix.md](docs/user-guide-unix.md) | [docs/user-guide-dos.md](docs/user-guide-dos.md) |
 
 ```
@@ -88,7 +88,7 @@ the shell must keep its data on the SD Card.
 ## The UNIX flavour
 
 **Commands:** `backlight battery bootsel cat cd clear cp df echo export
-font grep head history info ls man menu mkdir more mv phosphor poweroff
+grep head history info ls man menu mkdir more mv phosphor poweroff
 pwd reboot rm rmdir set sh tail touch unset usbdisk vi view wc`.
 All commands are built in. Use `man` to lists the available command and
 `man name` gives a short explaination.
@@ -108,8 +108,6 @@ All commands are built in. Use `man` to lists the available command and
 **vi** edits files of up to 64 KB, keeping their line endings (LF or
 CR LF). `view` or `vi -R` opens a file read-only. Brk leaves at once,
 discarding changes.
-
-**`font`** switches between a 40-column and a 64-column font.
 
 [docs/user-guide-unix.md](docs/user-guide-unix.md) explains it all.
 

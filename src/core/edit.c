@@ -23,7 +23,7 @@
 #include "keycodes.h"
 #include "keys.h"
 
-#define COLS       TERM_COLS_8X10   /* the DOS flavour's only width */
+#define COLS       TERM_COLS
 #define MENU_ROW   0
 #define TITLE_ROW  1
 #define TEXT_ROW   2

@@ -38,25 +38,6 @@ static int cmd_echo(shell_t *sh, int argc, char **argv) {
     return 0;
 }
 
-static int cmd_font(shell_t *sh, int argc, char **argv) {
-    bool wide = !sh->wide;
-    if (argc > 2) {
-        shell_error(sh, "usage: font [8x10|5x10]\n");
-        return 1;
-    }
-    if (argc == 2) {
-        if (strcmp(argv[1], "8x10") == 0) wide = false;
-        else if (strcmp(argv[1], "5x10") == 0) wide = true;
-        else {
-            shell_error(sh, "font: %s: no such font; 8x10 or 5x10\n", argv[1]);
-            return 1;
-        }
-    }
-    sh->wide = wide;
-    out_puts(&sh->con, wide ? "\033[?4264h" : "\033[?4264l");
-    return 0;
-}
-
 /* NAME=value, as typed, into a variable. */
 static int assign(shell_t *sh, const char *word, expand_t *e) {
     const char *eq;
@@ -135,7 +116,6 @@ const shell_builtin_t flavour_builtins[] = {
     { "df",         cmd_df,         "df", "Displays the card's size and free space" },
     { "echo",       cmd_echo,       "echo [-n] [word...]", "Print words; -n no line break" },
     { "export",     cmd_export,     "export [NAME=value...]", "Displays, sets or lists variables" },
-    { "font",       cmd_font,       "font [8x10|5x10]", "40 or 64 columns; swap with none" },
     { "grep",       cmd_grep,       "grep [-v] [-n] [-c] [-i] pattern [file...]", "File pattern searcher" },
     { "head",       cmd_head,       "head [-n N] [file...]", "Displays the first lines of a file" },
     { "history",    cmd_history,    "history", "Displays the lines typed" },

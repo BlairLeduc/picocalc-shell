@@ -85,9 +85,6 @@ typedef struct shell {
     const struct shell_loader *loader;   /* run.h; NULL: programs cannot run */
     const char   *version;
     char          cwd[SHELL_PATH_MAX + 1];   /* absolute and normal (path.h) */
-#if !SHELL_DOS
-    bool          wide;             /* font_5x10, 64 columns */
-#endif
     uint8_t       phosphor;         /* system.h: the ink chosen, 0 for the default */
     unsigned long mem_used, mem_total;   /* SRAM, for DOS's MEM; 0: not known */
     line_t        line;
@@ -130,9 +127,6 @@ void shell_error(shell_t *sh, const char *fmt, ...) __attribute__((format(printf
 /* For builtins: true once Break, Esc or Ctrl-C is pressed, and from then
  * on for the rest of the line. */
 bool shell_interrupted(shell_t *sh);
-
-/* The terminal's width in columns. */
-unsigned shell_cols(const shell_t *sh);
 
 /* Whether `name` is a builtin, and which, -1 if none; and the i-th
  * builtin's name, NULL past the last, for Tab completion and `help`. */

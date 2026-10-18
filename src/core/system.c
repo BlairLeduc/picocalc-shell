@@ -39,7 +39,7 @@ int cmd_help(shell_t *sh, int argc, char **argv) {
     for (unsigned i = 0; (name = shell_builtin_at(i)) != NULL; i++)
         if (strlen(name) > width) width = strlen(name);
     width += 2;
-    unsigned per_row = (unsigned)(shell_cols(sh) / width);
+    unsigned per_row = (unsigned)(TERM_COLS / width);
     if (per_row == 0) per_row = 1;
     unsigned col = 0;
     for (unsigned i = 0; (name = shell_builtin_at(i)) != NULL; i++) {

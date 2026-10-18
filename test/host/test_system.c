@@ -43,7 +43,7 @@ static int run(const char *line) {
 }
 
 static const char *row(unsigned r) {
-    static char buf[TERM_COLS_MAX + 1];
+    static char buf[TERM_COLS + 1];
     term_row_text(&t, r, buf);
     return buf;
 }
@@ -156,7 +156,7 @@ int main(void) {
                   strncmp(con + 7, shell_builtin_at(i), strlen(shell_builtin_at(i))) == 0,
               "%s: '%s'", line, con);
         /* The about line fits the narrow screen. */
-        CHECK(strlen(shell_builtin_about(i)) < TERM_COLS_8X10, "%s: too wide", line);
+        CHECK(strlen(shell_builtin_about(i)) < TERM_COLS, "%s: too wide", line);
     }
     CHECK(run("man head") == 0 &&
               strcmp(con, "usage: head [-n N] [file...]\nDisplays the first lines of a file\n") == 0,
@@ -164,11 +164,6 @@ int main(void) {
     CHECK(run("man pico-oric") == 1 && strstr(con, "man: pico-oric: not a builtin"), "a program: '%s'", con);
     CHECK(run("man a b") == 1 && strstr(con, "usage: man"), "two");
     CHECK(run("man | grep -c tail") == 0 && strcmp(con, "1\n") == 0, "man |: '%s'", con);
-    run("font 5x10");
-    CHECK(run("man") == 0 && strncmp(con, "backlight  battery    bootsel    cat        cd\nclear",
-                                     52) == 0,
-          "64 columns: '%.70s'", con);
-    run("font 8x10");
 
     /* ---- clear ---- */
     run("echo something");
