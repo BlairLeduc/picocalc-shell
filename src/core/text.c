@@ -55,7 +55,6 @@ static bool wait(shell_t *sh, pager_t *pg) {
 
 /* One byte to the screen, counting the rows it fills as term.c does. */
 static void page_byte(shell_t *sh, pager_t *pg, char c) {
-    unsigned cols = shell_cols(sh);
     if (pg->row >= pg->page && !wait(sh, pg)) {
         pg->quit = true;
         return;
@@ -72,9 +71,9 @@ static void page_byte(shell_t *sh, pager_t *pg, char c) {
         if (pg->col > 0) pg->col--;
     } else if (u == '\t') {
         pg->col = (pg->col / 8u + 1u) * 8u;
-        if (pg->col > cols - 1u) pg->col = cols - 1u;
+        if (pg->col > TERM_COLS - 1u) pg->col = TERM_COLS - 1u;
     } else if (u >= 0x20 && u != 0x7F) {
-        if (++pg->col == cols) {
+        if (++pg->col == TERM_COLS) {
             pg->row++;
             pg->col = 0;
         }

@@ -18,8 +18,7 @@
 /* Move the terminal's cursor to `to`, counted from the prompt's start. */
 static void go(shell_t *sh, size_t to) {
     line_t *l = &sh->line;
-    unsigned cols = shell_cols(sh);
-    size_t fr = l->cur / cols, tr = to / cols;
+    size_t fr = l->cur / TERM_COLS, tr = to / TERM_COLS;
     if (to == l->cur) return;
     if (fr == tr) {
         if (to < l->cur && l->cur - to <= 4u) out_write(&sh->con, "\b\b\b\b", l->cur - to);
@@ -31,7 +30,7 @@ static void go(shell_t *sh, size_t to) {
     if (tr < fr) out_printf(&sh->con, "\033[%uA", (unsigned)(fr - tr));
     if (tr > fr) out_printf(&sh->con, "\033[%uB", (unsigned)(tr - fr));
     out_puts(&sh->con, "\r");
-    if (to % cols) out_printf(&sh->con, "\033[%uC", (unsigned)(to % cols));
+    if (to % TERM_COLS) out_printf(&sh->con, "\033[%uC", (unsigned)(to % TERM_COLS));
     l->cur = to;
 }
 
@@ -244,7 +243,7 @@ static void list(shell_t *sh) {
         if (w > wmax) wmax = w;
     }
     unsigned colw = (unsigned)wmax + 2u;
-    unsigned cols = (shell_cols(sh) + 2u) / colw;
+    unsigned cols = (TERM_COLS + 2u) / colw;
     if (cols == 0) cols = 1;
     unsigned rows = (s_count + cols - 1u) / cols;
     go(sh, sh->line.prompt + sh->line.len);

@@ -1,7 +1,7 @@
 /* test_screen.c — the renderer, src/port/screen.c, against a model of the
  * panel (fake_lcd.c). After every flush, every pixel the panel shows must
  * be the one the grid calls for, drawn by the starter's rules: glyph bits
- * MSB first, bold smearing one pixel right in the 8x10 font, and the last
+ * MSB first, bold smearing one pixel right, and the last
  * pixel row the underline's and the cursor's. The cursor must show at the
  * terminal's cursor when it is on and its blink is on, and nowhere else,
  * however the screen scrolled under it. */
@@ -29,14 +29,12 @@ static void flush(void) {
 }
 
 static uint16_t expected(unsigned x, unsigned y, bool cursor) {
-    unsigned w = t.cols == TERM_COLS_5X10 ? 5u : 8u;
-    unsigned c = x / w, b = x % w, r = y / GLYPH_HEIGHT, i = y % GLYPH_HEIGHT;
+    unsigned c = x / 8u, b = x % 8u, r = y / GLYPH_HEIGHT, i = y % GLYPH_HEIGHT;
     const term_cell_t *cell = &t.cells[r][c];
-    const font_t *font = w == 5u ? &font_5x10 : &font_8x10;
-    uint8_t bits = font->glyphs[cell->ch * GLYPH_HEIGHT + i];
-    bool on = bits & (1u << (w - 1u - b));
-    if (w == 8u && i < GLYPH_HEIGHT - 1u && (cell->attr & TERM_ATTR_BOLD) && b > 0 &&
-        (bits & (1u << (w - b))))
+    uint8_t bits = font_bbc_master_512.glyphs[cell->ch * GLYPH_HEIGHT + i];
+    bool on = bits & (1u << (7u - b));
+    if (i < GLYPH_HEIGHT - 1u && (cell->attr & TERM_ATTR_BOLD) && b > 0 &&
+        (bits & (1u << (8u - b))))
         on = true;
     if (i == GLYPH_HEIGHT - 1u &&
         ((cell->attr & TERM_ATTR_UNDERLINE) || (cursor && r == t.row && c == t.col)))
@@ -51,7 +49,7 @@ static const char *panel_diff(bool cursor) {
         for (unsigned x = 0; x < SHELL_PANEL_W; x++)
             if (fake_lcd_panel(x, y) != expected(x, y, cursor)) {
                 snprintf(where, sizeof where, "%u,%u (cell %u,%u)", x, y, y / GLYPH_HEIGHT,
-                         x / (t.cols == TERM_COLS_5X10 ? 5u : 8u));
+                         x / 8u);
                 return where;
             }
     return NULL;
@@ -69,7 +67,7 @@ static const char *pieces[] = {
     "hello ", "\r\n", "\n", "\033M", "\033D", "\033E", "\033[S", "\033[3T", "\033[2;9r",
     "\033[r", "\033[10;20r", "\033[H", "\033[32;1H", "\033[5A", "\033[K", "\033[1J", "\033[J",
     "\033[2J", "\033[7m", "\033[0m", "\033[1m", "\033[4m", "\033[33m", "\033[38;5;100m",
-    "\033[?4264h", "\033[?4264l", "\033[?25l", "\033[?25h", "\t", "\b",
+    "\033[?25l", "\033[?25h", "\t", "\b",
     "0123456789abcdefghijklmnopqrstuvwxyz0123", "\033(0lqkxmj\033(B", "\xC3\xA9", "\033[2S",
     "\033[5;5H", "\033[30;1H", "\033[6S", "\033[40T",
 };

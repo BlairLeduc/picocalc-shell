@@ -38,6 +38,7 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-15 | The DOS flavour has only 40 columns, always in IBM's font: no `FONT` command and no 64-column mode, and EDIT runs in 40 columns, its boxes in IBM's line glyphs. This narrows the 2026-10-14 font decision: the 5x10 font is the UNIX flavour's alone. | 4.1, 4.7 |
 | 2026-10-15 | The UNIX flavour's `ls` puts `/` after a directory's name, as `ls -F` does, in columns, one per line and `-l`. | 4.2 |
 | 2026-10-16 | A release offers the two flavours' release builds as `shell-unix.uf2` and `shell-dos.uf2`; the user renames the one they want to `BOOT2350.UF2` on the card. | 4.7 |
+| 2026-10-18 | The UNIX flavour has only 40 columns too, in the Master 512's font (`font-master-512-8x10.c`), arranged as the terminal's 128 glyphs with the DEC graphics at `0x00`–`0x1F`, as IBM's is. There is no `font` command and no 64-column mode in either flavour, and the owner's 8x10 and 5x10 are no longer built in. This replaces the 2026-10-12 and 2026-10-14 decisions on the UNIX flavour's fonts. | 4.1 |
 | 2026-10-17 | `picocalc_shell_exit()` returns false when UF2 Loader did not start the program, as well as with no card, and the program decides what to do then (such as power off by its own means). The header stays independent and does not touch the southbridge; `picocalc_shell_loader_present()` tells a program beforehand. | 3.4 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
@@ -459,18 +460,23 @@ top. The UNIX flavour has about 69 KB free (504 KB less M9's 435 KB).
 
 ### 4.1 Terminal
 
-The terminal is a character grid on the 320×320 panel. *Settled
-2026-10-12:* it uses the owner's own fonts, from `references/fonts/`. Both
-are 10 pixels high, cover the 7-bit codes `0x00`–`0x7F` (128 glyphs), and store one byte per glyph
-row:
+The terminal is a character grid of **40 × 32** on the 320×320 panel, in
+an 8×10 font that is 10 pixels high, covers the 7-bit codes `0x00`–`0x7F`
+(128 glyphs), and stores one byte per glyph row. *Changed 2026-10-18:* the
+UNIX flavour's font is the Master 512's (`font_bbc_master_512`,
+`font-master-512-8x10.c`), and the DOS flavour's is IBM's (§4.7). Each
+flavour links only its own; there is no `font` command and no 64-column
+mode. The owner's `font_8x10` and `font_5x10` (40 and 64 columns, from
+`references/fonts/`), settled 2026-10-12, are no longer built in, but
+glyphs from `font_8x10` fill the DEC graphics both fonts lack.
 
-| Font | Grid | Character |
-|---|---|---|
-| `font_8x10` | **40 × 32** | modelled on the VT100/VT220 font, with a round `0` and a square `O`; the default |
-| `font_5x10` | **64 × 32** | the 8×10 face narrowed by the owner to 5 pixels; for wide listings |
-
-`font` switches between them for the session, and `/etc/profile` can set
-one. The DOS flavour has neither: only 40 columns, in IBM's font (§4.7). The files build cleanly with the host compiler under `-std=c11 -Wall
+The Master 512's font came in code page 437 order, 256 glyphs. It was
+arranged once, as `tools/mkfont-ibm.py` arranges IBM's: `0x20`–`0x7E` are
+its ASCII; `0x00`–`0x1F` are the DEC special graphics, each code page 437
+has taken from the font's own glyph, the box-drawing ones carried into
+rows 0 and 9 so they join; the rest, and `0x7F`, are `font_8x10`'s. Code
+page 437's upper half is dropped, since the terminal draws nothing above
+`0x7F`. The files build cleanly with the host compiler under `-std=c11 -Wall
 -Wextra -Werror`. They use two GCC/Clang extensions, binary literals and an
 initialised flexible array member, so `-Wpedantic` stays off (checked
 2026-10-12).
@@ -488,8 +494,8 @@ VT100/ANSI state machine that already handles:
 - the UK, ASCII and DEC special graphics character sets (`ESC ( 0`). The
   fonts' glyphs `0x00`–`0x1F` are the special graphics set, so line
   drawing works with no further check;
-- cursor on and off (`DECTCEM`), and 64-column mode (private mode 4264),
-  which is how `font` switches faces;
+- cursor on and off (`DECTCEM`). The starter's 64-column mode (private
+  mode 4264) is ignored *(changed 2026-10-18)*;
 - device status reports, and BEL through a callback.
 
 A phosphor preset (white, green or amber, from `display.h`) sets the default
@@ -753,6 +759,7 @@ costs a flash and a reboot.
 
 *As built at M4:* `cat cd cp df displaytest echo export font grep history
 ls menu mkdir more mv pwd rm rmdir set sh touch unset usbdisk vi view`.
+*(`displaytest` went on 2026-10-15, `font` on 2026-10-18.)*
 *As built at M8:* the rest of the v1 column, `head tail wc help clear
 phosphor battery backlight poweroff info reboot bootsel`. `more`, `grep`,
 `head`, `tail` and `wc` are in `src/core/text.c`:
@@ -814,13 +821,15 @@ shell, with none, says `not on this machine`:
 | `echo` `head` `tail` `wc` `grep` | `sort` `uniq` `diff` `hexdump` |
 | `df` | `fsck`-lite (check only) |
 | `vi` `view` | |
-| `man` `history` `clear` `set` `export` `font` `phosphor` | `alias` `date` |
+| `man` `history` `clear` `set` `export` `phosphor` | `alias` `date` |
 | `battery` `backlight` `poweroff` (southbridge; HW §6) | |
 | `info` (shell version, board, chip, flash, loader version, card, battery) `reboot` `bootsel` `menu` `usbdisk` | `which` `uf2info` (name, version, size from binary info) |
 
 *(Changed 2026-10-15:)* the UNIX flavour's `help` is called `man`, as
 on UNIX; the DOS flavour keeps `HELP`. `displaytest`, the starter's
 display stress test kept from M0 as a development command, is gone.
+*(Changed 2026-10-18:)* `font` is gone too: the flavour has one font, in
+40 columns (§4.1).
 
 ### 4.6 vi
 
@@ -983,7 +992,7 @@ rules for size, CR LF and safe save (§4.6).
   `/etc/profile`, moved out of `shell.c` unchanged); `dos.c` the DOS
   flavour's. `shell.c` keeps what both share: running one command with
   its redirections (`shell_command`), a pipeline (`shell_pipeline`),
-  the prompt and `font` and `usbdisk`. `files.c` resolves every operand
+  the prompt and `usbdisk`. `files.c` resolves every operand
   through the flavour, so a shared command reads `C:\X` in the DOS
   build, and says its failures in the flavour's words. CMake builds the
   core once per flavour, with `SHELL_DOS` 0 or 1 for the few places that
@@ -1181,9 +1190,8 @@ rules for size, CR LF and safe save (§4.6).
   its own. *(Changed 2026-10-15:)* the flavour has no 64 columns, since
   IBM made no font that narrow: no `FONT`, and the terminal ignores the
   64-column mode (4264). The terminal's grid, the panel's shadow and
-  EDIT's screens are 40 columns wide (`TERM_COLS_MAX` is 40 when
-  `SHELL_DOS` is 1, and `TERM_COLS_5X10` is not defined), and the
-  owner's two fonts are built into the UNIX flavour only.
+  EDIT's screens are 40 columns wide. *(Changed 2026-10-18:)* so is the
+  UNIX flavour's, and `TERM_COLS` (40) is the only width (§4.1).
 
 - **Chords.** `keys_event` reports chords only while EDIT asks
   (`keys_report_chords`), so the prompt and vi are as they were: Alt with
@@ -1273,7 +1281,7 @@ decide (§4.1).
 | | `lcd.c` | glyph drawing, cursor and hardware scroll only, rebuilt on the emulators' `lcd.c` |
 | | `southbridge.c` | battery, backlights, power-off and reset, added to the emulators' copy |
 | | `keyboard.h` | the key code table |
-| | `font-8x10.c`, `font-5x10.c` | from `references/fonts/`, the newer copies |
+| | `font.h` | from `references/fonts/`, declaring each flavour's font; `font-8x10.c`'s DEC graphics are in both fonts (§4.1) |
 | Pico Logo | `editor_vi.c`, `editor_pattern.c`, `editor_undo.c`, `editor_lines.c` | as is (§4.6) |
 | | `editor.c` | its `editor_vi_apply`, adapted into `vi.c` (§4.6) |
 | | `tests/test_editor_*.c` | as is, through `test/host/unity.h` |
@@ -1330,9 +1338,9 @@ decide (§4.1).
 |---|---:|
 | RAM image limit: 520 KB SRAM, minus stage3's 8 KB and the scratch banks | ~504 KB |
 | Code: core, FatFs, drivers, TinyUSB MSC | ~120 KB |
-| Terminal cells, 64 × 32 × 6 B (character, attributes, two RGB565 colours) | 12 KB |
-| The renderer's shadow of frame memory, 64 × 48 × 6 B (§4.1) | 18 KB |
-| Fonts, 2 × 128 glyphs × 10 rows | 2.5 KB |
+| Terminal cells, 40 × 32 × 6 B (character, attributes, two RGB565 colours) | 7.5 KB |
+| The renderer's shadow of frame memory, 40 × 48 × 6 B (§4.1) | 11.25 KB |
+| Font, 128 glyphs × 10 rows | 1.25 KB |
 | vi buffer and undo journal (*and, as built at M3, an 8 KB register*) | 64 + 16 KB |
 | Pipe buffer (*as built at M4: two of 16 KB*) | 32 KB |
 | FatFs (`FATFS`, 2 × `FIL`, LFN buffer) | ~3 KB |
@@ -1408,6 +1416,13 @@ file's.
 two screens, each 40 columns wide in place of 64) and 1.1 KB of code
 and fonts (`FONT` and the owner's 5x10). The UNIX flavour is
 unchanged.
+
+**Measured after the font change** (the same tools, 2026-10-18, release
+builds, `__end__`): with only 40 columns and one font, the UNIX flavour
+is 418,984 B, 13,868 B less than the 432,852 B before (its grid, the
+panel's shadow and vi's rows 40 columns wide in place of 64, one font in
+place of two, and `font`'s code). The DOS flavour is 407,700 B, 268 B
+less (`shell_cols` and the column switching in the terminal).
 
 **The stack** (*corrected at M3*). Core 0's stack starts at the top of
 scratch Y and may run down to `__StackLimit` at the bottom of scratch X:

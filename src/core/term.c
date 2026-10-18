@@ -37,6 +37,7 @@ _Static_assert(TERM_ROWS <= 32u, "the dirty mask is one 32-bit word");
 
 #define ALL_ROWS (TERM_ROWS == 32u ? 0xFFFFFFFFu : ((1u << TERM_ROWS) - 1u))
 #define MAX_ROW  ((int)TERM_ROWS - 1)
+#define MAX_COL  ((int)TERM_COLS - 1)
 
 enum {
     ST_NORMAL,
@@ -134,12 +135,8 @@ static void erase(term_t *t, int row, int c0, int c1) {
     mark(t, row);
 }
 
-/* Erasing to the end of a line clears the hidden columns past a 40-column
- * screen too, so a switch to 64 columns shows nothing stale. */
-#define LAST_COL ((int)TERM_COLS_MAX - 1)
-
 static void erase_all(term_t *t) {
-    for (int r = 0; r <= MAX_ROW; r++) erase(t, r, 0, LAST_COL);
+    for (int r = 0; r <= MAX_ROW; r++) erase(t, r, 0, MAX_COL);
 }
 
 static void put_glyph(term_t *t, uint8_t glyph) {
@@ -160,9 +157,9 @@ static void scroll_up(term_t *t) {
     if (top == 0 && bottom == MAX_ROW) {
         t->dirty >>= 1;
         t->scroll++;
-        erase(t, bottom, 0, LAST_COL);
+        erase(t, bottom, 0, MAX_COL);
     } else {
-        erase(t, bottom, 0, LAST_COL);
+        erase(t, bottom, 0, MAX_COL);
         for (int r = top; r <= bottom; r++) mark(t, r);
     }
 }
@@ -175,9 +172,9 @@ static void scroll_down(term_t *t) {
     if (top == 0 && bottom == MAX_ROW) {
         t->dirty = (t->dirty << 1) & ALL_ROWS;
         t->scroll--;
-        erase(t, top, 0, LAST_COL);
+        erase(t, top, 0, MAX_COL);
     } else {
-        erase(t, top, 0, LAST_COL);
+        erase(t, top, 0, MAX_COL);
         for (int r = top; r <= bottom; r++) mark(t, r);
     }
 }
@@ -196,16 +193,6 @@ static void reset_region(term_t *t) {
     t->top = 0;
     t->bottom = (uint8_t)MAX_ROW;
 }
-
-#if !SHELL_DOS
-static void set_cols(term_t *t, unsigned cols) {
-    if (t->cols == cols) return;
-    t->cols = (uint8_t)cols;
-    t->col = (uint8_t)imin(t->col, (int)cols - 1);
-    t->save_col = (uint8_t)imin(t->save_col, (int)cols - 1);
-    t->dirty = ALL_ROWS;
-}
-#endif
 
 static void update_leds(term_t *t, uint8_t leds) {
     t->leds = leds;
@@ -369,7 +356,6 @@ static void sgr(term_t *t) {
 }
 
 static void csi_final(term_t *t, uint8_t ch) {
-    int max_col = t->cols - 1;
     int row = t->row, col = t->col;
 
     t->state = ST_NORMAL;
@@ -381,7 +367,7 @@ static void csi_final(term_t *t, uint8_t ch) {
         t->row = (uint8_t)imin(row + param(t, 0, 1), MAX_ROW);
         break;
     case 'C':   /* CUF */
-        t->col = (uint8_t)imin(col + param(t, 0, 1), max_col);
+        t->col = (uint8_t)imin(col + param(t, 0, 1), MAX_COL);
         break;
     case 'D':   /* CUB */
         t->col = (uint8_t)imax(0, col - param(t, 0, 1));
@@ -395,28 +381,28 @@ static void csi_final(term_t *t, uint8_t ch) {
         t->col = 0;
         break;
     case 'G':   /* CHA */
-        t->col = (uint8_t)imin(param(t, 0, 1) - 1, max_col);
+        t->col = (uint8_t)imin(param(t, 0, 1) - 1, MAX_COL);
         break;
     case 'H':   /* CUP */
     case 'f':   /* HVP */
         t->row = (uint8_t)imin(param(t, 0, 1) - 1, MAX_ROW);
-        t->col = (uint8_t)imin(param(t, 1, 1) - 1, max_col);
+        t->col = (uint8_t)imin(param(t, 1, 1) - 1, MAX_COL);
         break;
     case 'J':   /* ED */
         if (t->params[0] == 0) {
-            erase(t, row, col, LAST_COL);
-            for (int r = row + 1; r <= MAX_ROW; r++) erase(t, r, 0, LAST_COL);
+            erase(t, row, col, MAX_COL);
+            for (int r = row + 1; r <= MAX_ROW; r++) erase(t, r, 0, MAX_COL);
         } else if (t->params[0] == 1) {
-            for (int r = 0; r < row; r++) erase(t, r, 0, LAST_COL);
+            for (int r = 0; r < row; r++) erase(t, r, 0, MAX_COL);
             erase(t, row, 0, col);
         } else if (t->params[0] == 2) {
             erase_all(t);
         }
         break;
     case 'K':   /* EL */
-        if (t->params[0] == 0) erase(t, row, col, LAST_COL);
+        if (t->params[0] == 0) erase(t, row, col, MAX_COL);
         else if (t->params[0] == 1) erase(t, row, 0, col);
-        else if (t->params[0] == 2) erase(t, row, 0, LAST_COL);
+        else if (t->params[0] == 2) erase(t, row, 0, MAX_COL);
         break;
     case 'S':   /* SU */
         for (int n = param(t, 0, 1); n > 0; n--) scroll_up(t);
@@ -500,9 +486,6 @@ static void dec_final(term_t *t, uint8_t ch) {
     bool set = ch == 'h';
     for (unsigned i = 0; i <= t->nparam; i++) {
         if (t->params[i] == 25) t->cursor_on = set;                    /* DECTCEM */
-#if !SHELL_DOS   /* the DOS flavour has only 40 columns */
-        else if (t->params[i] == 4264) set_cols(t, set ? TERM_COLS_5X10 : TERM_COLS_8X10);
-#endif
     }
 }
 
@@ -525,8 +508,8 @@ static void normal(term_t *t, uint8_t ch) {
         break;
     case CHR_HT: {
         int c = t->col + 1;
-        while (c < t->cols - 1 && !t->tab_stops[c]) c++;
-        t->col = (uint8_t)imin(c, t->cols - 1);
+        while (c < MAX_COL && !t->tab_stops[c]) c++;
+        t->col = (uint8_t)imin(c, MAX_COL);
         break;
     }
     case CHR_LF:
@@ -598,7 +581,7 @@ void term_putc(term_t *t, uint8_t ch) {
     }
 
     /* Wrap at once at the end of a line, as the starter does. */
-    if (t->col >= t->cols) {
+    if (t->col >= TERM_COLS) {
         t->col = 0;
         linefeed(t);
     }
@@ -610,9 +593,8 @@ void term_write(term_t *t, const char *s, size_t n) {
 
 void term_init(term_t *t) {
     memset(t, 0, sizeof *t);
-    t->cols = TERM_COLS_8X10;
     t->default_fg = TERM_FOREGROUND;
-    for (unsigned c = 8; c < TERM_COLS_MAX; c += 8) t->tab_stops[c] = true;
+    for (unsigned c = 8; c < TERM_COLS; c += 8) t->tab_stops[c] = true;
     reset_terminal(t);
     t->dirty = ALL_ROWS;
 }
@@ -631,7 +613,7 @@ uint32_t term_take(term_t *t, int *scroll) {
 
 size_t term_row_text(const term_t *t, unsigned row, char *buf) {
     size_t n = 0, end = 0;
-    for (unsigned c = 0; c < t->cols; c++) {
+    for (unsigned c = 0; c < TERM_COLS; c++) {
         uint8_t ch = t->cells[row][c].ch;
         buf[n++] = (ch >= 0x20 && ch < 0x7F) ? (char)ch : '.';
         if (ch != ' ') end = n;

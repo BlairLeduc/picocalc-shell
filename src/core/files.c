@@ -358,7 +358,7 @@ static void ls_names(shell_t *sh, unsigned n) {
         if (w > wmax) wmax = w;
     }
     unsigned colw = (unsigned)wmax + 2u;
-    unsigned cols = (shell_cols(sh) + 2u) / colw;
+    unsigned cols = (TERM_COLS + 2u) / colw;
     if (cols == 0) cols = 1;
     unsigned rows = (n + cols - 1u) / cols;
     for (unsigned r = 0; r < rows; r++) {

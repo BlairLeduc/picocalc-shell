@@ -191,13 +191,6 @@ static int files_tests(bool fat32) {
                       "name02.txt  name06.txt  name10.txt\n"
                       "name03.txt  name07.txt  name11.txt\n") == 0,
           "ls in 40 columns:\n%s", con);
-    sh.wide = true;
-    CHECK(run("ls") == 0 && strcmp(con, "name00.txt  name03.txt  name06.txt  name09.txt\n"
-                                        "name01.txt  name04.txt  name07.txt  name10.txt\n"
-                                        "name02.txt  name05.txt  name08.txt  name11.txt\n") ==
-                                0,
-          "ls in 64 columns:\n%s", con);
-    sh.wide = false;
 
     /* cp: a file, into a directory, several, through .new. */
     CHECK(run("cd /home && cp a.txt b.txt") == 0, "cp: %s", con);

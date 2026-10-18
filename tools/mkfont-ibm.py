@@ -2,7 +2,7 @@
 """mkfont-ibm.py — the DOS flavour's 40-column font (design.md §4.7) from
 VileR's Ultimate Oldschool PC Font Pack (CC BY-SA 4.0, int10h.org).
 
-  tools/mkfont-ibm.py Bm437_IBM_BIOS.otb src/core/font-8x10.c > src/core/font-ibm-8x10.c
+  tools/mkfont-ibm.py Bm437_IBM_BIOS.otb references/fonts/font-8x10.c > src/core/font-ibm-8x10.c
 
 Needs fontTools (pip install fonttools). The IBM PC BIOS font is 8x8; the
 terminal's cells are 8x10 (font.h), so each glyph is drawn in rows 1-8

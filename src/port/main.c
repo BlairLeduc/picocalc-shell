@@ -198,8 +198,8 @@ static const char *power(void *ctx, shell_power_t what) {
 
 #if PICO_SHELL_UART
 static void dump_screen(void) {
-    char text[TERM_COLS_MAX + 1];
-    printf("\n--- screen %u x %u, cursor row %u col %u ---\n", g_term.cols, TERM_ROWS,
+    char text[TERM_COLS + 1];
+    printf("\n--- screen %u x %u, cursor row %u col %u ---\n", TERM_COLS, TERM_ROWS,
            g_term.row, g_term.col);
     for (unsigned r = 0; r < TERM_ROWS; r++) {
         term_row_text(&g_term, r, text);

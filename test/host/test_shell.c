@@ -1,5 +1,5 @@
 /* test_shell.c — M0's command line on the grid: the banner and the `/>`
- * prompt in both fonts, the line, and `font` (design.md §4.4, §10). */
+ * prompt, the line, and no `font` (design.md §4.4, §10). */
 
 #include <string.h>
 
@@ -32,7 +32,7 @@ static void type(const char *s) {
 }
 
 static const char *row(unsigned r) {
-    static char buf[TERM_COLS_MAX + 1];
+    static char buf[TERM_COLS + 1];
     term_row_text(&t, r, buf);
     return buf;
 }
@@ -71,20 +71,9 @@ int main(void) {
     type("\r");
     CHECK(strcmp(row(8), "/>") == 0, "the line was dropped: '%s'", row(8));
 
-    /* Both fonts. */
-    type("font 5x10\r");
-    CHECK(t.cols == 64 && sh.wide, "font 5x10: %u columns", t.cols);
-    CHECK(strcmp(row(9), "/>") == 0, "prompt in 64 columns: '%s'", row(9));
-    shell_start(&sh);
-    CHECK(t.cols == 64 && strcmp(row(0), "PicoCalc shell v0-test") == 0 &&
-              strcmp(row(2), "/>") == 0,
-          "banner and prompt in 64 columns");
+    /* One font, so no `font`. */
     type("font\r");
-    CHECK(t.cols == 40 && !sh.wide, "font toggles back: %u", t.cols);
-    type("font 9x9\r");
-    CHECK(has_row("font: 9x9: no such font; 8x10 or 5x10"), "no error for font 9x9");
-    type("font a b\r");
-    CHECK(has_row("usage: font [8x10|5x10]"), "no usage for font a b");
+    CHECK(!shell_is_builtin("font") && has_row("font: not found"), "font is a builtin");
 
     /* The line holds SHELL_LINE_MAX characters and drops the rest. */
     for (unsigned i = 0; i < SHELL_LINE_MAX + 10; i++) shell_input(&sh, 'x');

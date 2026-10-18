@@ -34,14 +34,13 @@ set(SHELL_CORE_SOURCES
     src/core/uf2.c
     src/core/vars.c
 )
-# ...the UNIX flavour's command language, vi and fonts...
+# ...the UNIX flavour's command language, vi and font...
 set(SHELL_UNIX_SOURCES
     src/core/editor_lines.c
     src/core/editor_undo.c
     src/core/editor_vi.c
     src/core/expand.c
-    src/core/font-5x10.c
-    src/core/font-8x10.c
+    src/core/font-master-512-8x10.c
     src/core/parse.c
     src/core/unix.c
     src/core/vi.c

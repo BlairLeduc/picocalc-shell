@@ -218,7 +218,7 @@ int dos_rd(shell_t *sh, int argc, char **argv) {
 
 #define DIR_COL   15u   /* where <DIR> starts, after a name of 8.3 */
 #define DIR_TOTAL "%5u file(s) %14s bytes"   /* its number ends where "%28s bytes free"'s does */
-#define DIR_WIDTH TERM_COLS_8X10   /* the screen's columns */
+#define DIR_WIDTH TERM_COLS   /* the screen's columns */
 
 enum { DIR_W = 1u << 0, DIR_P = 1u << 1, DIR_S = 1u << 2, DIR_A = 1u << 3, DIR_B = 1u << 4 };
 
@@ -274,7 +274,6 @@ static bool dir_list(shell_t *sh, dir_t *d, const char *dir, bool header) {
     d->files = 0;
     d->bytes = 0;
     d->col = 0;
-    unsigned cols = shell_cols(sh);
     while (!d->stopped && (r = f_readdir(&s_dir, &s_ent)) == FR_OK && s_ent.fname[0]) {
         if (!dir_wants(d, &s_ent)) continue;
         bool sub = (s_ent.fattrib & AM_DIR) != 0;
@@ -298,13 +297,13 @@ static bool dir_list(shell_t *sh, dir_t *d, const char *dir, bool header) {
             snprintf(name, sizeof name, sub ? "[%s]" : "%s", s_ent.fname);
             size_t w = strlen(name);
             size_t cell = (w / 13u + 1u) * 13u;
-            if (d->col > 0 && d->col + w >= cols) {
+            if (d->col > 0 && d->col + w >= DIR_WIDTH) {
                 dir_row(sh, d);
                 d->col = 0;
             }
             out_puts(&sh->out, name);
             d->col += (unsigned)cell;
-            if (d->col + 13u > cols) {
+            if (d->col + 13u > DIR_WIDTH) {
                 dir_row(sh, d);
                 d->col = 0;
             } else {

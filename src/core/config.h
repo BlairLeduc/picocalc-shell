@@ -11,18 +11,10 @@
 #define SHELL_PANEL_MEM_H  480u   /* frame memory rows, for hardware scroll (§4.8) */
 #define SHELL_GLYPH_H      10u
 
-/* The terminal's grid: 32 rows, 40 columns in font_8x10, 64 in font_5x10.
- * In the UNIX flavour the grid is always 64 wide and 40-column mode uses
- * its left part. The DOS flavour has only 40 columns, in IBM's font
- * (design.md §4.7), so its grid is 40 wide. */
+/* The terminal's grid: 32 rows of 40 columns, in each flavour's 8x10 font
+ * (design.md §4.1, §4.7). */
 #define TERM_ROWS          32u
-#define TERM_COLS_8X10     40u
-#if SHELL_DOS
-#define TERM_COLS_MAX      TERM_COLS_8X10
-#else
-#define TERM_COLS_5X10     64u
-#define TERM_COLS_MAX      TERM_COLS_5X10
-#endif
+#define TERM_COLS          40u
 #define TERM_PARAMS        16u    /* CSI parameters kept; more are dropped */
 
 /* One line typed at the prompt, without its terminator, and what the
@@ -114,7 +106,7 @@
 
 /* The vi key layer's own capacities, under Pico Logo's names (its
  * core/limits.h explains each). Its 40-column footer fits this status
- * row in either font. */
+ * row. */
 #define LOGO_VI_TEXT_MAX          32
 #define LOGO_VI_CMDLINE_MAX       (LOGO_VI_TEXT_MAX * 2 + 8)
 #define LOGO_VI_MSG_MAX           40

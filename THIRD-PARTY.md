@@ -68,9 +68,19 @@ not in the tree: the firmware links the Pico SDK's copy.
 
 ## The fonts — the owner's
 
-`src/core/font.h`, `font-8x10.c` and `font-5x10.c` are copied unchanged from
-the owner's `references/fonts/` (design.md §4.1); `font.h` adds only the
-declaration of the DOS flavour's font, below.
+`src/core/font.h` is the owner's `references/fonts/font.h`, but for the fonts
+it declares (design.md §4.1). The owner's `font-8x10.c` is no longer built
+in, but its glyphs fill the DEC special graphics that code page 437 lacks,
+and glyph 0x7F, in both flavours' fonts.
+
+## The UNIX flavour's font — the Master 512's
+
+`src/core/font-master-512-8x10.c` is the Master 512's character set, as the
+owner supplied it, in code page 437 order. Changes: arranged as the
+terminal's 128 glyphs, with the DEC special graphics at 0x00-0x1F taken
+from its own code page 437 glyphs where it has them (the box-drawing ones
+carried into rows 0 and 9) and from the owner's `font-8x10.c` where it does
+not, and code page 437's upper half dropped (design.md §4.1).
 
 ## The DOS flavour's font — VileR, CC BY-SA 4.0
 

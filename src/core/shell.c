@@ -148,15 +148,6 @@ bool shell_interrupted(shell_t *sh) {
     return sh->stop;
 }
 
-unsigned shell_cols(const shell_t *sh) {
-#if SHELL_DOS
-    (void)sh;
-    return TERM_COLS_8X10;
-#else
-    return sh->wide ? TERM_COLS_5X10 : TERM_COLS_8X10;
-#endif
-}
-
 /* ---- commands --------------------------------------------------------- */
 
 int cmd_usbdisk(shell_t *sh, int argc, char **argv) {

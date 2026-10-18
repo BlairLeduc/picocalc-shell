@@ -61,16 +61,15 @@ typedef void (*term_report_fn)(void *ctx, const char *reply);
 typedef void (*term_leds_fn)(void *ctx, uint8_t leds);
 
 struct term {
-    term_cell_t cells[TERM_ROWS][TERM_COLS_MAX];
+    term_cell_t cells[TERM_ROWS][TERM_COLS];
     uint32_t    dirty;           /* one bit per row */
     int         scroll;          /* net full-screen lines up, see above */
 
-    uint8_t     cols;            /* 40 or 64: the font in use */
     uint8_t     row, col;        /* the cursor */
     uint8_t     save_row, save_col;
     uint8_t     top, bottom;     /* the scroll region, inclusive */
     bool        cursor_on;       /* DECTCEM */
-    bool        tab_stops[TERM_COLS_MAX];
+    bool        tab_stops[TERM_COLS];
 
     uint16_t    fg, bg;          /* as drawn: already swapped if reverse */
     uint16_t    default_fg;      /* the phosphor */
@@ -107,7 +106,7 @@ uint32_t term_take(term_t *t, int *scroll);
 
 /* Row `row` as text, for a dump over the UART and for host tests: glyphs
  * 0x20-0x7E as themselves, any other as '.', trailing blanks removed.
- * `buf` holds at least TERM_COLS_MAX + 1 bytes. Returns the length. */
+ * `buf` holds at least TERM_COLS + 1 bytes. Returns the length. */
 size_t term_row_text(const term_t *t, unsigned row, char *buf);
 
 #endif /* SHELL_TERM_H */
