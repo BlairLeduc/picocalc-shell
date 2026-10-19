@@ -235,7 +235,8 @@ static void insert_escaped(shell_t *sh, const char *name, size_t from, size_t to
     insert(sh, buf, n);
 }
 
-/* The names, down the columns, as ls shows them. */
+/* The names, down the columns, as ls shows them, each row short of the
+ * last column (files.c). */
 static void list(shell_t *sh) {
     size_t wmax = 0;
     for (unsigned i = 0; i < s_count; i++) {
@@ -243,7 +244,7 @@ static void list(shell_t *sh) {
         if (w > wmax) wmax = w;
     }
     unsigned colw = (unsigned)wmax + 2u;
-    unsigned cols = (TERM_COLS + 2u) / colw;
+    unsigned cols = (TERM_COLS + 1u) / colw;
     if (cols == 0) cols = 1;
     unsigned rows = (s_count + cols - 1u) / cols;
     go(sh, sh->line.prompt + sh->line.len);

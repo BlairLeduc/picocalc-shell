@@ -28,6 +28,10 @@ typedef struct {
      * keyboard itself, such as vi. -1 when there will be no more: the end
      * of a script or of the host's input. NULL: no keyboard. */
     int (*getkey)(void *ctx);
+    /* The next input byte if one is waiting, otherwise -1 at once, for a
+     * command that waits for a key with a time limit, such as DOS's
+     * CHOICE /T. NULL: none, and such a command waits without one. */
+    int (*pollkey)(void *ctx);
     /* Offer the card over USB until the computer ejects it or a key
      * stops it (design.md §4.2): NULL, or why not. FatFs's volume is
      * unmounted around the call. NULL: no USB here. */

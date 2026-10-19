@@ -13,6 +13,7 @@ set(SHELL_HOST_TESTS
     test_parse
     test_path
     test_pipe
+    test_select
     test_shell
     test_skeleton
     test_system

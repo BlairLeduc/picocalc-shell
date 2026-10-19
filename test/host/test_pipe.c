@@ -285,7 +285,7 @@ static int pipe_tests(bool fat32) {
 
 int main(void) {
     const out_t out = { sink, NULL, false };
-    const shell_hooks_t hooks = { now, interrupted, NULL, NULL, NULL };
+    const shell_hooks_t hooks = { now, interrupted, NULL, NULL, NULL, NULL };
     shell_init(&sh, &out, &hooks, "test");
     if (pipe_tests(false)) return 1;
     shell_init(&sh, &out, &hooks, "test");

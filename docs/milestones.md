@@ -16,6 +16,89 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M11 — Menus (2026-10-18, branch `m11-menus`)
+
+**Done 2026-10-18.** The owner tested it on a Pico 2 W, with both
+flavours' release builds, and reports that it works as expected. Which
+of design.md §10's checks were run one by one was not recorded; this is
+the run that covers a program started from a menu and the
+return to the shell, which the Plus 2 W could not do without its loader
+(below).
+
+**The owner chose** (2026-10-18) bash's `select` with `break` for the
+UNIX flavour, and DOS 6's `CHOICE` with all its switches for the DOS
+flavour (design.md, the decision table; §4.4, §4.7, §10). `select` is the
+UNIX flavour's one compound command; the parser now records each
+command's place in its line (`parse_cmd_t.start`, `end`) so `unix.c` can
+cut a line at `select`, `do` and `done`. `shell_hooks_t` has a new
+`pollkey`, for `CHOICE /T`, in the port, the host shell and the tests.
+
+**Checked on the host:** the new `test_select` covers one line and
+several in a script, a select inside another, `break`, `break 2`,
+`break 9` and `break` outside one, an empty line, a wrong number, `PS3`
+and `REPLY`, a glob and a variable in the words, no words, the menu's
+columns, the end of the input, Ctrl-C, Esc and Break, sixteen
+mistakes, a quoted `select`, a mistake inside a script's select, a
+script with no `done`, `break` not reaching out of `sh`, and no
+keyboard. `test_dos` covers `CHOICE`'s default keys, `/C` with and without
+`:`, quoted text, `/N`, `/S`, a key not among them, `/T` running out on
+a fake clock and not restarted by a wrong key, `/T` with a key and with 0
+seconds, ten mistakes, Esc and the end of input, and a menu batch file
+with `IF ERRORLEVEL` and `GOTO`, over FAT16 and FAT32. `test_system`'s
+`man` columns take `break` in. All 23 host tests pass. The development,
+release and DOS release builds compile clean. The guides' examples were
+run in the host shells.
+
+**Checked on the board:** Claude, on the Plus 2 W on the probe (RP2350B
+rev 2, id 7458DC82A89AAC12), both flavours' development builds run from
+SRAM over SWD (`tools/swd-ram.sh`), keys typed over the UART, on its test
+card; the log is `out/m11-unix.log`, the screen read with
+`tools/uart-screen.sh`. UNIX: a one-line menu running `pwd`, a wrong
+number, an empty line, `break`, `$?`, `$REPLY`; Ctrl-C (status 130);
+a menu over several lines in `/etc/profile` running as the shell
+started and leaving for the prompt on `break`; a program in a menu
+refused (`cannot run programs: no UF2 Loader partition table`) and the
+menu going on. DOS: a menu in `AUTOEXEC.BAT` (`CHOICE /C:12Q /T:Q,5`,
+`IF ERRORLEVEL`, `GOTO`) at the start, `2` and `1` chosen, then `Q`
+taken by `/T` with nothing pressed; a key not among them sending BEL;
+Esc stopping `CHOICE /T:N,30`. `/etc` and the scratch directory were
+removed afterwards. `AUTOEXEC.BAT`, which typed as one blank line,
+was overwritten for the test and put back as one line break (1 byte);
+its exact bytes before were not recorded.
+
+**Found on the board, and fixed:** a menu row exactly 40 columns wide
+(the twelve-word case) was followed by a blank row on the panel, though
+not in the UART's copy: the terminal wraps as soon as a row is full, so
+the line break started another. Menu rows now stop short of the 40th
+column (`test_select` checks it); seen right on the panel after.
+**Found on the board, and fixed after:** `ls` did the same for a row
+whose last column is its widest (six 12-character names gave a blank row
+after each row on the panel), and Tab's listing (`line.c`) used the same
+rule. Both now stop short of the 40th column; `test_line` checks both on
+the terminal's grid with those six names, and failed before the fix.
+On the panel (the same board and build, the probe back, log
+`out/m11-ls.log`), `ls` and Tab's listing of those names show two
+columns with no blank row.
+`DIR /W` (rows of at most 39) and `man`/`HELP` (at most 38) were already
+short of it.
+
+**Measured** (release builds, `__end__`, against main built the same
+day): the UNIX flavour 432,068 B, 13,092 B more; the DOS flavour
+409,244 B, 1,552 B more (design.md §7). `CHOICE /T:Q,5`'s default came
+4.61 s after the last key typed, timed on the Mac; the count starts at
+the prompt, a little after that key, so it agrees with 5 s by eye, not
+measured from the board's clock.
+
+**Not checked:**
+
+- On the Plus 2 W: a program run from a menu and coming back, and a menu
+  at a real power-on through stage3. It was found with no UF2 Loader in
+  flash (`info`: `loader none in flash`), so programs cannot run on it
+  and power-on does not reach the card. The owner's Pico 2 W run is
+  taken for these (above).
+- Claude's runs used only the development builds; the release builds
+  ran in the owner's run alone.
+
 ## After M9 — one font, 40 columns, in the UNIX flavour (2026-10-18)
 
 **The owner chose** (2026-10-18) the Master 512's font as the UNIX

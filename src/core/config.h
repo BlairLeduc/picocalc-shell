@@ -34,6 +34,14 @@
  * its own parsed line, expanded words and redirections. */
 #define SHELL_DEPTH        4u
 
+/* The UNIX flavour's select (design.md §4.4), at each level: its text
+ * from `select` to `done`, in pieces, and the words being offered by it
+ * and any select inside it. */
+#define SHELL_SELECT_TEXT  1024u
+#define SHELL_SELECT_PARTS 64u
+#define SHELL_SELECT_WORDS 512u
+#define SHELL_SELECT_ITEMS 64u
+
 /* Variables (vars.h), packed as NAME=value: all of them together. */
 #define SHELL_VARS_BYTES   1024u
 

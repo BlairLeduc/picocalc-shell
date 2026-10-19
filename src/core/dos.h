@@ -180,5 +180,6 @@ int dos_goto(shell_t *sh, int argc, char **argv);
 int dos_shift(shell_t *sh, int argc, char **argv);
 int dos_rem(shell_t *sh, int argc, char **argv);
 int dos_control(shell_t *sh, int argc, char **argv);
+int dos_choice(shell_t *sh, int argc, char **argv);
 
 #endif /* SHELL_DOS_H */

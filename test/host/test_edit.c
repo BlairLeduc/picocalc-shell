@@ -347,7 +347,7 @@ static int edit_tests(bool fat32) {
 
 int main(void) {
     const out_t out = { sink, NULL, false };
-    const shell_hooks_t hooks = { now, interrupted, getkey, NULL, NULL };
+    const shell_hooks_t hooks = { now, interrupted, getkey, NULL, NULL, NULL };
     term_init(&t);
     shell_init(&sh, &out, &hooks, "test");
     if (edit_tests(false)) return 1;

@@ -219,35 +219,50 @@ static void log_stats(void) {
 }
 #endif
 
-/* The next input byte, from the keyboard or, in the development build,
- * the UART, with the cursor blinking while it waits. FS, GS and RS on
- * the UART are acted on here and never returned. */
+/* One look at the keyboard and, in the development build, the UART: an
+ * input byte, or KEYS_NONE. FS, GS and RS on the UART are acted on here
+ * and never returned. */
+static int poll_once(void) {
+    poll_keys();
+    uint8_t state, code;
+    while (kbd_pop(&state, &code)) {
+#if PICO_SHELL_UART
+        if (s_log_keys) printf("key %u 0x%02x\n", state, code);
+#endif
+        int k = keys_event(&g_keys, state, code);
+        if (k != KEYS_NONE) return k;
+    }
+#if PICO_SHELL_UART
+    int c;
+    while ((c = getchar_timeout_us(0)) >= 0) {
+        if (c == UART_DUMP_SCREEN) dump_screen();
+        else if (c == UART_LOG_STATS) log_stats();
+        else if (c == UART_LOG_KEYS) s_log_keys = !s_log_keys;
+        else {
+            int k = keys_uart(&g_keys, (uint8_t)c);
+            if (k != KEYS_NONE) return k;
+        }
+    }
+#endif
+    return KEYS_NONE;
+}
+
+/* The next input byte, with the cursor blinking while it waits. */
 static int getkey(void *ctx) {
     (void)ctx;
     for (;;) {
-        poll_keys();
-        uint8_t state, code;
-        while (kbd_pop(&state, &code)) {
-#if PICO_SHELL_UART
-            if (s_log_keys) printf("key %u 0x%02x\n", state, code);
-#endif
-            int k = keys_event(&g_keys, state, code);
-            if (k != KEYS_NONE) return k;
-        }
-#if PICO_SHELL_UART
-        int c;
-        while ((c = getchar_timeout_us(0)) >= 0) {
-            if (c == UART_DUMP_SCREEN) dump_screen();
-            else if (c == UART_LOG_STATS) log_stats();
-            else if (c == UART_LOG_KEYS) s_log_keys = !s_log_keys;
-            else {
-                int k = keys_uart(&g_keys, (uint8_t)c);
-                if (k != KEYS_NONE) return k;
-            }
-        }
-#endif
+        int k = poll_once();
+        if (k != KEYS_NONE) return k;
         screen_tick(&g_term, time_us_64());
     }
+}
+
+/* The next input byte if one is waiting, otherwise -1 (KEYS_NONE). */
+static int pollkey(void *ctx) {
+    (void)ctx;
+    int k = poll_once();
+    if (k == KEYS_NONE) screen_tick(&g_term, time_us_64());
+    return k;
 }
 
 static void log_banner(bool clocks_ok, uint32_t i2c_hz, sb_status_t sb, const uint8_t ver[2],
@@ -314,7 +329,7 @@ int main(void) {
     term_init(&g_term);
     keys_init(&g_keys);
     const out_t out = { con_write, NULL, false };
-    const shell_hooks_t hooks = { now_us, interrupted, getkey, usbdisk, NULL };
+    const shell_hooks_t hooks = { now_us, interrupted, getkey, pollkey, usbdisk, NULL };
     shell_init(&g_shell, &out, &hooks, SHELL_VERSION);
     shell_set_loader(&g_shell, &g_loader);
     const shell_system_t sys = { battery, backlight, phosphor, info, power, NULL };

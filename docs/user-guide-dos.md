@@ -201,6 +201,7 @@ batch file or a program (section 5).
 | `PROMPT [text]` | sets the prompt: `$P` the path, `$G` `>`, `$_` a new line, `$N` the drive. `PROMPT` alone puts back `$P$G` |
 | `ECHO [ON\|OFF\|message]` | prints a message; `ECHO.` prints a blank line; `ECHO OFF` hides the prompt |
 | `PAUSE` | waits for a key |
+| `CHOICE [/C:keys] [/N] [/S] [/T:c,nn] [text]` | waits for one of the keys; ERRORLEVEL is which (section 6) |
 | `CALL`, `FOR`, `GOTO`, `IF`, `REM`, `SHIFT` | for batch files (section 6); `FOR` and `IF` work at the prompt too |
 | `CLS` | clears the screen |
 | `HELP [command]` | lists the commands, or explains one |
@@ -352,11 +353,45 @@ ECHO Usage: BACKUP file...
 | `REM text` | a comment |
 | `ECHO OFF`, `@` | `ECHO OFF` stops the shell showing each line before running it; `@` at a line's start hides that line. At the end of the batch file, ECHO is as it was at the prompt |
 | `PAUSE` | waits for a key |
+| `CHOICE` | waits for one of a set of keys, and sets ERRORLEVEL to which (below) |
 
 `%NAME%` is a variable, as at the prompt. Lines can be up to 255
 characters long, and batch files can `CALL` one another three deep. A
 batch file's output cannot be redirected or piped as `NAME > FILE`, but
 `CALL NAME > FILE` works.
+
+### Menus
+
+`CHOICE` waits for one of a set of keys, and sets ERRORLEVEL to the
+key's place in the set: 1 for the first, 2 for the second, and so on.
+With `IF ERRORLEVEL` and `GOTO`, that makes a menu:
+
+```
+@ECHO OFF
+:MENU
+ECHO 1  Oric
+ECHO 2  Atom
+ECHO Q  Quit
+CHOICE /C:12Q /T:Q,10 Which
+IF ERRORLEVEL 3 GOTO END
+IF ERRORLEVEL 2 PICO-ATOM
+IF ERRORLEVEL 1 PICO-ORIC
+:END
+```
+
+This shows `Which[1,2,Q]?` and waits. `IF ERRORLEVEL n` is true for `n`
+or more, so test the highest first.
+
+| Switch | Does |
+|---|---|
+| `/C:keys` | the keys to choose from; `YN` if there is no `/C` |
+| `/N` | does not show the keys after the text |
+| `/S` | `a` and `A` are different keys; otherwise case does not matter |
+| `/T:c,nn` | chooses `c` if nothing is pressed for `nn` seconds (0 to 99) |
+
+Put the text last, after the switches. A key that is not in the set
+beeps. Break, Esc or Ctrl-C stops the batch file. A mistake in the
+switches sets ERRORLEVEL to 255.
 
 ### AUTOEXEC.BAT
 
