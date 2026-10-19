@@ -1265,7 +1265,8 @@ IF ERRORLEVEL 1 PICO-ORIC
 - **The `pollkey` hook** (`shell_hooks_t`, beside `getkey`): the next
   input byte if one is waiting, otherwise -1 at once. The port polls the
   keyboard and blinks the cursor as `getkey` does; the host shell reads
-  its terminal without waiting.
+  its terminal without waiting. Without it, or without `now_us`, `/T`
+  waits for a key with no time limit.
 
 *As built at M9, step 3* (2026-10-14; `src/core/edit.c`,
 `editor_file.c`, `keys.c`):

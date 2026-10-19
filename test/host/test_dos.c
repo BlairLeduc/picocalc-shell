@@ -297,6 +297,13 @@ static int batch_tests(void) {
     keys = "";
     s_clock = 0;
     CHECK(run("CHOICE /T:n,0") == 2 && s_clock == 250000u, "/T at once: '%s'", con);
+    /* With no clock, /T waits for a key as if it had no time limit. */
+    sh.hooks.now_us = NULL;
+    keys = "";
+    CHECK(run("CHOICE /T:N,5") == 130, "/T with no clock: '%s'", con);
+    keys = "y";
+    CHECK(run("CHOICE /T:N,5") == 1 && strcmp(con, "[Y,N]?Y\n") == 0, "/T with no clock, a key: '%s'", con);
+    sh.hooks.now_us = now;
     struct { const char *line, *why; } bad[] = {
         { "CHOICE /X", "CHOICE: invalid switch - /X\n" },
         { "CHOICE /NX", "CHOICE: invalid switch - /NX\n" },

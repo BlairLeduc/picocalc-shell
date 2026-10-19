@@ -597,14 +597,15 @@ int dos_choice(shell_t *sh, int argc, char **argv) {
         out_puts(&sh->con, "]?");
     }
 
-    uint64_t end = timed && sh->hooks.now_us
-                       ? sh->hooks.now_us(sh->hooks.ctx) + (uint64_t)secs * 1000000u : 0;
+    /* A time limit needs both a clock and a key that does not wait. */
+    timed = timed && sh->hooks.pollkey && sh->hooks.now_us;
+    uint64_t end = timed ? sh->hooks.now_us(sh->hooks.ctx) + (uint64_t)secs * 1000000u : 0;
     for (;;) {
         int key;
-        if (timed && sh->hooks.pollkey) {
+        if (timed) {
             key = sh->hooks.pollkey(sh->hooks.ctx);
             if (key < 0) {
-                if (!sh->hooks.now_us || sh->hooks.now_us(sh->hooks.ctx) < end) continue;
+                if (sh->hooks.now_us(sh->hooks.ctx) < end) continue;
                 key = (unsigned char)dflt;
             }
         } else {

@@ -30,7 +30,8 @@ typedef struct {
     int (*getkey)(void *ctx);
     /* The next input byte if one is waiting, otherwise -1 at once, for a
      * command that waits for a key with a time limit, such as DOS's
-     * CHOICE /T. NULL: none, and such a command waits without one. */
+     * CHOICE /T. NULL: none, and such a command waits without one, as
+     * it does when now_us is NULL. */
     int (*pollkey)(void *ctx);
     /* Offer the card over USB until the computer ejects it or a key
      * stops it (design.md §4.2): NULL, or why not. FatFs's volume is
