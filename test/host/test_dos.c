@@ -33,9 +33,12 @@ static void sink(void *ctx, const char *buf, size_t n) {
     con[con_len] = '\0';
 }
 
+/* The clock, which moves only while pollkey finds no key. */
+static uint64_t s_clock;
+
 static uint64_t now(void *ctx) {
     (void)ctx;
-    return 0;
+    return s_clock;
 }
 
 /* Break after this many more polls; never if negative. */
@@ -49,6 +52,14 @@ static bool interrupted(void *ctx) {
 static int getkey(void *ctx) {
     (void)ctx;
     return *keys ? (unsigned char)*keys++ : -1;
+}
+
+/* The next key typed, or a quarter of a second with none. */
+static int pollkey(void *ctx) {
+    (void)ctx;
+    if (*keys) return (unsigned char)*keys++;
+    s_clock += 250000u;
+    return -1;
 }
 
 static void clear(void) {
@@ -255,6 +266,78 @@ static int batch_tests(void) {
     CHECK(run("IF a==a") == 2 && has("Syntax error"), "no command: '%s'", con);
     CHECK(run("IF ERRORLEVEL x ECHO y") == 2 && has("Syntax error"), "'%s'", con);
     CHECK(run("ECHO x | IF a==a ECHO y") == 2 && has("Syntax error"), "after a pipe: '%s'", con);
+
+    /* CHOICE: the keys' place, the prompt, /N, /S and /T. */
+    keys = "n";
+    CHECK(run("CHOICE") == 2 && strcmp(con, "[Y,N]?N\n") == 0, "default keys: '%s'", con);
+    keys = "q";
+    CHECK(run("CHOICE /C:12Q Which one") == 3 && strcmp(con, "Which one[1,2,Q]?Q\n") == 0,
+          "/C: '%s'", con);
+    keys = "2";
+    CHECK(run("choice /c12q \"Pick \"") == 2 && strcmp(con, "Pick [1,2,Q]?2\n") == 0,
+          "no colon, quoted text: '%s'", con);
+    keys = "b";
+    CHECK(run("CHOICE /N /C:ab") == 2 && strcmp(con, "B\n") == 0, "/N: '%s'", con);
+    keys = "Aa";
+    CHECK(run("CHOICE /S /C:aA") == 2 && strcmp(con, "[a,A]?A\n") == 0, "/S: '%s'", con);
+    keys = "xy";
+    CHECK(run("CHOICE") == 1 && strcmp(con, "[Y,N]?\aY\n") == 0, "a key not among them: '%s'", con);
+    keys = "";
+    s_clock = 0;
+    CHECK(run("CHOICE /T:N,5") == 2 && strcmp(con, "[Y,N]?N\n") == 0 && s_clock >= 5000000u &&
+              s_clock < 5500000u,
+          "/T runs out: '%s' at %llu", con, (unsigned long long)s_clock);
+    keys = "z";
+    s_clock = 0;
+    CHECK(run("CHOICE /TN,2 Go") == 2 && strcmp(con, "Go[Y,N]?\aN\n") == 0 && s_clock >= 2000000u &&
+              s_clock < 2500000u,
+          "/T not restarted: '%s'", con);
+    keys = "y";
+    CHECK(run("CHOICE /T:N,10") == 1 && strcmp(con, "[Y,N]?Y\n") == 0, "/T, a key: '%s'", con);
+    keys = "";
+    s_clock = 0;
+    CHECK(run("CHOICE /T:n,0") == 2 && s_clock == 250000u, "/T at once: '%s'", con);
+    /* With no clock, /T waits for a key as if it had no time limit. */
+    sh.hooks.now_us = NULL;
+    keys = "";
+    CHECK(run("CHOICE /T:N,5") == 130, "/T with no clock: '%s'", con);
+    keys = "y";
+    CHECK(run("CHOICE /T:N,5") == 1 && strcmp(con, "[Y,N]?Y\n") == 0, "/T with no clock, a key: '%s'", con);
+    sh.hooks.now_us = now;
+    struct { const char *line, *why; } bad[] = {
+        { "CHOICE /X", "CHOICE: invalid switch - /X\n" },
+        { "CHOICE /NX", "CHOICE: invalid switch - /NX\n" },
+        { "CHOICE /C", "CHOICE: invalid choice switch syntax. Expected form: /C[:]choices\n" },
+        { "CHOICE /C:", "CHOICE: invalid choice switch syntax. Expected form: /C[:]choices\n" },
+        { "CHOICE /C:a/b", "CHOICE: invalid choice switch syntax. Expected form: /C[:]choices\n" },
+        { "CHOICE /T:N", "CHOICE: Incorrect timeout syntax. Expected form Tc,nn or T:c,nn\n" },
+        { "CHOICE /T:N,100", "CHOICE: Incorrect timeout syntax. Expected form Tc,nn or T:c,nn\n" },
+        { "CHOICE /T:N,x", "CHOICE: Incorrect timeout syntax. Expected form Tc,nn or T:c,nn\n" },
+        { "CHOICE /T:Q,5", "CHOICE: Timeout default not in specified (or default) choices.\n" },
+        { "CHOICE /S /T:n,5", "CHOICE: Timeout default not in specified (or default) choices.\n" },
+    };
+    for (size_t i = 0; i < sizeof bad / sizeof bad[0]; i++) {
+        keys = "y";
+        CHECK(run(bad[i].line) == 255 && strcmp(con, bad[i].why) == 0, "%s: '%s'", bad[i].line, con);
+    }
+    /* Esc, and the end of the input, stop the line. */
+    keys = "\x1b";
+    CHECK(run("CHOICE") == 130 && strcmp(con, "[Y,N]?\n^C\n") == 0, "Esc: '%s'", con);
+    keys = "";
+    CHECK(run("CHOICE") == 130, "end of input: '%s'", con);
+    /* A menu in a batch file: IF ERRORLEVEL, highest first, with GOTO. */
+    CHECK(put("/HOME/MENU.BAT", "@ECHO OFF\r\n:TOP\r\nECHO 1 one\r\nECHO 2 two\r\n"
+                                "CHOICE /C:12Q /N Pick:\r\n"
+                                "IF ERRORLEVEL 3 GOTO END\r\nIF ERRORLEVEL 2 GOTO TWO\r\n"
+                                "ECHO chose one\r\nGOTO TOP\r\n:TWO\r\nECHO chose two\r\nGOTO TOP\r\n"
+                                ":END\r\nECHO bye\r\n"),
+          "MENU");
+    keys = "21q";
+    CHECK(run("MENU") == 0 &&
+              strcmp(con, "1 one\n2 two\nPick:2\nchose two\n1 one\n2 two\nPick:1\nchose one\n"
+                          "1 one\n2 two\nPick:Q\nbye\n") == 0,
+          "menu: '%s'", con);
+    keys = "";
 
     /* FOR, at the prompt with %x and in a file with %%x; a wildcard as
      * typed before each name; echoed with ECHO ON, not after @. */
@@ -712,7 +795,7 @@ static int dos_tests(bool fat32) {
 
 int main(void) {
     const out_t out = { sink, NULL, false };
-    const shell_hooks_t hooks = { now, interrupted, getkey, NULL, NULL };
+    const shell_hooks_t hooks = { now, interrupted, getkey, pollkey, NULL, NULL };
     shell_init(&sh, &out, &hooks, "test");
     if (unit_tests()) return 1;
     if (dos_tests(false)) return 1;

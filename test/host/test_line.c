@@ -67,7 +67,7 @@ static bool touch(const char *path) {
 
 int main(void) {
     const out_t out = { sink, NULL, false };
-    const shell_hooks_t hooks = { now, interrupted, NULL, NULL, NULL };
+    const shell_hooks_t hooks = { now, interrupted, NULL, NULL, NULL, NULL };
     term_init(&t);
     shell_init(&sh, &out, &hooks, "test");
     CHECK(host_disk_create(NULL, 64u << 20, true), "image");
@@ -298,6 +298,30 @@ int main(void) {
     CHECK(strcmp(row(1), "data/          new notes.txt") == 0 &&
               strcmp(row(2), "Docs/          notes.txt") == 0,
           "list: '%s' '%s'", row(1), row(2));
+    /* Three columns of 12 would fill the row, and the terminal would wrap
+     * it into a blank row: two columns, for the list and for ls. */
+    key(0x03);
+    CHECK(f_mkdir("/home/w") == FR_OK, "mkdir");
+    const char *wide[] = { "aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc",
+                           "dddddddddddd", "eeeeeeeeeeee", "ffffffffffff" };
+    for (int i = 0; i < 6; i++) {
+        char p[32];
+        snprintf(p, sizeof p, "/home/w/%s", wide[i]);
+        CHECK(touch(p), "%s", p);
+    }
+    fresh();
+    type("ls w/\t\t");
+    CHECK(strcmp(row(1), "aaaaaaaaaaaa  dddddddddddd") == 0 &&
+              strcmp(row(2), "bbbbbbbbbbbb  eeeeeeeeeeee") == 0 &&
+              strcmp(row(3), "cccccccccccc  ffffffffffff") == 0,
+          "list, wide: '%s' '%s' '%s'", row(1), row(2), row(3));
+    key(0x03);
+    fresh();
+    type("ls w\r");
+    CHECK(strcmp(row(1), "aaaaaaaaaaaa  dddddddddddd") == 0 &&
+              strcmp(row(2), "bbbbbbbbbbbb  eeeeeeeeeeee") == 0 &&
+              strcmp(row(3), "cccccccccccc  ffffffffffff") == 0 && strcmp(row(4), "/home>") == 0,
+          "ls, wide: '%s' '%s' '%s' '%s'", row(1), row(2), row(3), row(4));
 
     host_disk_close();
     TEST_DONE();

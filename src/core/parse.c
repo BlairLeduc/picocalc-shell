@@ -87,6 +87,7 @@ bool parse_line(parse_t *p, const char *line) {
             c = &p->cmds[p->ncmds++];
             c->sep = sep;
             c->argv = &p->words[nwords];
+            c->start = (unsigned)(s - line);
         }
 
         if (*s == '<' && c->sep == SEP_PIPE) return fail(p, "input both piped and redirected");
@@ -99,6 +100,7 @@ bool parse_line(parse_t *p, const char *line) {
             if (!*s || *s == '#' || is_meta(*s)) return fail(p, "a redirection with no file");
             char *name = t;
             if (!word(p, &s, &t)) return false;
+            c->end = (unsigned)(s - line);
             if (out) {
                 c->out = name;
                 c->append = append;
@@ -113,6 +115,7 @@ bool parse_line(parse_t *p, const char *line) {
         p->words[nwords++] = t;
         c->argc++;
         if (!word(p, &s, &t)) return false;
+        c->end = (unsigned)(s - line);
     }
 
     if (c && c->argc == 0) return fail(p, "a redirection with no command");

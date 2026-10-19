@@ -1,6 +1,7 @@
 /* dos.c — the DOS flavour (flavour.h, dos.h; design.md §4.7): its
  * builtins, the prompt, running a parsed line, and CLS, VER, MEM, SET,
- * PATH, PROMPT, ECHO and PAUSE. */
+ * PATH, PROMPT, ECHO and PAUSE. CHOICE is with the batch files'
+ * commands, in dos_batch.c. */
 
 #include <stdio.h>
 #include <string.h>
@@ -264,6 +265,7 @@ const shell_builtin_t flavour_builtins[] = {
     { "CALL",      dos_call,      "CALL file [parameters]", "Starts a batch file and returns" },
     { "CD",        dos_cd,        "CD [path]", "Displays or changes the directory" },
     { "CHDIR",     dos_cd,        "CHDIR [path]", "Displays or changes the directory" },
+    { "CHOICE",    dos_choice,    "CHOICE [/C[:]keys] [/N] [/S] [/T[:]c,nn] [text]", "Waits for one of a set of keys" },
     { "CLS",       dos_cls,       "CLS", "Clears the screen" },
     { "COPY",      dos_copy,      "COPY source [destination]", "Copy one or more files" },
     { "DEL",       dos_del,       "DEL [/P] path", "Removes one or more files" },

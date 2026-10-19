@@ -123,7 +123,7 @@ static const char *power(void *ctx, shell_power_t what) {
 
 int main(void) {
     const out_t out = { sink, NULL, false };
-    const shell_hooks_t hooks = { now, interrupted, NULL, NULL, NULL };
+    const shell_hooks_t hooks = { now, interrupted, NULL, NULL, NULL, NULL };
     term_init(&t);
     shell_init(&sh, &out, &hooks, "v-test");
     CHECK(host_disk_create(NULL, 32u << 20, false), "image");
@@ -146,8 +146,8 @@ int main(void) {
 
     /* ---- man ---- */
     CHECK(run("man") == 0, "man");
-    CHECK(strncmp(con, "backlight  battery    bootsel\ncat", 33) == 0, "columns: '%.60s'", con);
-    CHECK(strstr(con, "\n`man name` for one.") && strstr(con, " wc\n") && strstr(con, "tail"),
+    CHECK(strncmp(con, "backlight  battery    bootsel\nbreak      cat", 40) == 0, "columns: '%.60s'", con);
+    CHECK(strstr(con, "\n`man name` for one.") && strstr(con, "\nwc\n") && strstr(con, "tail"),
           "man: '%s'", con);
     for (unsigned i = 0; shell_builtin_at(i); i++) {
         char line[32];

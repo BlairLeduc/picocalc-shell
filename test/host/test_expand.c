@@ -139,7 +139,7 @@ int main(void) {
         CHECK(path_match(m[i].pat, m[i].name) == m[i].want, "'%s' on '%s'", m[i].pat, m[i].name);
 
     const out_t out = { sink, NULL, false };
-    const shell_hooks_t hooks = { now, interrupted, NULL, NULL, NULL };
+    const shell_hooks_t hooks = { now, interrupted, NULL, NULL, NULL, NULL };
     shell_init(&sh, &out, &hooks, "test");
 
     /* Quotes and escapes, as the parser's tests had them before M4. */

@@ -3,8 +3,10 @@
  * `||`, NAME=value, `sh` scripts and /etc/profile, and its builtins:
  * the file commands (files.h), `more`, `grep`, `head`, `tail` and `wc`
  * (text.h), the PicoCalc's own (system.h), `echo`, `set`, `unset`,
- * `export`, `sh`, `history`, `menu`, `usbdisk`, `vi` and `view` (vi.h). */
+ * `export`, `sh`, `history`, `menu`, `usbdisk`, `vi` and `view` (vi.h);
+ * and `select` with `break`, its one compound command. */
 
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -12,6 +14,8 @@
 #include "files.h"
 #include "flavour.h"
 #include "history.h"
+#include "keycodes.h"
+#include "line.h"
 #include "parse.h"
 #include "path.h"
 #include "pipe.h"
@@ -24,6 +28,8 @@
 #define PROFILE "/etc/profile"
 
 static int script(shell_t *sh, const char *name);
+static int cmd_select(shell_t *sh, int argc, char **argv);
+static int cmd_break(shell_t *sh, int argc, char **argv);
 
 /* ---- commands --------------------------------------------------------- */
 
@@ -109,6 +115,7 @@ const shell_builtin_t flavour_builtins[] = {
     { "backlight",  cmd_backlight,  "backlight [lcd|kbd] [0-255]", "Shows or sets a backlight" },
     { "battery",    cmd_battery,    "battery", "Displays the battery's charge" },
     { "bootsel",    cmd_bootsel,    "bootsel", "Reboot into bootloader mode (BOOTSEL)" },
+    { "break",      cmd_break,      "break [N]", "Leaves a select, or N of them" },
     { "cat",        cmd_cat,        "cat file... (or cat < file)", "Concatenate and print files" },
     { "cd",         cmd_cd,         "cd [dir]", "Change directory; $HOME with none" },
     { "clear",      cmd_clear,      "clear", "Clears the screen" },
@@ -132,6 +139,7 @@ const shell_builtin_t flavour_builtins[] = {
     { "reboot",     cmd_reboot,     "reboot", "Restarts the shell" },
     { "rm",         cmd_rm,         "rm [-r] path...", "Removes files, -r directories" },
     { "rmdir",      cmd_rmdir,      "rmdir dir...", "Removes empty directories" },
+    { "select",     cmd_select,     "select NAME in WORD...; do LIST; done", "Offers the words as a menu" },
     { "set",        cmd_set,        "set", "Lists the variables" },
     { "sh",         cmd_sh,         "sh file", "Runs a script" },
     { "tail",       cmd_tail,       "tail [-n N] [file...]", "Displays the last lines, 10 by default" },
@@ -200,6 +208,9 @@ static int stage(shell_t *sh, int k, pipe_t *from, pipe_t *to, void *ctx) {
     return run_cmd(sh, &s->p->cmds[s->first + k], from, to);
 }
 
+/* A parsed line's commands, at this level. */
+static int run_parsed(shell_t *sh, const parse_t *p);
+
 /* A line at this level. `where` names a script's file and line for a
  * mistake in it; NULL for a typed line. */
 static int run_line(shell_t *sh, const char *line, const char *where) {
@@ -209,7 +220,384 @@ static int run_line(shell_t *sh, const char *line, const char *where) {
         else shell_error(sh, "shell: %s\n", p->error);
         return sh->status = 2;
     }
-    for (int i = 0; i < p->ncmds && !sh->stop;) {
+    return run_parsed(sh, p);
+}
+
+/* Each level's script and its reader. */
+static FIL      s_script[SHELL_DEPTH];
+static reader_t s_reader[SHELL_DEPTH];
+static char     s_text[SHELL_DEPTH][SHELL_LINE_MAX + 2];
+static char     s_where[SHELL_DEPTH][SHELL_PATH_MAX + 16];
+
+/* ---- select (design.md §4.4) ------------------------------------------ */
+
+/* A select is kept as the pieces of its lines between the words select,
+ * do and done, each piece of commands a line of its own to run_line. */
+typedef enum { PART_CMDS, PART_SELECT, PART_DO, PART_DONE } part_kind_t;
+
+typedef struct {
+    uint8_t  kind;
+    uint16_t text;              /* PART_CMDS, PART_SELECT: into compound_t.text */
+    uint16_t line;              /* its line in the script; 0 at the prompt */
+} part_t;
+
+/* Each level's select, from `select` to its `done`, while it is read and
+ * while it runs, and the words offered by it and those inside it. */
+typedef struct {
+    char        text[SHELL_SELECT_TEXT];
+    size_t      used;
+    part_t      parts[SHELL_SELECT_PARTS];
+    unsigned    nparts;         /* 0: none being read or run */
+    unsigned    open;           /* selects read and not yet ended by done */
+    bool        want_do;        /* the last piece was a select's words */
+    bool        broken;         /* a mistake in it: the script ends */
+    unsigned    line;           /* the first select's line */
+    const char *name;           /* the script's; NULL at the prompt */
+    char        words[SHELL_SELECT_WORDS];
+    size_t      wused;
+    uint16_t    items[SHELL_SELECT_ITEMS];   /* into words */
+    unsigned    nitems;
+    unsigned    loops;          /* selects running */
+    unsigned    brk;            /* selects `break` is leaving */
+} compound_t;
+
+static compound_t s_comp[SHELL_DEPTH];
+
+typedef enum { KW_NONE, KW_SELECT, KW_DO, KW_DONE } kw_t;
+
+/* select, do and done count only unquoted, as a command's first word. */
+static kw_t keyword(const parse_cmd_t *c) {
+    const char *w = c->argv[0];
+    if (strcmp(w, "select") == 0) return KW_SELECT;
+    if (strcmp(w, "do") == 0) return KW_DO;
+    if (strcmp(w, "done") == 0) return KW_DONE;
+    return KW_NONE;
+}
+
+static bool has_keyword(const parse_t *p) {
+    for (int i = 0; i < p->ncmds; i++)
+        if (keyword(&p->cmds[i]) != KW_NONE) return true;
+    return false;
+}
+
+static bool is_blank(char c) { return c == ' ' || c == '\t'; }
+
+/* A decimal number of digits alone, or 0. */
+static unsigned long number(const char *s) {
+    unsigned long n = 0;
+    if (!*s) return 0;
+    for (; *s; s++) {
+        if (*s < '0' || *s > '9' || n > 99999999ul) return 0;
+        n = n * 10u + (unsigned long)(*s - '0');
+    }
+    return n;
+}
+
+static bool mistake(shell_t *sh, const char *where, const char *why) {
+    if (where) shell_error(sh, "sh: %s: %s\n", where, why);
+    else shell_error(sh, "shell: %s\n", why);
+    return false;
+}
+
+static bool add_part(shell_t *sh, compound_t *k, part_kind_t kind, const char *s, size_t n,
+                     unsigned line, const char *where) {
+    part_t *pt = &k->parts[k->nparts];
+    if (k->nparts == SHELL_SELECT_PARTS || (s && k->used + n + 1u > sizeof k->text))
+        return mistake(sh, where, "select too long");
+    pt->kind = (uint8_t)kind;
+    pt->line = (uint16_t)line;
+    pt->text = (uint16_t)k->used;
+    if (s) {
+        memcpy(k->text + k->used, s, n);
+        k->text[k->used + n] = '\0';
+        k->used += n + 1u;
+    }
+    k->nparts++;
+    return true;
+}
+
+/* The commands in s[0..n): after a keyword's command when `lead`, so
+ * with the ';' after it, and before one when `trail`, with the ';'
+ * before it. Blank, or only a comment, they are no piece. */
+static bool add_cmds(shell_t *sh, compound_t *k, const char *s, size_t n, bool lead, bool trail,
+                     unsigned line, const char *where) {
+    while (n && is_blank(*s)) s++, n--;
+    if (lead && n && *s == ';') s++, n--;
+    while (n && is_blank(*s)) s++, n--;
+    while (n && is_blank(s[n - 1])) n--;
+    if (trail && n && s[n - 1] == ';') n--;
+    if (n == 0 || *s == '#') return true;
+    if (k->want_do) return mistake(sh, where, "select: do expected");
+    return add_part(sh, k, PART_CMDS, s, n, line, where);
+}
+
+/* The pieces of one line of a select, added to k. False, with the
+ * mistake reported, if it is not one. */
+static bool split(shell_t *sh, compound_t *k, const char *text, unsigned line, const char *where) {
+    parse_t *p = &s_frames[sh->depth].parse;
+again:
+    if (!parse_line(p, text)) return mistake(sh, where, p->error);
+    unsigned from = 0;
+    for (int i = 0; i < p->ncmds; i++) {
+        const parse_cmd_t *c = &p->cmds[i];
+        kw_t kw = keyword(c);
+        if (kw == KW_NONE) continue;
+        if (c->sep != SEP_FIRST && c->sep != SEP_SEMI)
+            return mistake(sh, where, "select, do and done may follow only ; or a line's start");
+        if (!add_cmds(sh, k, text + from, c->start - from, from > 0, true, line, where)) return false;
+        if (kw != KW_DO) {
+            if (i + 1 < p->ncmds && p->cmds[i + 1].sep != SEP_SEMI)
+                return mistake(sh, where, "only ; or a line's end may follow select's words or done");
+            if (c->in || c->out) return mistake(sh, where, "a select cannot be redirected");
+        }
+        switch (kw) {
+        case KW_SELECT:
+            if (k->want_do) return mistake(sh, where, "select: do expected");
+            if (c->argc < 3 || strcmp(c->argv[2], "in") != 0)
+                return mistake(sh, where, "usage: select NAME in WORD...; do LIST; done");
+            if (!vars_is_name(c->argv[1], strlen(c->argv[1])))
+                return mistake(sh, where, "select: not a name");
+            if (k->open == 0) k->line = line;
+            if (!add_part(sh, k, PART_SELECT, text + c->start, c->end - c->start, line, where))
+                return false;
+            k->open++;
+            k->want_do = true;
+            break;
+        case KW_DO:
+            if (!k->want_do) return mistake(sh, where, "do without select");
+            k->want_do = false;
+            if (!add_part(sh, k, PART_DO, NULL, 0, line, where)) return false;
+            text += c->start + 2u;   /* the LIST may start on its line */
+            goto again;
+        case KW_DONE:
+            if (k->open == 0) return mistake(sh, where, "done without select");
+            if (k->want_do) return mistake(sh, where, "select: do expected");
+            if (c->argc > 1) return mistake(sh, where, "done: a word after it");
+            if (!add_part(sh, k, PART_DONE, NULL, 0, line, where)) return false;
+            k->open--;
+            break;
+        case KW_NONE:
+            break;
+        }
+        from = c->end;
+    }
+    return add_cmds(sh, k, text + from, strlen(text) - from, from > 0, false, line, where);
+}
+
+static const char *where_of(shell_t *sh, const compound_t *k, unsigned line) {
+    if (!k->name) return NULL;
+    snprintf(s_where[sh->depth], sizeof s_where[sh->depth], "%s: line %u", k->name, line);
+    return s_where[sh->depth];
+}
+
+static bool push_word(compound_t *k, const char *w) {
+    size_t n = strlen(w) + 1u;
+    if (k->wused + n > sizeof k->words) return false;
+    memcpy(k->words + k->wused, w, n);
+    k->wused += n;
+    return true;
+}
+
+/* The menu, to the terminal: `N) word` down the columns, as ls lays out
+ * names, each row short of the last column: the terminal wraps as soon as
+ * a row is full, so a full row and its line break would be two rows. */
+static void show_menu(shell_t *sh, const compound_t *k, unsigned first, unsigned n) {
+    unsigned nw = 1;
+    for (unsigned v = n; v >= 10u; v /= 10u) nw++;
+    size_t wmax = 0;
+    for (unsigned i = 0; i < n; i++) {
+        size_t w = nw + 2u + strlen(k->words + k->items[first + i]);
+        if (w > wmax) wmax = w;
+    }
+    unsigned colw = (unsigned)wmax + 2u;
+    unsigned cols = (TERM_COLS + 1u) / colw;
+    if (cols == 0) cols = 1;
+    unsigned rows = (n + cols - 1u) / cols;
+    if (!sh->at_bol) out_puts(&sh->con, "\n");
+    for (unsigned r = 0; r < rows; r++) {
+        for (unsigned i = r; i < n; i += rows) {
+            const char *w = k->words + k->items[first + i];
+            out_printf(&sh->con, "%*u) %s", (int)nw, i + 1u, w);
+            if (i + rows < n)
+                for (size_t pad = nw + 2u + strlen(w); pad < colw; pad++) out_puts(&sh->con, " ");
+        }
+        out_puts(&sh->con, "\n");
+    }
+}
+
+/* A line typed after $PS3, into sh->line: 1; 0 at the end of the input;
+ * -1 when stopped by Break, Esc or Ctrl-C. */
+static int read_reply(shell_t *sh) {
+    const char *ps3 = vars_get("PS3", 3);
+    if (!ps3) ps3 = "#? ";
+    if (!sh->at_bol) out_puts(&sh->con, "\n");
+    out_puts(&sh->con, ps3);
+    line_start(sh, strlen(ps3));
+    for (;;) {
+        int key = sh->hooks.getkey(sh->hooks.ctx);
+        if (key < 0) {
+            out_puts(&sh->con, "\n");
+            return 0;
+        }
+        if (key == 0x03 || key == 0x1B || key == KEY_BREAK) {
+            line_key(sh, KEY_END);
+            sh->stop = true;
+            return -1;
+        }
+        if (line_key(sh, key)) return 1;
+    }
+}
+
+static int run_parts(shell_t *sh, compound_t *k, unsigned i, unsigned end);
+
+/* The select whose words are part i and whose done is part j. */
+static void run_select(shell_t *sh, compound_t *k, unsigned i, unsigned j) {
+    unsigned d = sh->depth;
+    parse_t *p = &s_frames[d].parse;
+    expand_t *e = &s_frames[d].exp;
+    if (!sh->hooks.getkey) {
+        shell_error(sh, "select: no keyboard\n");
+        sh->status = 1;
+        return;
+    }
+    if (!parse_line(p, k->text + k->parts[i].text)) {   /* it parsed when it was read */
+        mistake(sh, where_of(sh, k, k->parts[i].line), p->error);
+        sh->status = 2;
+        return;
+    }
+    const parse_cmd_t *c = &p->cmds[0];
+    if (!expand_args(sh, c->argv + 3, e)) {
+        sh->status = 1;
+        return;
+    }
+    /* The LIST uses p and e: keep NAME and the words. */
+    size_t w0 = k->wused;
+    unsigned n0 = k->nitems, n = (unsigned)e->argc;
+    size_t nlen = strlen(c->argv[1]);
+    bool fits = push_word(k, c->argv[1]) && n0 + n <= SHELL_SELECT_ITEMS;
+    for (unsigned w = 0; fits && w < n; w++) {
+        k->items[n0 + w] = (uint16_t)k->wused;
+        fits = push_word(k, e->argv[w]);
+    }
+    const char *name = k->words + w0;
+    sh->status = 0;
+    if (!fits) {
+        shell_error(sh, "select: more words than it can offer\n");
+        sh->status = 1;
+    } else if (n > 0) {
+        k->nitems = n0 + n;
+        k->loops++;
+        show_menu(sh, k, n0, n);
+        while (read_reply(sh) > 0) {
+            const char *reply = sh->line.text;
+            unsigned long v = number(reply);
+            const char *word = v >= 1u && v <= n ? k->words + k->items[n0 + v - 1u] : "";
+            if (!vars_set("REPLY", 5, reply) || !vars_set(name, nlen, word)) {
+                shell_error(sh, "select: no room for %s\n", name);
+                sh->status = 1;
+                break;
+            }
+            if (!*reply) {
+                show_menu(sh, k, n0, n);
+                continue;
+            }
+            run_parts(sh, k, i + 2u, j);
+            if (k->brk) {
+                k->brk--;
+                break;
+            }
+            if (sh->stop) break;
+        }
+        if (--k->loops == 0) k->brk = 0;
+    }
+    k->wused = w0;
+    k->nitems = n0;
+}
+
+/* Parts [i, end) of this level's select. */
+static int run_parts(shell_t *sh, compound_t *k, unsigned i, unsigned end) {
+    while (i < end && !sh->stop && !k->brk) {
+        const part_t *pt = &k->parts[i];
+        if (pt->kind == PART_CMDS) {
+            run_line(sh, k->text + pt->text, where_of(sh, k, pt->line));
+            i++;
+            continue;
+        }
+        /* A select's words; its do and done are taken with it. */
+        unsigned j = i + 2u, open = 1;
+        for (;; j++) {
+            if (k->parts[j].kind == PART_SELECT) open++;
+            else if (k->parts[j].kind == PART_DONE && --open == 0) break;
+        }
+        run_select(sh, k, i, j);
+        i = j + 1u;
+    }
+    return sh->status;
+}
+
+static void select_reset(compound_t *k) {
+    k->nparts = k->open = 0;
+    k->used = 0;
+    k->want_do = false;
+}
+
+/* A line at this level, typed (name NULL), or line `line` of the script
+ * `name`, with `where` naming it. A select is read to its done over the
+ * script's lines, and then run; at the prompt it fits on one. */
+static int run_top(shell_t *sh, const char *text, const char *name, unsigned line,
+                   const char *where) {
+    compound_t *k = &s_comp[sh->depth];
+    if (k->nparts == 0) {
+        parse_t *p = &s_frames[sh->depth].parse;
+        if (!parse_line(p, text)) {
+            mistake(sh, where, p->error);
+            return sh->status = 2;
+        }
+        if (!has_keyword(p)) return run_parsed(sh, p);
+        select_reset(k);
+        k->name = name;
+    }
+    if (!split(sh, k, text, line, where)) {
+        select_reset(k);
+        k->broken = name != NULL;
+        return sh->status = 2;
+    }
+    if (k->open > 0) {
+        if (name) return sh->status;   /* the rest is on the lines to come */
+        mistake(sh, NULL, "select with no done");
+        select_reset(k);
+        return sh->status = 2;
+    }
+    run_parts(sh, k, 0, k->nparts);
+    select_reset(k);
+    return sh->status;
+}
+
+static int cmd_select(shell_t *sh, int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+    shell_error(sh, "select: only as a command's first word, unquoted\n");
+    return 2;
+}
+
+static int cmd_break(shell_t *sh, int argc, char **argv) {
+    compound_t *k = &s_comp[sh->depth];
+    unsigned long n = argc == 2 ? number(argv[1]) : 1u;
+    if (argc > 2 || n == 0) {
+        shell_error(sh, "usage: break [N]\n");
+        return 1;
+    }
+    if (k->loops == 0) {
+        shell_error(sh, "break: not in a select\n");
+        return 1;
+    }
+    k->brk = n < k->loops ? (unsigned)n : k->loops;
+    return 0;
+}
+
+static int run_parsed(shell_t *sh, const parse_t *p) {
+    const compound_t *k = &s_comp[sh->depth];
+    for (int i = 0; i < p->ncmds && !sh->stop && !k->brk;) {
         int end = i + 1;
         while (end < p->ncmds && p->cmds[end].sep == SEP_PIPE) end++;
         /* A pipeline skipped by && or || leaves the status as it was. */
@@ -224,14 +612,8 @@ static int run_line(shell_t *sh, const char *line, const char *where) {
 }
 
 int flavour_run_line(shell_t *sh, const char *line) {
-    return run_line(sh, line, NULL);
+    return run_top(sh, line, NULL, 0, NULL);
 }
-
-/* Each level's script and its reader. */
-static FIL      s_script[SHELL_DEPTH];
-static reader_t s_reader[SHELL_DEPTH];
-static char     s_text[SHELL_DEPTH][SHELL_LINE_MAX + 2];
-static char     s_where[SHELL_DEPTH][SHELL_PATH_MAX + 16];
 
 /* Run the file `name` a line at a time at the level below, to its end
  * or a stop; the last command's status. /etc/profile, if there is none,
@@ -264,9 +646,19 @@ static int script(shell_t *sh, const char *name) {
         if (piece || (size_t)n > SHELL_LINE_MAX) {
             shell_error(sh, "sh: %s: line too long\n", s_where[d]);
             status = sh->status = 2;
-            continue;
+            if (s_comp[d].nparts == 0) continue;
+            select_reset(&s_comp[d]);
+            break;
         }
-        status = run_line(sh, s_text[d], s_where[d]);
+        status = run_top(sh, s_text[d], name, lineno, s_where[d]);
+        /* A mistake in a select ends the script, as one in sh's grammar does. */
+        if (s_comp[d].broken) break;
+    }
+    s_comp[d].broken = false;
+    if (s_comp[d].nparts) {
+        shell_error(sh, "sh: %s: line %u: select with no done\n", name, s_comp[d].line);
+        select_reset(&s_comp[d]);
+        status = sh->status = 2;
     }
     if (s_reader[d].r != FR_OK) {
         shell_error(sh, "sh: %s: %s\n", name, files_why(s_reader[d].r));

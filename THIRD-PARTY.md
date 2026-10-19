@@ -75,9 +75,15 @@ and glyph 0x7F, in both flavours' fonts.
 
 ## The UNIX flavour's font — the Master 512's
 
-`src/core/font-master-512-8x10.c` is the Master 512's character set, as the
-owner supplied it, in code page 437 order. Changes: arranged as the
-terminal's 128 glyphs, with the DEC special graphics at 0x00-0x1F taken
+`src/core/font-master-512-8x10.c` is the Acorn BBC Master 512's character
+set (DOS Plus), from `FONTS/NON-PC/BBC512.F08` in VileR's collection of
+bitmap fonts compatible with VGA text mode,
+https://github.com/viler-int10h/vga-text-mode-fonts: 256 glyphs of 8x8 in
+code page 437 order. The collection has no licence file; its `FONTS.TXT`
+says that, as far as VileR could determine, including these plain bitmap
+fonts violates no copyright, and asks a font's creator who objects to get
+in touch. Changes: the glyphs drawn in rows 1-8 of an 8x10 cell, and
+arranged as the terminal's 128 glyphs, with the DEC special graphics at 0x00-0x1F taken
 from its own code page 437 glyphs where it has them (the box-drawing ones
 carried into rows 0 and 9) and from the owner's `font-8x10.c` where it does
 not, and code page 437's upper half dropped (design.md §4.1).

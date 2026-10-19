@@ -1,8 +1,8 @@
 # PicoCalc Shell — design
 
-Status: **Draft 11, 2026-10-18.** Feasibility study and first design. M0
+Status: **Draft 12, 2026-10-18.** Feasibility study and first design. M0
 (the skeleton), M1 (files), M2 (run), M3 (vi), M4 (comfort), M6 (USB
-speed), M8 (the rest of v1) and M9 (the DOS flavour) are done
+speed), M8 (the rest of v1), M9 (the DOS flavour) and M11 (menus) are done
 ([milestones.md](milestones.md)). There is no M5: *Exit to shell* in the
 emulators is done in their own projects (§3.4). The commands are explained
 for users in [user-guide-unix.md](user-guide-unix.md), and the DOS flavour's in
@@ -40,6 +40,7 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-16 | A release offers the two flavours' release builds as `shell-unix.uf2` and `shell-dos.uf2`; the user renames the one they want to `BOOT2350.UF2` on the card. | 4.7 |
 | 2026-10-18 | The UNIX flavour has only 40 columns too, in the Master 512's font (`font-master-512-8x10.c`), arranged as the terminal's 128 glyphs with the DEC graphics at `0x00`–`0x1F`, as IBM's is. There is no `font` command and no 64-column mode in either flavour, and the owner's 8x10 and 5x10 are no longer built in. This replaces the 2026-10-12 and 2026-10-14 decisions on the UNIX flavour's fonts. | 4.1 |
 | 2026-10-17 | `picocalc_shell_exit()` returns false when UF2 Loader did not start the program, as well as with no card, and the program decides what to do then (such as power off by its own means). The header stays independent and does not touch the southbridge; `picocalc_shell_loader_present()` tells a program beforehand. | 3.4 |
+| 2026-10-18 | Scripts and batch files can show menus (M11). The UNIX flavour has bash's `select NAME in WORDS; do LIST; done`, with `break`, `PS3` and `REPLY`, as its one compound command: no `if` or `case`, so a menu branches by running the word chosen. The DOS flavour has DOS 6's `CHOICE` with all its switches (`/C`, `/N`, `/S`, `/T`), for `IF ERRORLEVEL` and `GOTO`. | 4.4, 4.7, 10 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -470,7 +471,11 @@ mode. The owner's `font_8x10` and `font_5x10` (40 and 64 columns, from
 `references/fonts/`), settled 2026-10-12, are no longer built in, but
 glyphs from `font_8x10` fill the DEC graphics both fonts lack.
 
-The Master 512's font came in code page 437 order, 256 glyphs. It was
+The Master 512's font is `BBC512.F08` from VileR's collection of VGA
+text mode fonts (`FONTS/NON-PC/`, THIRD-PARTY.md): 256 glyphs of 8x8 in
+code page 437 order, drawn in rows 1–8 of the 8x10 cell (checked
+2026-10-18: `0x20`–`0x7E` and the DEC graphics taken from it match the
+file byte for byte). It was
 arranged once, as `tools/mkfont-ibm.py` arranges IBM's: `0x20`–`0x7E` are
 its ASCII; `0x00`–`0x1F` are the DEC special graphics, each code page 437
 has taken from the font's own glyph, the box-drawing ones carried into
@@ -672,7 +677,8 @@ This is deliberately small: UNIX spelling with a 1980s micro's ambitions.
 - **Pipes `a | b`.** All builtins run in one process, so `a` runs to
   completion into a buffer, spilling to a temporary file when it is large,
   and `b` then reads it. This is enough for `ls | more` and `cat f | grep x`.
-- `;`, `&&` and `||`. There is no `if`, `for` or functions in v1.
+- `;`, `&&` and `||`. There is no `if`, `for` or functions in v1;
+  `select` (M11) is the one compound command.
 - **Line editing** with history and Tab completion of commands and paths.
 - **Scripts:** `/etc/profile` runs at startup, and `sh file` runs a script.
 
@@ -741,7 +747,10 @@ Ctrl-C stops a long command and drops the rest of the line.
   without `.uf2`) as a command's first word, and a path anywhere else.
   One match goes in whole, with `/` after a directory and a space after
   anything else; several put in what they share, and a second Tab with
-  nothing to add lists them in columns. Names are put in as the card
+  nothing to add lists them in columns. *(Fixed at M11:)* this list
+  and `ls`'s stop each row short of the 40th column, as `select`'s menu
+  does: a full row would wrap, and its line break give a blank row.
+  Names are put in as the card
   spells them, with `\` before characters the shell would take as
   special. Up to `SHELL_COMPLETE_MAX` (128) names are offered.
 - **History** (`src/core/history.c`): 2 KB of lines, the oldest dropped;
@@ -752,6 +761,44 @@ Ctrl-C stops a long command and drops the rest of the line.
   write a session rather than one a command. Lines typed since are lost
   if the power goes. `history` lists it.
 
+*M11, `select`* (`src/core/unix.c`): menus, as bash has them.
+
+```
+select p in pico-oric pico-atom vi break; do $p; done
+```
+
+- **The form** is `select NAME in WORD...; do LIST; done`. `select`,
+  `do` and `done` are taken as such only unquoted, at a command's start:
+  at a line's start, after `;`, or just after `do`; anywhere else they are
+  words. Only `;` or the line's end may come before `select` and after
+  `done`, so a select is never in a pipe, after `&&` or `||`, or
+  redirected; `do` may follow the words on the next line. `in` is
+  needed, since there are no script arguments (§3.5). The whole select
+  is checked before any of it runs, as a line is.
+- **Over several lines** in a script, from `select` to its `done`, up to
+  `SHELL_SELECT_TEXT` (1 KB) in `SHELL_SELECT_PARTS` (64) pieces, a select
+  inside another's LIST included; at the prompt it fits on one line.
+  A script that ends first says `select with no done`, with the
+  `select`'s line. A mistake inside LIST is reported with its own line.
+- **Each time round**, the words are expanded once, as `select` starts,
+  as any command's are, into `SHELL_SELECT_WORDS` (512 B, up to
+  `SHELL_SELECT_ITEMS`, 64); with none, nothing happens and the status is
+  0. The menu, `N) word` down the columns as `ls` lays out names but
+  each row short of the 40th column (a full row would wrap, and its line
+  break give a blank row), goes to the terminal, never to a redirection, then `$PS3` (`#? ` if unset).
+  A line is read with the line editor (§4.4's keys, Tab included; it is
+  not kept in the history) into `REPLY`. An empty line shows the menu
+  again. Otherwise `NAME` is set to the word numbered, or emptied if
+  there is none, and LIST runs; then `$PS3` again. With no `if` or
+  `case`, a menu branches by running its word: `$p` with `p` empty is
+  dropped (§4.4), so a wrong number does nothing.
+- **Leaving it.** `break [N]` ends the select, or N of those around it,
+  and the rest of the LIST; outside one it is `break: not in a select`.
+  It does not reach out of a script run by `sh` from LIST. Break, Esc or
+  Ctrl-C stops the line, as anywhere; the end of the input (the host's)
+  ends the select. The status is LIST's last, 0 after `break`. Without a
+  keyboard (the `getkey` hook NULL), `select: no keyboard`, status 1.
+
 ### 4.5 Builtins
 
 Everything that touches files is a builtin, because running anything else
@@ -760,6 +807,9 @@ costs a flash and a reboot.
 *As built at M4:* `cat cd cp df displaytest echo export font grep history
 ls menu mkdir more mv pwd rm rmdir set sh touch unset usbdisk vi view`.
 *(`displaytest` went on 2026-10-15, `font` on 2026-10-18.)*
+*From M11:* `select` and `break` (§4.4), listed with the builtins for
+`man` and Tab, though `select` is taken by the shell before a command
+is looked up.
 *As built at M8:* the rest of the v1 column, `head tail wc help clear
 phosphor battery backlight poweroff info reboot bootsel`. `more`, `grep`,
 `head`, `tail` and `wc` are in `src/core/text.c`:
@@ -941,7 +991,7 @@ card, `files.c` (with safe saves, EL §8.6), running programs (`run.c`,
   `RD`/`RMDIR`, `COPY`, `XCOPY [/S]`, `DEL`/`ERASE`, `DELTREE`,
   `REN`/`RENAME`, `MOVE`, `TYPE`, `MORE`, `FIND [/V /N /C /I]`, `ATTRIB`,
   `CLS`, `VER`, `VOL`, `MEM`, `SET`, `PATH`, `PROMPT`, `ECHO`, `PAUSE`,
-  `HELP`, `EDIT`, `EXIT` (back to the loader's menu, as `menu`). The
+  `CHOICE` (*M11*), `HELP`, `EDIT`, `EXIT` (back to the loader's menu, as `menu`). The
   PicoCalc's own commands keep their names: `battery`, `backlight`,
   `phosphor`, `info`, `usbdisk`, `poweroff`, `reboot`, `bootsel`.
   *(Changed 2026-10-15: `font` is gone, as the flavour has only 40
@@ -951,7 +1001,7 @@ card, `files.c` (with safe saves, EL §8.6), running programs (`run.c`,
 - **Batch files.** `NAME.BAT` runs by name, ahead of a program of the
   same name. `%0`–`%9`, `SHIFT`, `GOTO :label`, `IF [NOT] EXIST`,
   `IF [NOT] ERRORLEVEL n`, `IF [NOT] a==b`, `CALL`, `REM`, `ECHO OFF` and
-  `@`, `PAUSE`, and `FOR %%x IN (set) DO command`. `C:\AUTOEXEC.BAT` runs
+  `@`, `PAUSE`, `CHOICE` (*M11*), and `FOR %%x IN (set) DO command`. `C:\AUTOEXEC.BAT` runs
   at start, in place of `/etc/profile`.
 - **No vi.** EDIT takes its place.
 
@@ -1176,6 +1226,47 @@ rules for size, CR LF and safe save (§4.6).
 - **`AUTOEXEC.BAT`** at the card's root runs after the banner, at level
   1, opened as `/etc/profile` is (`files_open_startup`, so a `.new` left
   by a cut write is used). Missing, it is nothing.
+
+*M11, CHOICE* (`src/core/dos_batch.c`): menus, as DOS 6 had them.
+
+```
+@ECHO OFF
+:MENU
+ECHO 1  Oric
+ECHO 2  Atom
+ECHO Q  Quit
+CHOICE /C:12Q /T:Q,10 Which
+IF ERRORLEVEL 3 GOTO END
+IF ERRORLEVEL 2 PICO-ATOM
+IF ERRORLEVEL 1 PICO-ORIC
+:END
+```
+
+- **`CHOICE [/C[:]keys] [/N] [/S] [/T[:]c,nn] [text]`**. The switches
+  come first, in either case; the first word that is not one starts the
+  text, and the words after it are the text, one blank between each.
+  The keys are `YN` by default, printable characters other than a blank
+  or `/`.
+- **The prompt**, to the terminal as `PAUSE`'s is: the text, then the
+  keys as `[Y,N]?`, with no blank between, as DOS showed it (a blank
+  after the text is put in quotes). `/N` leaves the keys out. The keys
+  are shown in capitals and matched without regard to case, unless `/S`.
+- **A key** among them is shown, the line ended, and the status
+  (ERRORLEVEL) is its place among them, 1 for the first. Any other key
+  sends BEL and is ignored. `/T:c,nn` takes `c`, which must be one of the
+  keys, after `nn` seconds (0–99) with none of them pressed; a key not
+  among them does not restart the count. The wait for a key with `/T`
+  uses the `pollkey` hook (below).
+- **Break, Esc or Ctrl-C** stops the batch file and the line, as
+  anywhere (`^C`, status 130); DOS's ERRORLEVEL 0 is not kept, since
+  nothing after it runs. A mistake (a switch it does not know, `/C` with no
+  keys, `/T` without a key among them or with more than 99 seconds) is
+  reported and the status is 255, as DOS's was; so is having no keyboard.
+- **The `pollkey` hook** (`shell_hooks_t`, beside `getkey`): the next
+  input byte if one is waiting, otherwise -1 at once. The port polls the
+  keyboard and blinks the cursor as `getkey` does; the host shell reads
+  its terminal without waiting. Without it, or without `now_us`, `/T`
+  waits for a key with no time limit.
 
 *As built at M9, step 3* (2026-10-14; `src/core/edit.c`,
 `editor_file.c`, `keys.c`):
@@ -1424,6 +1515,14 @@ panel's shadow and vi's rows 40 columns wide in place of 64, one font in
 place of two, and `font`'s code). The DOS flavour is 407,700 B, 268 B
 less (`shell_cols` and the column switching in the terminal).
 
+**Measured at M11** (the same tools, 2026-10-18, release builds,
+`__end__`, each against main built the same day in the same
+directory): the UNIX flavour 432,068 B, 13,092 B more than 418,976 B:
+`select`'s four levels (`s_comp`, 8,352 B: each 1 KB of text, 64 pieces,
+512 B of words and 64 of their places) and about 4.7 KB of code. About
+72 KB is left. The DOS flavour 409,244 B, 1,552 B more than 407,692 B:
+`CHOICE` and the port's `pollkey`.
+
 **The stack** (*corrected at M3*). Core 0's stack starts at the top of
 scratch Y and may run down to `__StackLimit` at the bottom of scratch X:
 8 KB, because core 1 never starts and nothing is linked into scratch X.
@@ -1593,3 +1692,19 @@ in [milestones.md](milestones.md).
 
   Measure each flavour's RAM, the mount time, and the rate of reading and
   writing a large file.
+- **M11 — Menus.** `select` and `break` in the UNIX flavour (§4.4), and
+  `CHOICE` in the DOS flavour (§4.7), with the `pollkey` hook for its
+  `/T`. Host tests cover, for `select`: one line and several, nested,
+  `break` and `break 2`, an empty line, a wrong number, `PS3` and
+  `REPLY`, a glob in the words, the mistakes (a missing `done`, `do` or
+  `in`, a pipe or `&&` around it, a redirection after `done`), and a
+  stop; for `CHOICE`: each switch, `/T` running out on a fake clock, a
+  key not among them, case, and the mistakes, over FAT16 and FAT32. Done
+  when, on the board, a script in `/etc/profile` and an `AUTOEXEC.BAT`
+  each show a menu at power-on that runs a program chosen by its number
+  or key and comes back, and `CHOICE /T` takes its default when nothing
+  is pressed. Measure the RAM each flavour gains.
+
+  *Done 2026-10-18* (milestones.md): host tests, Claude's runs on the
+  Plus 2 W from SRAM, and the owner's on a Pico 2 W, both flavours'
+  release builds.

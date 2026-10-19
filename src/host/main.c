@@ -67,6 +67,21 @@ static int getkey(void *ctx) {
     return c;
 }
 
+/* The next key if one is waiting on the terminal, otherwise -1 at once.
+ * Typed from a file or a pipe, the next key, as stdio has it buffered. */
+static int pollkey(void *ctx) {
+    if (!s_raw) return getkey(ctx);
+    int flags = fcntl(STDIN_FILENO, F_GETFL);
+    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+    unsigned char c;
+    ssize_t n = read(STDIN_FILENO, &c, 1);
+    fcntl(STDIN_FILENO, F_SETFL, flags);
+    if (n != 1) return -1;
+    if (c == 0x7F) return 0x08;
+    if (c == '\n') return '\r';
+    return c;
+}
+
 static void restore(void) {
     if (s_raw) tcsetattr(STDIN_FILENO, TCSAFLUSH, &s_saved);
     s_raw = false;
@@ -100,7 +115,7 @@ int main(int argc, char **argv) {
 
     static shell_t sh;
     const out_t out = { con_write, NULL, false };
-    const shell_hooks_t hooks = { now_us, interrupted, getkey, NULL, NULL };
+    const shell_hooks_t hooks = { now_us, interrupted, getkey, pollkey, NULL, NULL };
     shell_init(&sh, &out, &hooks, "host");
     shell_start(&sh);
 

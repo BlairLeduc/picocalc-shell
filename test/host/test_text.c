@@ -93,7 +93,7 @@ static const char *span(unsigned a, unsigned b) {
 
 int main(void) {
     const out_t out = { sink, NULL, false };
-    const shell_hooks_t hooks = { now, interrupted, getkey, NULL, NULL };
+    const shell_hooks_t hooks = { now, interrupted, getkey, NULL, NULL, NULL };
     shell_init(&sh, &out, &hooks, "test");
     CHECK(host_disk_create(NULL, 32u << 20, false), "image");
     files_mount();

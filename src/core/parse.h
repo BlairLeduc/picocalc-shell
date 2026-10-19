@@ -30,6 +30,7 @@ typedef struct {
     char  *in;                  /* < file, as typed, or NULL */
     char  *out;                 /* > or >> file, as typed, or NULL */
     bool   append;              /* >> */
+    unsigned start, end;        /* where it is in the line: its first character, and past its last */
 } parse_cmd_t;
 
 typedef struct {

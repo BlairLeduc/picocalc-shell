@@ -1,6 +1,6 @@
 /* dos_batch.c — batch files and AUTOEXEC.BAT (dos.h; design.md §4.7):
  * running a line, with %0-%9 and %NAME%, REM, IF and FOR, and the
- * commands that steer a batch file, GOTO, SHIFT and CALL.
+ * commands that steer a batch file, GOTO, SHIFT and CALL, and CHOICE.
  *
  * A batch file runs a line at a time at the level below the command
  * that ran it, as `sh` does in the UNIX flavour (unix.c), each level
@@ -13,6 +13,7 @@
 #include "dos.h"
 #include "files.h"
 #include "flavour.h"
+#include "keycodes.h"
 #include "path.h"
 #include "vars.h"
 
@@ -523,4 +524,104 @@ int dos_shift(shell_t *sh, int argc, char **argv) {
     level_t *lv = &s_levels[sh->depth];
     if (lv->open && lv->shift < lv->nparams) lv->shift++;
     return 0;
+}
+
+/* ---- CHOICE ------------------------------------------------------------ */
+
+static bool key_is(char a, char b, bool exact) {
+    return exact ? a == b : upper(a) == upper(b);
+}
+
+/* CHOICE [/C[:]keys] [/N] [/S] [/T[:]c,nn] [text]: one of the keys; the
+ * status is its place among them, 1 for the first, and 255 for a
+ * mistake, as DOS 6's (design.md §4.7). */
+int dos_choice(shell_t *sh, int argc, char **argv) {
+    const char *keys = "YN";
+    bool list = true, exact = false, timed = false;
+    char dflt = 0;
+    unsigned secs = 0;
+    int i = 1;
+    for (; i < argc && argv[i][0] == '/'; i++) {
+        const char *a = argv[i], *v = a + 2;
+        char sw = upper(a[1]);
+        if ((sw == 'C' || sw == 'T') && *v == ':') v++;
+        if (sw == 'C') {
+            if (!*v) {
+                dos_error(sh, "CHOICE: invalid choice switch syntax. Expected form: /C[:]choices", NULL);
+                return 255;
+            }
+            keys = v;
+        } else if (sw == 'T') {
+            /* c,nn: a key, a comma, and one or two digits. */
+            if (!v[0] || v[1] != ',' || v[2] < '0' || v[2] > '9' ||
+                (v[3] && (v[3] < '0' || v[3] > '9' || v[4]))) {
+                dos_error(sh, "CHOICE: Incorrect timeout syntax. Expected form Tc,nn or T:c,nn", NULL);
+                return 255;
+            }
+            dflt = v[0];
+            secs = (unsigned)(v[2] - '0');
+            if (v[3]) secs = secs * 10u + (unsigned)(v[3] - '0');
+            timed = true;
+        } else if ((sw == 'N' || sw == 'S') && !a[2]) {
+            if (sw == 'N') list = false;
+            else exact = true;
+        } else {
+            dos_error(sh, "CHOICE: invalid switch", a);
+            return 255;
+        }
+    }
+    for (const char *k = keys; *k; k++) {
+        if (*k <= ' ' || *k > '~' || *k == '/') {
+            dos_error(sh, "CHOICE: invalid choice switch syntax. Expected form: /C[:]choices", NULL);
+            return 255;
+        }
+    }
+    if (timed) {
+        const char *k = keys;
+        while (*k && !key_is(*k, dflt, exact)) k++;
+        if (!*k) {
+            dos_error(sh, "CHOICE: Timeout default not in specified (or default) choices.", NULL);
+            return 255;
+        }
+    }
+    if (!sh->hooks.getkey) {
+        dos_error(sh, "CHOICE: no keyboard", NULL);
+        return 255;
+    }
+
+    for (int w = i; w < argc; w++) out_printf(&sh->con, w > i ? " %s" : "%s", argv[w]);
+    if (list) {
+        out_puts(&sh->con, "[");
+        for (const char *k = keys; *k; k++)
+            out_printf(&sh->con, k > keys ? ",%c" : "%c", exact ? *k : upper(*k));
+        out_puts(&sh->con, "]?");
+    }
+
+    /* A time limit needs both a clock and a key that does not wait. */
+    timed = timed && sh->hooks.pollkey && sh->hooks.now_us;
+    uint64_t end = timed ? sh->hooks.now_us(sh->hooks.ctx) + (uint64_t)secs * 1000000u : 0;
+    for (;;) {
+        int key;
+        if (timed) {
+            key = sh->hooks.pollkey(sh->hooks.ctx);
+            if (key < 0) {
+                if (sh->hooks.now_us(sh->hooks.ctx) < end) continue;
+                key = (unsigned char)dflt;
+            }
+        } else {
+            key = sh->hooks.getkey(sh->hooks.ctx);
+        }
+        if (key < 0 || key == 0x03 || key == 0x1B || key == KEY_BREAK) {
+            out_puts(&sh->con, "\n");
+            sh->stop = true;
+            return 0;
+        }
+        for (const char *k = keys; *k; k++) {
+            if (key < 0x80 && key_is(*k, (char)key, exact)) {
+                out_printf(&sh->con, "%c\n", exact ? *k : upper(*k));
+                return (int)(k - keys) + 1;
+            }
+        }
+        out_puts(&sh->con, "\a");
+    }
 }

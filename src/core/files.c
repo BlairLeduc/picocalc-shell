@@ -343,7 +343,9 @@ static void ls_name(shell_t *sh, const ent_t *e) {
 }
 
 /* Down the columns, as ls does on a terminal, and one per line when the
- * output is a file. */
+ * output is a file. Each row stops short of the last column: the terminal
+ * wraps as soon as a row is full, so a full row and its line break would
+ * be two rows. */
 static void ls_names(shell_t *sh, unsigned n) {
     if (!sh->out_is_con) {
         for (unsigned i = 0; i < n; i++) {
@@ -358,7 +360,7 @@ static void ls_names(shell_t *sh, unsigned n) {
         if (w > wmax) wmax = w;
     }
     unsigned colw = (unsigned)wmax + 2u;
-    unsigned cols = (TERM_COLS + 2u) / colw;
+    unsigned cols = (TERM_COLS + 1u) / colw;
     if (cols == 0) cols = 1;
     unsigned rows = (n + cols - 1u) / cols;
     for (unsigned r = 0; r < rows; r++) {

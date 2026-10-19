@@ -219,6 +219,47 @@ cd /home
 
 Scripts can call other scripts, up to three deep.
 
+### Menus
+
+`select` shows a list of words, numbered, and asks you to choose one:
+
+```
+/>select p in pico-oric pico-atom vi break; do $p; done
+1) pico-oric  3) vi
+2) pico-atom  4) break
+#? 2
+```
+
+It sets the variable (`p` here) to the word you chose, and runs the
+commands between `do` and `done`. Then it asks again, until a command
+runs `break`. Type a number and Enter. Enter on its own shows the list
+again. A number not in the list sets the variable to nothing. Break,
+Esc or Ctrl-C stops it.
+
+There is no `if` or `case` in this shell, so make each word something
+you can run, as above: `$p` runs the program chosen, and choosing
+`break` runs `break`. A wrong number does nothing, because an empty
+`$p` runs nothing.
+
+What you typed is also in `$REPLY`, and the question `#? ` is `$PS3`:
+set it to change it. The words can be a glob, such as `/home/*.txt`.
+
+In a script, a menu can take several lines:
+
+```
+# /etc/profile: a menu at every start
+PS3='Run which? '
+select p in pico-oric pico-atom pico-ace
+do
+    echo Starting $p
+    $p
+done
+```
+
+Esc leaves this menu for the prompt. At the prompt, the whole menu
+must fit on one line. A menu can hold another, and `break 2` leaves two
+at once.
+
 ## 4. Commands
 
 Every command is built in. Any other name runs a
@@ -411,6 +452,8 @@ it moves to `/`.
 | `export [NAME=value...]` | sets variables, or lists them. The same as `NAME=value` |
 | `unset NAME...` | removes variables |
 | `sh file` | runs a script |
+| `select NAME in WORD...; do LIST; done` | shows the words as a numbered menu, and runs LIST with `NAME` set to the one chosen |
+| `break [N]` | leaves a `select`, or N of them |
 | `history` | lists the lines typed before |
 
 ## 5. Running programs
@@ -570,5 +613,7 @@ Limits:
 | History | about 2 KB of lines |
 | A file in vi | 64 KB |
 | Scripts within scripts | 3 deep |
+| A `select` in a script, `select` to `done` | 1 KB |
+| Words in a `select` and those inside it | 64, in 512 bytes |
 | A path | 255 characters |
 

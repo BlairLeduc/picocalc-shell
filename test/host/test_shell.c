@@ -46,7 +46,7 @@ static bool has_row(const char *text) {
 
 int main(void) {
     const out_t out = { sink, NULL, false };
-    const shell_hooks_t hooks = { now, interrupted, NULL, NULL, NULL };
+    const shell_hooks_t hooks = { now, interrupted, NULL, NULL, NULL, NULL };
 
     term_init(&t);
     term_write(&t, "junk from before", 16);
