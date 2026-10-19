@@ -1,8 +1,11 @@
 // font-master-512-8x10.c — the UNIX flavour's font, 40 columns (design.md §4.1).
 //
-// The Acorn BBC Master 512's character set, as the owner supplied it in code
-// page 437 order, arranged once as the terminal's 128 glyphs (term.h), as
-// tools/mkfont-ibm.py arranges IBM's for the DOS flavour: 0x20-0x7E are the
+// The Acorn BBC Master 512's character set (DOS Plus), from BBC512.F08 in
+// VileR's collection of VGA text mode fonts, FONTS/NON-PC/
+// (https://github.com/viler-int10h/vga-text-mode-fonts), 256 glyphs of 8x8
+// in code page 437 order, drawn in rows 1-8 of the 8x10 cell and arranged
+// once as the terminal's 128 glyphs (term.h), as tools/mkfont-ibm.py
+// arranges IBM's for the DOS flavour: 0x20-0x7E are the
 // Master's ASCII; 0x00-0x1F are the DEC special graphics the terminal shows
 // for ESC ( 0, each that code page 437 has taken from the Master's own glyph
 // (the box-drawing ones carried into rows 0 and 9, so they join the cells

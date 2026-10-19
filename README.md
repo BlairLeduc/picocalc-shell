@@ -220,6 +220,7 @@ build/host/shell-dos card.img    # the DOS flavour
 
 GPL-3.0; see [LICENSE](LICENSE). `include/picocalc_shell.h` is also under
 the MIT licence. Code from other projects (UF2 Loader, the owner's
-emulators and picocalc-text-starter, Pico Logo's vi) and the DOS
-flavour's font (IBM's PC font from VileR's Ultimate Oldschool PC Font
-Pack, CC BY-SA 4.0) are listed in [THIRD-PARTY.md](THIRD-PARTY.md).
+emulators and picocalc-text-starter, Pico Logo's vi) and both
+flavours' fonts (the Master 512's from VileR's collection of VGA text
+mode fonts; IBM's PC font from VileR's Ultimate Oldschool PC Font Pack,
+CC BY-SA 4.0) are listed in [THIRD-PARTY.md](THIRD-PARTY.md).
