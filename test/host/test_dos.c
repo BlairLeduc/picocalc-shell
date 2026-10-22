@@ -739,10 +739,12 @@ static int dos_tests(bool fat32) {
           "'%s'", con);
     CHECK(run("VOL D:") == 1 && has("Invalid drive specification"), "'%s'", con);
     CHECK(run("MEM") == 1 && has("MEM: not on this machine"), "'%s'", con);
-    shell_set_memory(&sh, 400000, 532480);
+    shell_set_memory(&sh, 400000, 532480, 0);
     CHECK(run("MEM") == 0 && has("    532480 bytes total memory\n") &&
-              has("    132480 bytes free\n"),
+              has("    132480 bytes free\n         0 bytes PSRAM\n"),
           "'%s'", con);
+    shell_set_memory(&sh, 400000, 532480, 8388608);
+    CHECK(run("MEM") == 0 && has("    132480 bytes free\n   8388608 bytes PSRAM\n"), "'%s'", con);
     CHECK(run("HELP") == 0 && has("ATTRIB") && has("XCOPY") && has("HELP name for one"), "'%s'",
           con);
     CHECK(run("help copy") == 0 && strcmp(con, "usage: COPY source [destination]\nCopy one or more files\n") == 0,

@@ -219,6 +219,9 @@ else()
         PICO_DEFAULT_UART=1
         PICO_DEFAULT_UART_TX_PIN=4
         PICO_DEFAULT_UART_RX_PIN=5
+        # board.c only reads the PSRAM's id, for info and MEM; nothing
+        # sets it up or uses it (hardware-notes.md §2.4).
+        PICO_RUNTIME_NO_INIT_PSRAM=1
     )
     target_link_libraries(shell
         shell_core
@@ -228,6 +231,7 @@ else()
         hardware_dma
         hardware_flash
         hardware_i2c
+        hardware_psram
         hardware_spi
         hardware_vreg
         tinyusb_device

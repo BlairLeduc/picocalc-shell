@@ -214,8 +214,8 @@ batch file or a program (section 5).
 | `BATTERY` | the battery's charge, and `charging` when the charger is on |
 | `BACKLIGHT [lcd\|kbd] [0-255]` | shows or sets the screen (`lcd`) or keyboard (`kbd`) backlight |
 | `VER` | the shell's version |
-| `MEM` | the memory in use and free |
-| `INFO` | the shell's version, the chip, memory, UF2 Loader, the keyboard's firmware, the card and the battery |
+| `MEM` | the memory in use and free, and the PSRAM: 8 MB on the Pimoroni Pico Plus 2 W, 0 on a board without it |
+| `INFO` | the shell's version, the chip, memory and PSRAM (0 MB on a board without it), UF2 Loader, the keyboard's firmware, the card and the battery |
 
 `PHOSPHOR` lasts until the shell is left. Put it in `AUTOEXEC.BAT` to
 have it every time. There is no `DATE` or `TIME`: the PicoCalc has no

@@ -153,11 +153,13 @@ static void info(void *ctx, const out_t *o) {
     out_printf(o, "memory    %lu KB of %lu KB SRAM\n",
                (unsigned long)(((uintptr_t)&__end__ - SRAM_BASE) >> 10),
                (unsigned long)((SRAM_END - SRAM_BASE) >> 10));
-    if (g_loader_st.part_size)
-        out_printf(o, "loader    UF2 Loader %s, %lu KB for programs\n",
-                   g_loader_st.version ? g_loader_st.version : "(no version)",
+    out_printf(o, "psram     %lu MB\n", (unsigned long)(g_board.psram_bytes >> 20));
+    if (g_loader_st.part_size) {
+        out_printf(o, "loader    UF2 Loader %s\n",
+                   g_loader_st.version ? g_loader_st.version : "(no version)");
+        out_printf(o, "partition %lu KB for programs\n",
                    (unsigned long)(g_loader_st.part_size >> 10));
-    else
+    } else
         out_puts(o, "loader    none in flash\n");
     out_printf(o, "programs  %s\n", g_loader.problem ? g_loader.problem : "can be run");
     if (g_sb == SB_OK) out_printf(o, "keyboard  firmware 0x%02x\n", g_sb_ver[1]);
@@ -291,6 +293,7 @@ static void log_banner(bool clocks_ok, uint32_t i2c_hz, sb_status_t sb, const ui
     printf("  programs     : %s\n", g_loader.problem ? g_loader.problem : "can be run");
     printf("  memory       : static data ends at %p, %lu bytes of SRAM\n", (void *)&__end__,
            (unsigned long)((uintptr_t)&__end__ - SRAM_BASE));
+    printf("  psram        : %lu bytes, by its id on GPIO 47\n", (unsigned long)g_board.psram_bytes);
     printf("  start        : main at %llu us, lcd up at %llu us since reset\n",
            (unsigned long long)s_main_us, (unsigned long long)s_lcd_us);
 #else
@@ -335,7 +338,7 @@ int main(void) {
     const shell_system_t sys = { battery, backlight, phosphor, info, power, NULL };
     shell_set_system(&g_shell, &sys);
     shell_set_memory(&g_shell, (unsigned long)((uintptr_t)&__end__ - SRAM_BASE),
-                     (unsigned long)(SRAM_END - SRAM_BASE));
+                     (unsigned long)(SRAM_END - SRAM_BASE), (unsigned long)g_board.psram_bytes);
     shell_start(&g_shell);
     s_prompt_us = time_us_64();
 

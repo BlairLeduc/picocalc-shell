@@ -211,6 +211,14 @@ memory-mapped window. Do not assume a generic `pico2` build enables it. Three th
 Use PSRAM for **capacity** (level data, sprite banks, audio samples, a text
 buffer) and SRAM for the **per-frame working set**.
 
+**Finding it without a board definition.** A generic `pico2` build can still
+learn the size: on an RP2350B, set GPIO 47 to `GPIO_FUNC_XIP_CS1`, point
+`flash_devinfo` CS1 at GPIO 47 (otherwise the bootrom drives GPIO 0 as CS1
+for the XIP exit sequence), and call the SDK's `psram_detect_size()`, which
+reads the chip's id. It reported 8 MB on the Plus 2 W (the shell's
+development builds, both flavours, from SRAM over SWD, 2026-10-22). This
+reads the id only; it is not the round-trip check above.
+
 ### 2.5 The status LED
 
 Not on the PicoCalc's front panel — it is the small LED on the processor board,

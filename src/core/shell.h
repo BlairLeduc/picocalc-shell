@@ -92,6 +92,7 @@ typedef struct shell {
     char          cwd[SHELL_PATH_MAX + 1];   /* absolute and normal (path.h) */
     uint8_t       phosphor;         /* system.h: the ink chosen, 0 for the default */
     unsigned long mem_used, mem_total;   /* SRAM, for DOS's MEM; 0: not known */
+    unsigned long mem_psram;             /* PSRAM, for DOS's MEM; 0 is shown */
     line_t        line;
 } shell_t;
 
@@ -106,8 +107,9 @@ void shell_set_loader(shell_t *sh, const struct shell_loader *loader);
 /* The port's link to the PicoCalc's southbridge, ink and power. */
 void shell_set_system(shell_t *sh, const shell_system_t *sys);
 
-/* The SRAM the shell uses and the SRAM there is, in bytes, for MEM. */
-void shell_set_memory(shell_t *sh, unsigned long used, unsigned long total);
+/* The SRAM the shell uses, the SRAM there is and the PSRAM there is (0
+ * for none), in bytes, for MEM. */
+void shell_set_memory(shell_t *sh, unsigned long used, unsigned long total, unsigned long psram);
 
 /* Mount the card, reset the terminal, read the history, print the
  * banner, run the flavour's startup script (/etc/profile), and show the

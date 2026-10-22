@@ -77,9 +77,10 @@ void shell_set_system(shell_t *sh, const shell_system_t *sys) {
     sh->sys = *sys;
 }
 
-void shell_set_memory(shell_t *sh, unsigned long used, unsigned long total) {
+void shell_set_memory(shell_t *sh, unsigned long used, unsigned long total, unsigned long psram) {
     sh->mem_used = used;
     sh->mem_total = total;
+    sh->mem_psram = psram;
 }
 
 /* The prompt's width on its last row: what follows its last line

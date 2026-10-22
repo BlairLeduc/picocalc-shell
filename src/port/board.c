@@ -6,6 +6,9 @@
 #include <string.h>
 
 #include "hardware/clocks.h"
+#include "hardware/flash.h"
+#include "hardware/gpio.h"
+#include "hardware/psram.h"
 #include "hardware/structs/sysinfo.h"
 #include "hardware/vreg.h"
 #include "pico/stdlib.h"
@@ -37,6 +40,24 @@ bool board_init_clocks(void) {
     return true;
 }
 
+/* The Plus 2 W's PSRAM is on QMI chip select 1, GPIO 47, which only the
+ * RP2350B has (hardware-notes.md §2.4). Read its id and put the pin back:
+ * the shell only reports the size, and a program sets PSRAM up itself. */
+#define BOARD_PSRAM_CS 47u
+
+static uint32_t psram_size(void) {
+    if (sysinfo_hw->package_sel & SYSINFO_PACKAGE_SEL_BITS) return 0;
+    gpio_function_t was = gpio_get_function(BOARD_PSRAM_CS);
+    /* Else the bootrom drives its default CS1 pin, GPIO 0, as well. */
+    uint cs_was = flash_devinfo_get_cs_gpio(1);
+    flash_devinfo_set_cs_gpio(1, BOARD_PSRAM_CS);
+    gpio_set_function(BOARD_PSRAM_CS, GPIO_FUNC_XIP_CS1);
+    size_t size = psram_detect_size();
+    gpio_set_function(BOARD_PSRAM_CS, was);
+    flash_devinfo_set_cs_gpio(1, cs_was);
+    return (uint32_t)size;
+}
+
 void board_identify(board_info_t *info) {
     memset(info, 0, sizeof(*info));
     info->sdk_board = PICO_BOARD;
@@ -46,4 +67,5 @@ void board_identify(board_info_t *info) {
     info->clk_sys_hz = clock_get_hz(clk_sys);
     info->clk_peri_hz = clock_get_hz(clk_peri);
     info->vreg_mv = 550u + 50u * (unsigned)vreg_get_voltage();
+    info->psram_bytes = psram_size();
 }
