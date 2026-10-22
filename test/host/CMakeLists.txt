@@ -2,6 +2,7 @@
 # compiler and no Pico SDK. One binary per area; exit 77 is a skip.
 
 set(SHELL_HOST_TESTS
+    test_clock
     test_editor_lines
     test_editor_pattern
     test_editor_undo
@@ -39,6 +40,13 @@ target_link_libraries(test_dos PRIVATE shell_core_dos shell_host_disk)
 target_include_directories(test_dos PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(test_dos PRIVATE ${SHELL_WARNINGS})
 add_test(NAME test_dos COMMAND test_dos)
+
+# The DOS flavour's date and time (design.md §3.8).
+add_executable(test_dos_time test_dos_time.c)
+target_link_libraries(test_dos_time PRIVATE shell_core_dos shell_host_disk)
+target_include_directories(test_dos_time PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_options(test_dos_time PRIVATE ${SHELL_WARNINGS})
+add_test(NAME test_dos_time COMMAND test_dos_time)
 
 # EDIT, the DOS flavour's editor (design.md §4.7).
 add_executable(test_edit test_edit.c)

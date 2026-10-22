@@ -186,7 +186,7 @@ and the Arm toolchain; `tools/build.sh` uses the newest it finds under
 ```sh
 tools/build.sh -DPICO_SHELL_UART=OFF build/pico-release                               # UNIX flavour, release
 tools/build.sh -DPICO_SHELL_UART=OFF -DPICO_SHELL_FLAVOUR=dos build/pico-dos-release  # DOS flavour, release
-tools/build.sh                                                                        # development: UART1 log, mirror and typed keys
+tools/build.sh                                                                        # development: UART0 log, mirror and typed keys
 ```
 
 The output is `build/<variant>/BOOT2350.uf2`. A release offers the two

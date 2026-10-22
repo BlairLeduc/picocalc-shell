@@ -63,6 +63,15 @@ typedef struct {
     void *ctx;
 } shell_system_t;
 
+/* The port's clock (clock.h; design.md §3.8): UTC in milliseconds since
+ * 1970. get is false while the clock is not set; set gives NULL, or why
+ * not. Either may be NULL: no clock, or one that cannot be set. */
+typedef struct {
+    bool (*get)(void *ctx, int64_t *utc_ms);
+    const char *(*set)(void *ctx, int64_t utc_ms);
+    void *ctx;
+} shell_clock_t;
+
 /* The line being edited at the prompt (line.c). */
 typedef struct {
     char   text[SHELL_LINE_MAX + 1];
@@ -106,6 +115,9 @@ void shell_set_loader(shell_t *sh, const struct shell_loader *loader);
 
 /* The port's link to the PicoCalc's southbridge, ink and power. */
 void shell_set_system(shell_t *sh, const shell_system_t *sys);
+
+/* The port's clock; without one, the clock is never set. */
+void shell_set_clock(shell_t *sh, const shell_clock_t *clock);
 
 /* The SRAM the shell uses, the SRAM there is and the PSRAM there is (0
  * for none), in bytes, for MEM. */

@@ -50,7 +50,7 @@ puts them. Use the module's board definition for its on-board peripherals.
 
 | GP | Used by | Function |
 |---:|---|---|
-| 0–5 | — | GP4/GP5 are used for UART1 debug through the Debug Probe; GP0/GP1 are free |
+| 0–5 | — | GP2/GP3 carry UART0 debug through the Debug Probe (GP4/GP5, UART1, until 2026-10-22); GP0/GP1 and GP4/GP5 are free |
 | 6 | carrier | `i2c1` SDA → southbridge |
 | 7 | carrier | `i2c1` SCL → southbridge |
 | 8–9 | — | free |
@@ -80,8 +80,8 @@ So a PicoCalc application has roughly **eleven free GPIOs** (0–5, 8–9, 20–
 PicoCalc schematic before you route a signal to one, because the carrier may
 still connect it.
 
-GP4 and GP5 are only free in a build that leaves UART1 alone, and UART1 is
-how the Debug Probe gets your log (§2.7). Either keep a development build
+The pins the Debug Probe's UART uses are only free in a build that leaves
+that UART alone, and it is how the probe gets your log (§2.7). Either keep a development build
 with the UART and a release build without it, or hand the pins back and forth
 at run time and say which is lost. The pads are 3.3 V at default drive
 strength; a circuit built for a 5 V port may need a level shifter or a
@@ -266,6 +266,12 @@ The driver reaches the chip over a **PIO SPI whose divider is fixed against
   failure: diagnostic firmware may deliberately start blank and silent.
 - **UART is a separate connection from SWD.** UART1 at **115200, 8-N-1**, TX
   GP4 and RX GP5, was verified in both directions through the Debug Probe.
+  So was **UART0 on TX GP2 and RX GP3**, through function 11 (`UART_AUX`),
+  which the SDK picks itself for those pins on RP2350 (`UART_FUNCSEL_NUM`)
+  from `PICO_DEFAULT_UART=0` and the two pin numbers: the shell's log, its
+  screen mirrored, typed keys and the FS screen dump, on a Plus 2 W,
+  2026-10-22 (`out/m12-uart0-1.log`). Not yet checked there: that the RX
+  pull-up keeps a floating GP3 quiet with the probe unplugged.
   Cross TX/RX and share ground. Discover the serial endpoint rather than
   hardcoding a workstation path.
 - **Keep a Mac's display awake while the probe is in use.** On a Mac, when
@@ -1407,6 +1413,41 @@ battery gauge on the southbridge (§6) is a better source anyway.
 The module's USB port is reachable through the case. It is available for CDC
 stdio, for mass storage, or for a USB host stack — but see §2.7: nothing routes
 `printf` there unless you ask.
+
+### 8.4 The AON timer and POWMAN's scratch registers across a reset
+
+The RP2350's always-on timer (POWMAN's 64-bit millisecond count) and
+POWMAN's eight scratch registers (`powman_hw->scratch[]`, at `0x401000b0`,
+a bank separate from the watchdog's) are in the always-on domain. A
+program that does not touch them leaves them as they were. The scratch
+registers take a plain 32-bit write; unlike POWMAN's other registers,
+they need no password in the top half. The SDK's `pico_low_power` uses
+scratch 6 and 7.
+
+Measured on a Plus 2 W, 2026-10-22, with the shell's release build run
+from SRAM: the timer was started from the crystal at a set time, and the
+shell wrote a record to scratch 0-2. Then `tools/swd-ram.sh` loaded
+another image and rebooted by the watchdog, with `PSM_WDSEL` at
+`0x01fffff3`. That value leaves bits 2 and 3, ROSC and XOSC, out of the
+reset. The new image found the record whole, and the timer still
+counting from the time it was given.
+
+Measured on the same Plus 2 W, 2026-10-22, with the DOS flavour's
+development build on the card as `/BOOT2350.UF2` under UF2 Loader 2.5:
+the clock was set with `DATE` and `TIME`, then kept its time through each
+of these, read back with `TIME /T` against the Mac's clock to the
+second, with no loss seen at that resolution:
+
+- the loader's `BOOT_SD` and a watchdog reboot (`tools/swd-shell.sh`),
+  stage3 loading the shell from the card (`out/m12-card-roundtrip-1.log`);
+- a program round trip: the shell flashed `exit-test.uf2` and rebooted,
+  stage3 started it, and a key typed on UART0 sent it back through
+  `picocalc_shell_exit()` (`out/m12-card-program-2.log`);
+- the shell's `REBOOT` (`out/m12-card-reboot-1.log`).
+
+Not yet checked: the loss per trip below a second; power-off; the RUN
+pin; BOOTSEL; OpenOCD's `reset halt`; and what the timer does if XOSC
+stops.
 
 ---
 

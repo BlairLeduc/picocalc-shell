@@ -4,6 +4,7 @@
 
 #include <string.h>
 
+#include "clock.h"
 #include "files.h"
 #include "flavour.h"
 #include "term.h"
@@ -215,4 +216,79 @@ int cmd_bootsel(shell_t *sh, int argc, char **argv) {
 
 bool system_leaves(shell_cmd_fn fn) {
     return fn == cmd_poweroff || fn == cmd_reboot || fn == cmd_bootsel;
+}
+
+/* ---- date ------------------------------------------------------------- */
+
+static void date_show(shell_t *sh, const clock_tm_t *tm) {
+    out_printf(&sh->out, "%s %s %2d %02d:%02d:%02d %s %d\n", clock_wday_name(tm->wday),
+               clock_mon_name(tm->mon), tm->mday, tm->hour, tm->min, tm->sec, tm->zone, tm->year);
+}
+
+/* Two digits from s, into *v. */
+static bool two(const char *s, int *v) {
+    if (s[0] < '0' || s[0] > '9' || s[1] < '0' || s[1] > '9') return false;
+    *v = (s[0] - '0') * 10 + (s[1] - '0');
+    return true;
+}
+
+/* mmddHHMM[[cc]yy], POSIX's form, in local time or UTC. Without a year,
+ * this year, or the fixed date's with the clock not set. Seconds are 0.
+ * The years are FAT's and DOS's, 1980-2099; yy of 69-99 is the 1900s,
+ * as POSIX has it. */
+static int date_set(shell_t *sh, const char *arg, bool utc) {
+    clock_tm_t tm;
+    int64_t t;
+    if (clock_utc(&t)) {
+        if (utc) clock_gmt(t, &tm);
+        else clock_local(t, &tm);
+    } else {
+        clock_now(&tm);
+    }
+    size_t n = strlen(arg);
+    int cc = 0, yy = 0;
+    bool ok = (n == 8 || n == 10 || n == 12) && two(arg, &tm.mon) && two(arg + 2, &tm.mday) &&
+              two(arg + 4, &tm.hour) && two(arg + 6, &tm.min);
+    if (ok && n == 10) {
+        ok = two(arg + 8, &yy);
+        tm.year = yy + (yy >= 69 ? 1900 : 2000);
+    } else if (ok && n == 12) {
+        ok = two(arg + 8, &cc) && two(arg + 10, &yy);
+        tm.year = cc * 100 + yy;
+    }
+    tm.sec = 0;
+    if (!ok || tm.year < 1980 || tm.year > 2099 || !clock_valid(tm.year, tm.mon, tm.mday) ||
+        tm.hour > 23 || tm.min > 59) {
+        shell_error(sh, "date: %s: not a date: mmddHHMM[[cc]yy]\n", arg);
+        return 1;
+    }
+    t = utc ? clock_seconds(&tm) : clock_from_local(&tm);
+    const char *why = clock_set(t);
+    if (why) {
+        shell_error(sh, "date: %s\n", why);
+        return 1;
+    }
+    if (utc) clock_gmt(t, &tm);
+    else clock_local(t, &tm);
+    date_show(sh, &tm);
+    return 0;
+}
+
+int cmd_date(shell_t *sh, int argc, char **argv) {
+    static const char use[] = "date [-u] [mmddHHMM[[cc]yy]]";
+    int i = 1;
+    bool utc = i < argc && strcmp(argv[i], "-u") == 0;
+    if (utc) i++;
+    if (argc - i > 1 || (i < argc && argv[i][0] == '-')) return usage(sh, use);
+    if (i < argc) return date_set(sh, argv[i], utc);
+    int64_t t;
+    if (!clock_utc(&t)) {
+        shell_error(sh, "date: clock not set\n");
+        return 1;
+    }
+    clock_tm_t tm;
+    if (utc) clock_gmt(t, &tm);
+    else clock_local(t, &tm);
+    date_show(sh, &tm);
+    return 0;
 }

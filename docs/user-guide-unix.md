@@ -178,6 +178,15 @@ Two variables matter to the shell:
 |---|---|---|
 | `HOME` | `/home` | `cd` with no directory, and where the shell starts |
 | `PATH` | `/pico2-apps` | where programs are looked for, directories separated by `:` |
+| `TZ` | (none: UTC) | the time zone, as a POSIX string: `export TZ=EST5EDT,M3.2.0,M11.1.0` |
+
+`TZ` names the standard zone and how many hours it is behind UTC, then
+the summer zone, if there is one, and when summer time starts and ends:
+`M3.2.0` is the second Sunday of March, at 2:00. Without the dates, the
+United States' are used. Some others: `CST6CDT`, `MST7MDT`, `PST8PDT`,
+`GMT0BST,M3.5.0/1,M10.5.0`, `CET-1CEST,M3.5.0,M10.5.0/3`,
+`AEST-10AEDT,M10.1.0,M4.1.0/3`. Put it in `/etc/profile`. Names of
+places, such as `America/Toronto`, are not understood, and give UTC.
 
 ### Statuses
 
@@ -271,13 +280,18 @@ program (section 5).
 |---|---|
 | `pwd` | prints the current directory |
 | `cd [dir]` | changes directory; to `$HOME` with none. `..` is the directory above |
-| `ls [-l] [-a] [path...]` | lists a directory, sorted, with `/` after each directory's name. `-l` adds the size, and `d` for a directory. `-a` includes hidden names |
+| `ls [-l] [-a] [path...]` | lists a directory, sorted, with `/` after each directory's name. `-l` adds the size and date, and `d` for a directory. `-a` includes hidden names |
 
 ```
 />ls -l /home
--rw       24 a.txt
-drw          notes/
+-rw       24 Oct 22 14:30 a.txt
+-rw      310 Mar  3  2025 old.txt
+drw          Oct 20 09:12 notes/
 ```
+
+`ls -l` shows the time for a date within six months of now, and the
+year in place of the time for one further away. A name longer than 14
+characters wraps to the next row.
 
 ### Files and directories
 
@@ -289,12 +303,16 @@ drw          notes/
 | `rm [-r] path...` | removes files. `-r` removes directories and everything in them. **There is no undo** |
 | `mkdir [-p] dir...` | makes directories. `-p` makes the ones above too, and does not mind if it is already there |
 | `rmdir dir...` | removes empty directories |
-| `touch file...` | makes empty files. A file that exists is left alone |
+| `touch file...` | makes empty files. A file that exists gets the time now, if the clock is set; otherwise it is left alone |
 | `df` | the card's format, size, space used and space free |
 
 Names on the card are case-insensitive but keep their case: `cat
-TODO.TXT` reads `todo.txt`, and `ls` shows it as `todo.txt`. The
-PicoCalc has no clock, so every file gets the same fixed date.
+TODO.TXT` reads `todo.txt`, and `ls` shows it as `todo.txt`.
+
+A file written or made gets the date and time, in local time, as a
+computer does. `cp` gives the copy the time now; `mv` keeps the file's.
+With the clock not set (see `date`), every file gets the same fixed
+date, 1 January 2026.
 
 ### Reading text
 
@@ -382,7 +400,25 @@ have it every time.
 |---|---|
 | `battery` | the battery's charge, and `charging` when the charger is on |
 | `backlight [lcd\|kbd] [0-255]` | shows or sets the screen (`lcd`) or keyboard (`kbd`) backlight |
-| `info` | the shell's version, the chip, memory and PSRAM (0 MB on a board without it), UF2 Loader, the keyboard's firmware, the card and the battery |
+| `info` | the shell's version, the chip, memory and PSRAM (0 MB on a board without it), UF2 Loader, the clock, the keyboard's firmware, the card and the battery |
+| `date [-u]` | the date and time; `-u` in UTC. Says `clock not set`, with status 1, when it is not |
+| `date [-u] mmddHHMM[[cc]yy]` | sets the date and time: month, day, hour, minute and the year, which may be left off. `-u` takes it as UTC |
+
+`date`:
+
+- The clock keeps going while a program runs, and through `reboot`.
+  Switching the PicoCalc off loses it.
+- The time is set to the minute, in local time, given by `TZ` (below).
+  The year is 1980 to 2099; `yy` from 69 to 99 is the 1900s.
+- `date` in `/etc/profile` with a test can remind you to set it:
+  `date || echo set the clock: date mmddHHMM`.
+
+```
+/>date 1022143026
+Thu Oct 22 14:30:00 EDT 2026
+/>date -u
+Thu Oct 22 18:30:00 UTC 2026
+```
 
 `battery`:
 

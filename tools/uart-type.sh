@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# uart-type.sh — type at the shell over UART1 (design.md §4.1; EL §13.1).
+# uart-type.sh — type at the shell over UART0 (design.md §4.1; EL §13.1).
 # Copied from pico-oric, with the shell's keys and pacing.
 #
 #   tools/uart-type.sh 'ls -l\r'

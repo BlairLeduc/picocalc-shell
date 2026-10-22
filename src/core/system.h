@@ -1,6 +1,7 @@
 /* system.h — the PicoCalc's own commands (design.md §4.5): `help`
  * (`man` in the UNIX flavour), `clear`, `phosphor`, `battery`,
- * `backlight`, `info`, `poweroff`, `reboot` and `bootsel`.
+ * `backlight`, `info`, `poweroff`, `reboot` and `bootsel`; and the UNIX
+ * flavour's `date` (design.md §3.8).
  *
  * Portable: the southbridge, the terminal's ink and the reboots are the
  * port's, through shell_system_t (shell.h). With a hook missing, as on
@@ -24,6 +25,7 @@ int cmd_info(shell_t *sh, int argc, char **argv);
 int cmd_poweroff(shell_t *sh, int argc, char **argv);
 int cmd_reboot(shell_t *sh, int argc, char **argv);
 int cmd_bootsel(shell_t *sh, int argc, char **argv);
+int cmd_date(shell_t *sh, int argc, char **argv);
 
 /* Whether `fn` leaves the shell, for run_cmd to refuse a redirection. */
 bool system_leaves(shell_cmd_fn fn);

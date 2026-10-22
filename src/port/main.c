@@ -2,7 +2,7 @@
  *
  * One core. Bring-up follows hardware-notes.md §10: the southbridge, the
  * panel, the keyboard. The shell's output goes to the terminal's grid,
- * then, in the development build, to UART1 as the same bytes, so a
+ * then, in the development build, to UART0 as the same bytes, so a
  * terminal on the other end shows what the panel does; then the panel is
  * brought up to date. Waiting for a key, at the prompt or in vi, polls
  * the keyboard and card detect at about 30 Hz, takes the UART's bytes as
@@ -21,6 +21,7 @@
 #include "pico/bootrom.h"
 #include "pico/stdlib.h"
 
+#include "aon.h"
 #include "board.h"
 #include "card.h"
 #include "kbd.h"
@@ -112,6 +113,19 @@ static const char *usbdisk(void *ctx) {
     return usbdisk_run(usb_stop, ctx);
 }
 
+/* ---- the clock (design.md §3.8) ----------------------------------------- */
+
+static bool clock_get(void *ctx, int64_t *utc_ms) {
+    (void)ctx;
+    return aon_get(utc_ms);
+}
+
+static const char *clock_set(void *ctx, int64_t utc_ms) {
+    (void)ctx;
+    aon_set(utc_ms, AON_SRC_USER);
+    return NULL;
+}
+
 /* ---- the PicoCalc, for system.h ---------------------------------------- */
 
 static const char *sb_why(sb_status_t st) {
@@ -162,6 +176,7 @@ static void info(void *ctx, const out_t *o) {
     } else
         out_puts(o, "loader    none in flash\n");
     out_printf(o, "programs  %s\n", g_loader.problem ? g_loader.problem : "can be run");
+    out_printf(o, "clock     %s\n", aon_source_name(aon_source()));
     if (g_sb == SB_OK) out_printf(o, "keyboard  firmware 0x%02x\n", g_sb_ver[1]);
     else out_printf(o, "keyboard  %s\n", sb_why(g_sb));
 }
@@ -313,7 +328,7 @@ int main(void) {
     bool clocks_ok = board_init_clocks();
     stdio_init_all();
 #if PICO_SHELL_UART
-    /* Bytes on UART1 are keys: with nothing on GP5, as on a PicoCalc with
+    /* Bytes on UART0 are keys: with nothing on GP3, as on a PicoCalc with
      * no probe attached, a floating line could type them. */
     gpio_pull_up(PICO_DEFAULT_UART_RX_PIN);
 #endif
@@ -337,6 +352,8 @@ int main(void) {
     shell_set_loader(&g_shell, &g_loader);
     const shell_system_t sys = { battery, backlight, phosphor, info, power, NULL };
     shell_set_system(&g_shell, &sys);
+    const shell_clock_t clock = { clock_get, clock_set, NULL };
+    shell_set_clock(&g_shell, &clock);
     shell_set_memory(&g_shell, (unsigned long)((uintptr_t)&__end__ - SRAM_BASE),
                      (unsigned long)(SRAM_END - SRAM_BASE), (unsigned long)g_board.psram_bytes);
     shell_start(&g_shell);

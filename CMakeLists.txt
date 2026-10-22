@@ -16,6 +16,7 @@ option(PICO_SHELL_HOST "Build the portable core and its host tests, with no Pico
 # What both flavours share (design.md §4.7)...
 set(SHELL_CORE_SOURCES
     src/core/bininfo.c
+    src/core/clock.c
     src/core/editor_file.c
     src/core/editor_pattern.c
     src/core/files.c
@@ -53,6 +54,7 @@ set(SHELL_DOS_SOURCES
     src/core/dos_parse.c
     src/core/dos_path.c
     src/core/dos_text.c
+    src/core/dos_time.c
     src/core/edit.c
     src/core/editor_lines.c
     src/core/font-ibm-8x10.c
@@ -161,10 +163,11 @@ else()
         COMMENT "shell: version from git describe"
         VERBATIM)
 
-    # PICO_SHELL_UART=OFF is the build that ships: nothing on UART1, so GP4
-    # and GP5 are free. ON, the default, is the development build: the log,
-    # the screen mirrored and keys typed over UART1 (design.md §6, EL §13.2).
-    option(PICO_SHELL_UART "Log, mirror the screen and take keys over UART1 on GP4/GP5" ON)
+    # PICO_SHELL_UART=OFF is the build that ships: nothing on UART0, so GP2
+    # and GP3 are free. ON, the default, is the development build: the log,
+    # the screen mirrored and keys typed over UART0 (design.md §3.8, §6,
+    # EL §13.2). GP4 and GP5 are i2c0's, for a DS3231 (design.md §3.8).
+    option(PICO_SHELL_UART "Log, mirror the screen and take keys over UART0 on GP2/GP3" ON)
     if (PICO_SHELL_UART)
         set(PICO_SHELL_UART_ON 1)
     else()
@@ -182,6 +185,7 @@ else()
 
     add_executable(shell
         src/port/board.c
+        src/port/clock.c
         src/port/diskio.c
         src/port/kbd.c
         src/port/lcd.c
@@ -215,10 +219,11 @@ else()
         PICO_SHELL_LCD_SPI_HZ=${PICO_SHELL_LCD_SPI_HZ}
         # clk_peri does not follow clk_sys by default (hardware-notes.md §3).
         PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1
-        # UART1 at 115200 8-N-1, TX GP4 / RX GP5 (hardware-notes.md §2.7).
-        PICO_DEFAULT_UART=1
-        PICO_DEFAULT_UART_TX_PIN=4
-        PICO_DEFAULT_UART_RX_PIN=5
+        # UART0 at 115200 8-N-1, TX GP2 / RX GP3, through UART_AUX
+        # (design.md §3.8; hardware-notes.md §2.7).
+        PICO_DEFAULT_UART=0
+        PICO_DEFAULT_UART_TX_PIN=2
+        PICO_DEFAULT_UART_RX_PIN=3
         # board.c only reads the PSRAM's id, for info and MEM; nothing
         # sets it up or uses it (hardware-notes.md §2.4).
         PICO_RUNTIME_NO_INIT_PSRAM=1
@@ -231,6 +236,7 @@ else()
         hardware_dma
         hardware_flash
         hardware_i2c
+        hardware_powman
         hardware_psram
         hardware_spi
         hardware_vreg
@@ -255,9 +261,9 @@ else()
     target_compile_definitions(exit-test PRIVATE
         PICO_SHELL_LCD_SPI_HZ=${PICO_SHELL_LCD_SPI_HZ}
         PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1
-        PICO_DEFAULT_UART=1
-        PICO_DEFAULT_UART_TX_PIN=4
-        PICO_DEFAULT_UART_RX_PIN=5
+        PICO_DEFAULT_UART=0
+        PICO_DEFAULT_UART_TX_PIN=2
+        PICO_DEFAULT_UART_RX_PIN=3
     )
     target_link_libraries(exit-test shell_core pico_stdlib hardware_dma hardware_i2c hardware_spi)
     pico_enable_stdio_uart(exit-test 1)

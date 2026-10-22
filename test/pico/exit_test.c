@@ -9,9 +9,9 @@
  * so, and the program waits for the card and another key. Copied on in
  * BOOTSEL instead, without the loader, the panel says so and the call
  * returns false, card or not. A printable
- * character or CR on UART1 (GP4/GP5, 115200) counts as a key too, and
+ * character or CR on UART0 (GP2/GP3, 115200) counts as a key too, and
  * each step is logged there, so it can be driven over the Debug Probe.
- * GP5 is pulled up, and only those bytes count: with nothing on GP5, as
+ * GP3 is pulled up, and only those bytes count: with nothing on it, as
  * on a PicoCalc with no probe, the first build returned at once, most
  * likely on bytes read from the floating line. The panel says which key woke it, and from where.
  *

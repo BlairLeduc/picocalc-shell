@@ -59,6 +59,10 @@
 #define SHELL_COMPLETE_NAMES 2048u
 #define SHELL_COMPLETE_MAX   128u
 
+/* A time zone's name in TZ, such as EST or <+0530> (clock.h); a longer
+ * one is cut. */
+#define SHELL_ZONE_MAX     15u
+
 /* A line as grep and more read it; a longer one is taken in pieces. */
 #define SHELL_TEXT_LINE    512u
 

@@ -11,6 +11,7 @@
  *   dos_text.c   TYPE, MORE and FIND
  *   dos_batch.c  batch files and AUTOEXEC.BAT: %0-%9, REM, IF, FOR,
  *                GOTO, SHIFT and CALL
+ *   dos_time.c   DATE, TIME, and CONFIG.SYS's COUNTRY= (design.md §3.8)
  *
  * Underneath, the card is the UNIX flavour's: absolute paths with '/'
  * (path.h), resolved from what is typed by dos_resolve. */
@@ -20,6 +21,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "clock.h"
 #include "config.h"
 #include "ff.h"
 #include "shell.h"
@@ -181,5 +183,35 @@ int dos_shift(shell_t *sh, int argc, char **argv);
 int dos_rem(shell_t *sh, int argc, char **argv);
 int dos_control(shell_t *sh, int argc, char **argv);
 int dos_choice(shell_t *sh, int argc, char **argv);
+int dos_date(shell_t *sh, int argc, char **argv);
+int dos_time(shell_t *sh, int argc, char **argv);
+
+/* ---- the country (dos_time.c) ----------------------------------------- */
+
+/* How a country writes a date, a time and a number, as COUNTRY= set
+ * them in DOS: the date's order ('M' month-day-year, 'D' day-month-year,
+ * 'Y' year-month-day), its separator and the time's, a 24-hour clock or
+ * 12 with a or p, and the separators of thousands and of decimals. */
+typedef struct {
+    unsigned code;
+    char     order, date_sep, time_sep;
+    bool     h24;
+    char     thousands, decimal;
+} dos_country_t;
+
+/* The country in effect: 001, the United States, until CONFIG.SYS says. */
+const dos_country_t *dos_country(void);
+/* False, and no change, for a code not in the table. */
+bool dos_set_country(unsigned code);
+
+/* C:\CONFIG.SYS, if there is one, before AUTOEXEC.BAT: COUNTRY=, and the
+ * lines DOS's had that mean nothing here, passed over. */
+void dos_config(shell_t *sh);
+
+/* A date in the country's way, with a year of four digits or two; a
+ * time, hours and minutes, with seconds and hundredths if asked, and a
+ * or p on a 12-hour clock. */
+void dos_format_date(char *buf, size_t size, const clock_tm_t *tm, bool long_year);
+void dos_format_time(char *buf, size_t size, const clock_tm_t *tm, bool seconds);
 
 #endif /* SHELL_DOS_H */

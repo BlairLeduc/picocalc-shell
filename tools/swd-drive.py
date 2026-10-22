@@ -55,11 +55,12 @@ if cmd == 'type':
     ocd(cmds)
 elif cmd == 'screen':
     t = syms['g_term']
-    words = read(t, 32 * 64 * 6 // 4)
+    COLS = 40   # TERM_COLS in src/core/config.h; a cell is 6 bytes (term.h)
+    words = read(t, 32 * COLS * 6 // 4)
     raw = b''.join(w.to_bytes(4, 'little') for w in words)
     for r in range(32):
-        row = raw[r * 64 * 6:(r + 1) * 64 * 6]
-        s = ''.join(chr(row[c * 6]) if 0x20 <= row[c * 6] < 0x7f else '.' for c in range(64))
+        row = raw[r * COLS * 6:(r + 1) * COLS * 6]
+        s = ''.join(chr(row[c * 6]) if 0x20 <= row[c * 6] < 0x7f else '.' for c in range(COLS))
         print(s.rstrip())
 elif cmd == 'stats':
     for name in [n for n in ['s_main_us', 's_lcd_us', 's_prompt_us'] if n in syms]:

@@ -1,6 +1,6 @@
 # PicoCalc Shell — design
 
-Status: **Draft 12, 2026-10-18.** Feasibility study and first design. M0
+Status: **Draft 13, 2026-10-22.** Feasibility study and first design. M0
 (the skeleton), M1 (files), M2 (run), M3 (vi), M4 (comfort), M6 (USB
 speed), M8 (the rest of v1), M9 (the DOS flavour) and M11 (menus) are done
 ([milestones.md](milestones.md)). There is no M5: *Exit to shell* in the
@@ -14,7 +14,7 @@ in the PicoCalc's own flash (§3.6).
 
 The owner's decisions so far are listed below. Do not reopen them. The
 only open questions are M10's, a flash filesystem for programs to share
-(§3.7).
+(§3.7). M12, date and time (§3.8), is settled.
 
 | Date | Decision | § |
 |---|---|---|
@@ -40,6 +40,9 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-16 | A release offers the two flavours' release builds as `shell-unix.uf2` and `shell-dos.uf2`; the user renames the one they want to `BOOT2350.UF2` on the card. | 4.7 |
 | 2026-10-18 | The UNIX flavour has only 40 columns too, in the Master 512's font (`font-master-512-8x10.c`), arranged as the terminal's 128 glyphs with the DEC graphics at `0x00`–`0x1F`, as IBM's is. There is no `font` command and no 64-column mode in either flavour, and the owner's 8x10 and 5x10 are no longer built in. This replaces the 2026-10-12 and 2026-10-14 decisions on the UNIX flavour's fonts. | 4.1 |
 | 2026-10-17 | `picocalc_shell_exit()` returns false when UF2 Loader did not start the program, as well as with no card, and the program decides what to do then (such as power off by its own means). The header stays independent and does not touch the southbridge; `picocalc_shell_loader_present()` tells a program beforehand. | 3.4 |
+| 2026-10-22 | For M12 (§3.8): the DS3231 is on `i2c0`, on the bus alone, with no GPIO (no `SQW`). Time zones are POSIX `TZ` strings. The UNIX flavour sets the time in POSIX's form, `date mmddHHMM[[cc]yy]`. The Wi-Fi password may be kept in plain text on the card. `i2c0` is on GP4 (SDA) and GP5 (SCL). The DOS flavour has `C:\CONFIG.SYS`, with `COUNTRY=`. `DIR` takes the 39-column layout with the size moved left. `/ntp/ntp.cfg` names one network (*changed the same day:* it was to hold several). The development build's UART moves off GP4 and GP5, to the pins left for it: 2, 3, 21 and 28. | 3.8 |
+| 2026-10-22 | Each flavour has a Pico 2 build and a separate Pico 2 W build; only the W build supports NTP (§3.8). A release offers `shell-unix.uf2`, `shell-dos.uf2`, `shell-unix-w.uf2` and `shell-dos-w.uf2`, and `ntp.uf2` for `/pico2-apps/`; this extends the 2026-10-16 decision. | 3.8, 4.7 |
+| 2026-10-22 | M12's design (§3.8) is settled: NTP runs in a separate RAM program, `ntp.uf2`, at most once per power-on, joining the one network `/ntp/ntp.cfg` names; `i2c0` runs at 100 kHz; the AON timer and the DS3231 hold UTC, POSIX `TZ` gives local time, and FAT timestamps are local; the record of the clock is in POWMAN scratch 0–2; `picocalc_shell.h` gains `picocalc_shell_time()` and `picocalc_shell_set_time()`; a clock that is not set is handled as in §3.8 (`date`'s status 1; `DATE`, `TIME`, and `/T` with `ERRORLEVEL`); file times as in §3.8 (`touch` sets an existing file's time, `cp` the current time, `COPY` keeps the source's; `ls -l`'s six-month rule); `CONFIG.SYS` as in §3.8. | 3.8 |
 | 2026-10-18 | Scripts and batch files can show menus (M11). The UNIX flavour has bash's `select NAME in WORDS; do LIST; done`, with `break`, `PS3` and `REPLY`, as its one compound command: no `if` or `case`, so a menu branches by running the word chosen. The DOS flavour has DOS 6's `CHOICE` with all its switches (`/C`, `/N`, `/S`, `/T`), for `IF ERRORLEVEL` and `GOTO`. | 4.4, 4.7, 10 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
@@ -456,6 +459,349 @@ top. The UNIX flavour has about 69 KB free (504 KB less M9's 435 KB).
   the power-cut window;
 - that loader versions 2.3 to 2.5 lay out the table block as 2.2 does;
 - that BOOTSEL writes a `data` UF2 only to the partition that accepts it.
+
+### 3.8 Date and time (M12)
+
+*Proposed 2026-10-22, and settled by the owner the same day* (the
+decisions table). *The facts still to check on the board are at the
+end.* Both flavours
+learn the date and time, keep it in the RP2350's always-on (AON) timer,
+and hand it to the programs they start. The time comes from one of three
+places, in this order:
+
+1. **The AON timer itself**, already set: the shell is coming back from
+   a program, or from `reboot`.
+2. **A DS3231 on I²C**, if one is fitted: it keeps time with the power
+   off.
+3. **NTP over Wi-Fi** on a W board, or **the user**, through `date` or
+   `DATE` and `TIME`, typed or in `/etc/profile` or `AUTOEXEC.BAT`.
+
+With none of them, the clock is *not set*. The shell then works as it
+does now: files get FatFs's fixed date, and `date` says the clock is not
+set.
+
+**The AON timer.** POWMAN's timer is a 64-bit count of milliseconds. It
+is in the always-on domain, so it survives the watchdog reboots between
+the shell and a program, but not a power-off (HW §1.2). It holds **UTC,
+in milliseconds since 1970**, which is what the SDK's `aon_timer` uses.
+A program can then read it with `aon_timer_get_time()` as well as through
+the header (below). It ticks from the crystal (XOSC), as
+`aon_timer_start()` sets it; the low-power oscillator is much less
+accurate. Three things in the SDK support this, to be confirmed on the
+board:
+
+- `POWMAN_WDSEL` resets to 0, so a watchdog reset leaves POWMAN alone;
+- `watchdog_reboot()` leaves XOSC out of `PSM_WDSEL`, so the crystal
+  keeps running through the reboot;
+- nothing in the SDK's start-up code touches the timer, so a program
+  that does not use it leaves it running.
+
+The SDK's `time()` and `gettimeofday()` do not read the AON timer: they
+count from each boot. So a program sees the shell's time only if it asks
+for it.
+
+**The record beside it.** The timer alone cannot say whether it was set.
+POWMAN's scratch registers survive the same resets as the timer, and
+power-on clears them. Three of them hold the record; the SDK's
+`pico_low_power` uses scratch 6 and 7, and the boot ROM the `BOOT`
+registers. They are not the watchdog's scratch registers, which carry
+the loader's commands (0–2, §3.1) and the boot ROM's (4–7, HW §2.7):
+POWMAN's are a bank of their own (`powman_hw->scratch[]`, at
+`0x401000b0`, against the watchdog's at `0x400d800c`).
+
+| Register | Holds |
+|---|---|
+| scratch 0 | a magic word |
+| scratch 1 | the local offset from UTC in minutes (16 bits, signed); the source (user, RTC, NTP, a program); *set*; *NTP tried since power-on* and its result; *the RTC needs writing* |
+| scratch 2 | the complement of scratch 0 XOR scratch 1, as a check |
+
+The clock is set when the magic, the check and *set* agree and the timer
+is running. All knowledge of the record lives in one port file,
+`src/port/clock.c`, as the loader's protocol lives in `loader.c`.
+
+**The DS3231.** It holds UTC. At startup, if the AON timer is not set,
+the shell probes address `0x68`. If the chip answers and its
+oscillator-stop flag (`OSF`, status register bit 7) is clear, the shell
+reads the time into the AON timer. If `OSF` is set, the chip lost its
+time, and the shell says so once. Whenever the time is set (by `date`,
+`DATE`, `TIME` or NTP), the shell writes it to the DS3231 and clears
+`OSF`. NTP runs in a program that has no I²C driver, so it marks *the RTC
+needs writing*, and the shell writes the chip when it comes back. Every
+I²C wait stays bounded, as the southbridge's are (HW §6.1). *Settled
+2026-10-22:* the DS3231 is on `i2c0`, on GP4 (SDA) and GP5 (SCL), at
+100 kHz, and only on the bus. Its `SQW` pin
+is not connected, so the timer is not locked to its seconds (POWMAN
+could lock to 1 Hz on GP12, 14, 20 or 22). Between settings the timer
+keeps the crystal's accuracy.
+
+*Settled 2026-10-22:* GP4 and GP5 were UART1, the development build's
+log, mirror and typed keys (HW §1.1, §2.7), so the UART moves, and both
+builds have the DS3231. The pins left for the UART are 2, 3, 21 and 28.
+On RP2350, GP2 and GP3 are UART0's TX and RX through function 11,
+`UART_AUX`, which the SDK picks itself (`UART_FUNCSEL_NUM`, used by
+`pico_stdio_uart`). So the UART becomes **UART0, TX GP2 and RX GP3**,
+with GP21 and GP28 left free. (The alternative, TX on GP28 and RX on
+GP21, is two different UARTs.) The change is `PICO_DEFAULT_UART=0`,
+`PICO_DEFAULT_UART_TX_PIN=2` and `PICO_DEFAULT_UART_RX_PIN=3` in
+`CMakeLists.txt`'s two places, and the comments that say UART1. It is
+made with the Debug Probe's wires moved, as M12's first step; the
+`uart-*.sh` tools open only the probe's port and do not change. The
+programs' own builds are not affected.
+
+**NTP.** The CYW43's firmware alone is 224 KB
+(`w43439A0_7_95_49_00_combined.h`), and the UNIX flavour has about
+72 KB free (§7), so Wi-Fi cannot be in the shell. It goes in a separate
+**RAM program**, `ntp.uf2` in `/pico2-apps/`, built from this tree for
+`pico2_w`. The shell runs it with `BOOT_RAM` (§3.3), so the program in
+flash and the last program are untouched. It reads `/ntp/ntp.cfg` (the
+network's name and password, and the server, `pool.ntp.org` by default;
+EL §8.7, and below), joins the network, sends one SNTP request, and sets the AON
+timer and the record. Then it sends `BOOT_SD` and reboots. It shows
+what it is doing on the panel and gives up after a bounded time. On a
+board with no radio, or with no network, it records the failure and
+returns, leaving the clock as it was. *Estimates:* about 340 KB of SRAM
+(the firmware, the driver, lwIP, and the card and panel drivers), and
+5–10 s from Enter back to the prompt. *Settled 2026-10-22:* the password
+may be kept in plain text on the card.
+
+*Why not in the shell, without the firmware resident.* The driver needs
+the firmware only while it starts the chip (`cyw43_download_resource`
+in `cyw43_ll.c` copies it from one pointer), so it could in principle be
+read from the card in pieces and the space freed. That would take a
+patched driver, or the SDK's firmware partition
+(`pico_use_wifi_firmware_partition`), which is a second partition with
+M10's question about writing stage3's table. What is left, all
+*estimates*: the driver's code and buffers, 25–30 KB; lwIP with UDP,
+DHCP, ARP and DNS but no TCP, 25–35 KB of code and 10–16 KB of packet
+buffers; the SNTP code and the join, a few KB. That is 60–80 KB against
+the UNIX flavour's 72 KB free, which also has to cover the clock's own
+8–12 KB and every later feature. So it does not fit with any margin, and
+the RAM program costs the shell nothing.
+
+**Two builds for each flavour** (*settled 2026-10-22*). The Pico 2
+build has no NTP: no `ntp` builtin, and a word `ntp` is looked up as any
+program is. The Pico 2 W build, configured with `-DPICO_BOARD=pico2_w`
+(`build/pico-w`, `build/pico-w-release`, `build/pico-dos-w`, ...), adds
+the `ntp` builtin and nothing else. Wi-Fi itself stays in `ntp.uf2`, for
+the reasons above, and the shell links no CYW43 code, so either build is
+harmless on either board; on a Pico 2, the W build's `ntp` fails and
+says so. The Pimoroni Plus 2 W takes the W build. `info` names the
+build. *Settled 2026-10-22:* a release offers four shell files, `shell-unix.uf2`,
+`shell-dos.uf2`, `shell-unix-w.uf2` and `shell-dos-w.uf2`, and
+`ntp.uf2` for `/pico2-apps/`. The host build compiles the builtin in, so
+its tests run, with the program run faked.
+
+**Running it.** `ntp` (`NTP` in the DOS flavour), in the W build, is a builtin, so it wins
+over the program of the same name (§3.3). It runs `ntp.uf2` once per
+power-on: if NTP has already been tried since power-on, it prints the
+result and returns, with status 0 if NTP set the clock and 1 if not. So
+`ntp` in `/etc/profile` or `AUTOEXEC.BAT`, which run every time the shell
+starts, does not loop after the program returns, even when the network
+is down. `ntp -f` (`NTP /F`) runs it again. With a DS3231 and Wi-Fi,
+each power-on that reaches the shell syncs once and corrects the chip.
+
+**Local time.** The offset comes from `TZ`, a POSIX string such as
+`EST5EDT,M3.2.0,M11.1.0`, set in `/etc/profile` (`export TZ=...`) or
+`AUTOEXEC.BAT` (`SET TZ=...`, as DOS's C libraries read it). newlib's
+`localtime_r` reads `TZ`, and the host's C library does too, so the
+conversion is tested on the host. Without `TZ` the shell uses UTC.
+*Settled 2026-10-22:* POSIX `TZ` strings, not a fixed offset. The
+shell writes the offset in effect into the record each time it starts a
+program; a program running when daylight saving starts or ends keeps the
+old offset until it returns to the shell. FAT has no time zone, so FAT
+timestamps are local time, as DOS and Windows write them.
+
+**What programs agree to.** Two functions go in `include/picocalc_shell.h`,
+header-only and dual-licensed as the rest of it is (§9):
+
+```c
+// The time the shell keeps: UTC milliseconds since 1970, and the local
+// offset in minutes when the shell started the program. Returns false,
+// and leaves both alone, if the clock is not set.
+bool picocalc_shell_time(int64_t *utc_ms, int *offset_min);
+
+// Set the time, for a program that learns it itself (its own NTP or
+// RTC). The shell writes the DS3231, if there is one, when it comes back.
+void picocalc_shell_set_time(int64_t utc_ms);
+```
+
+A program may read the time at any moment. It must not stop the timer,
+change its tick source, or set it except through
+`picocalc_shell_set_time()`. It must not write POWMAN scratch 0–2. A
+program that wants `time()` to work can call `settimeofday()` with the
+value at start-up. With the stock loader, power-on with no key held
+starts the last program without the shell (§3.4), so the clock is not
+set then unless the program reads a DS3231 itself. With M7's patched
+loader the shell starts first, and sets it.
+
+**In each flavour.**
+
+| | UNIX | DOS |
+|---|---|---|
+| Show | `date`: `Thu Oct 22 14:30:05 EDT 2026` (28 columns); `date -u` in UTC. Status 1, with `date: clock not set`, when it is not | `DATE` shows `Current date is Thu 10-22-2026` and asks `Enter new date (mm-dd-yy):`; `TIME` likewise, `Current time is  2:30:05.00p`. Enter keeps it. `DATE /T` and `TIME /T` only show, and set `ERRORLEVEL` 1 when the clock is not set |
+| Set | `date mmddHHMM[[cc]yy]`, POSIX's form (*settled 2026-10-22*) | `DATE 10-22-26`, `TIME 14:30`, in the order and with the separators `COUNTRY=` gives (below) |
+| From NTP | `ntp`, `ntp -f` | `NTP`, `NTP /F` |
+| Files | `ls -l`: `-rw       24 Oct 22 14:30 a.txt`, with the year in place of the time for a date more than six months away, as `ls` does | `DIR`: `COMMAND  COM     54,645 05-31-94  6:22a` (below) |
+| Writes | new and changed files, `mkdir`, `touch` (which, with a clock, sets an existing file's time, as POSIX's does); `cp` gives the copy the current time | as UNIX, but `COPY` keeps the source's date, as DOS's did |
+| Elsewhere | `info` shows the clock and its source | `info` likewise |
+
+`get_fattime()` replaces `FF_FS_NORTC`; with the clock not set it
+returns FatFs's fixed date, so nothing changes without a clock. In
+`AUTOEXEC.BAT`, a PicoCalc with no clock source asks only when needed:
+
+```
+@ECHO OFF
+NTP
+DATE /T
+IF NOT ERRORLEVEL 1 GOTO SET
+DATE
+TIME
+:SET
+```
+
+The UNIX flavour has no prompt of its own: `/etc/profile` can say
+`ntp || date || echo set the clock: date mmddHHMM`.
+
+**In 40 columns.** `date`'s 28 columns and `DATE`'s `Current date is Thu
+10-22-2026`, 30, fit. The two listings are the tight ones:
+
+- **`ls -l`** keeps its mode and its 9-column size field, then POSIX's
+  date, `%b %e %H:%M` (12 columns): 26 columns before the name, so 14 are
+  left for it. A longer name wraps, as it does now. A file of 1 GB or more
+  has a 10-digit size and pushes the name one column on.
+- **`DIR`** can keep the commas asked for on 2026-10-14 if the size
+  moves left: the 8.3 name (12 columns), the size or `<DIR>` in an
+  11-column field, the date (9 with its space) and the time (7, the hour
+  padded to two and `a` or `p`). That is 39 columns, short of the 40th,
+  where the terminal wraps, as now:
+
+  ```
+  COMMAND  COM     54,645 05-31-94  6:22a
+  HOME         <DIR>      10-22-26  2:30p
+  ```
+
+  It is DOS's own order, squeezed: DOS 6.22's line, with a wider size
+  field, was 43 columns. A country with a 24-hour clock saves a column.
+  Two cases do not fit, and take the rule for a long name now (§4.7),
+  their size, date and time on the next line, under the name's column:
+  a name that is not 8.3, and a file of 1 GB or more, whose size is 13
+  columns. `DIR /W` shows no dates, as in DOS. This moves the size from
+  ending at column 39, where it was put on 2026-10-14. *Settled
+  2026-10-22.*
+
+**`COUNTRY=` and `CONFIG.SYS`** (*settled 2026-10-22*). DOS took its date order,
+its separators, its 12- or 24-hour clock and its thousands separator from
+`COUNTRY=` in `CONFIG.SYS`, so the DOS flavour would too: a
+`C:\CONFIG.SYS`, read before `AUTOEXEC.BAT`, with `COUNTRY=nnn` its one
+working line. `COUNTRY=044,850,C:\DOS\COUNTRY.SYS`, as DOS wrote it,
+reads only the code. The codes and their formats come from MS-DOS 6's
+documented table, a few of them at first (001 United States, the
+default; 002 Canadian French; 044 United Kingdom; 049 Germany; 033
+France; 081 Japan). `FILES=`, `BUFFERS=`, `DEVICE=`, `DOS=`, `LASTDRIVE=`,
+`BREAK=` and `SHELL=` mean nothing here and are passed over without a
+word, so a `CONFIG.SYS` from an old PC does not complain. Any other line
+gets DOS's `Unrecognized command in CONFIG.SYS` and its line number.
+`COUNTRY` affects only the DOS flavour: `DATE`, `TIME`, `DIR`, and the
+commas in `DIR` and `MEM`. The UNIX flavour keeps POSIX's C locale, as a
+shell with no locales does. A `CONFIG.SYS` that is missing is nothing.
+
+Nothing else needs `CONFIG.SYS` now. `PATH`, `PROMPT` and `TZ` are set
+in `AUTOEXEC.BAT`, as in DOS; NTP's settings are the program's own file.
+If M10 is built, its drive letter is fixed and needs no `LASTDRIVE=`.
+
+*Estimates:* newlib's `localtime_r`, `mktime`, `strftime` and `tzset`, the
+DS3231 driver and the commands: 8–12 KB in each flavour.
+
+**NTP's settings** (*settled 2026-10-22*). `/ntp/ntp.cfg` follows the
+emulators' `key = value` rules (EL §8.7), and names one network and one
+server:
+
+```
+# /ntp/ntp.cfg
+server   = pool.ntp.org         # the default
+country  = CA                   # Wi-Fi's country code; worldwide if absent
+timeout  = 20                   # seconds to join and get the time
+ssid     = Home
+password = "my # password"
+```
+
+- One network: a second would need numbered keys, since a repeated key
+  is an error (EL §8.7). A network with no password is open.
+- A value may be in double quotes, and must be when it holds `#` or
+  starts or ends with a space, so a password is not cut at a comment.
+- `country` is the radio's regulatory country, two letters, for
+  `cyw43_arch_init_with_country()`; worldwide without it. It is not the
+  DOS flavour's `COUNTRY=` number.
+- `ntp.uf2` only reads the file; the user edits it with vi or EDIT, so
+  EL §8.7's rules for saving do not apply.
+
+**To check before building** (on the board and in the RP2350 datasheet;
+facts found go in hardware-notes.md):
+
+- that the AON timer keeps counting, from XOSC, through `watchdog_reboot()`,
+  stage3, `BOOT_RAM` and a program's start-up, and how many milliseconds a
+  round trip loses;
+- what the timer does if XOSC stops: it stops, or falls back to the
+  low-power oscillator;
+- which resets clear POWMAN: power-off, the RUN pin, BOOTSEL, OpenOCD's
+  `reset halt`, and `tools/swd-ram.sh`, whose `PSM_WDSEL` of `0x01fffff3`
+  may include XOSC (HW §2.7);
+- that `picocalc_shell_exit()`'s loader check (§3.4) is right in a RAM
+  program, or that `ntp.uf2` sends `BOOT_SD` through `loader.c` itself;
+- that a `pico2_w` build of the shell runs on the Plus 2 W's RP2350B,
+  as the `pico2` build does;
+- that `ntp.uf2`, run by a W build put on a Pico 2 by mistake, fails
+  cleanly, without driving the Pico 2's SMPS, VBUS and LED pins (GP23–25,
+  GP29) harmfully;
+- which of the free pins the PicoCalc's carrier brings out to a connector;
+- that UART0 on GP2 and GP3 through `UART_AUX` carries the log, the
+  mirror and typed keys through the Debug Probe, and that the RX pull-up
+  (`main.c`) still keeps a floating GP3 quiet; the result goes in HW §2.7
+  and §1.1;
+- ~~MS-DOS 6's formats for each country chosen~~ *checked 2026-10-22:*
+  the dates are MS-DOS 6's `HELP COUNTRY` table (001 `01-23-1993`, 002
+  `1993-01-23`, 033 and 049 `23.01.1993`, 044 `23/01/1993`), and the
+  separators and Japan's row FreeDOS's `COUNTRY.SYS` (`country.asm`):
+  thousands and decimal `,` `.` for 001, 044 and 081, space and `,` for
+  002 and 033, `.` `,` for 049; a 12-hour clock for 001 alone; Japan
+  `yyyy-mm-dd`. They are in `src/core/dos_time.c`.
+
+**As built** (*step 2, 2026-10-22*; where the build departs from the text
+above, or fills in what it left open):
+
+- **`TZ` is read by the core's own parser** (`src/core/clock.c`), not
+  newlib's `localtime_r`: the host's C library differs from newlib (macOS
+  looks for zoneinfo files first, and takes a `TZ` with no rules its own
+  way), so a host test of libc would not be a test of the board. The
+  parser takes POSIX's form whole (names in `<>`, offsets to the second,
+  `Jn`, `n` and `Mm.w.d` rules with `/time`), and leaves the process's
+  environment alone. A `TZ` with a summer zone and no rules takes the
+  United States' (`M3.2.0,M11.1.0`), as glibc does. A `TZ` that cannot be
+  read, or names a place (`America/Toronto`), gives UTC.
+- The port's clock is `shell_clock_t` (`shell.h`): get and set, in UTC
+  milliseconds. The record's port file is `src/port/clock.c`, as above,
+  with its header named `aon.h`, so it cannot be taken for the core's
+  `clock.h` on the port's include path.
+- The clock not set: `get_fattime()` gives FatFs's fixed date
+  (`FF_NORTC_*`, 1 January 2026, midnight), and a command that sets
+  only the date or only the time, or `date` with no year, starts from it.
+  `DATE` and `TIME` with the clock not set say `Current date is not
+  set`, and `DATE` and `TIME`, as `/T`, end with ERRORLEVEL 1 while it is
+  still not set.
+- The years taken are FAT's and DOS's, 1980-2099, in both flavours.
+  `date` takes POSIX's `yy` (69-99 the 1900s); `DATE` takes DOS's (80-99).
+- `DATE` and `TIME` read the words after them as one, as DOS read its
+  tail, so `TIME 2:30 pm` works; a bad one gets DOS's `Invalid date` and
+  the question, as DOS 6 did.
+- `XCOPY` keeps the source's date too, as DOS's did.
+- `CONFIG.SYS` also passes over `DEVICEHIGH=`, `INSTALL=`, `FCBS=` and
+  `STACKS=`, which most of DOS 6's had, and takes `REM` and `;` as
+  comments. A code not in the table gets DOS's `Invalid country code or
+  code page`. Both errors are followed by `Error in CONFIG.SYS line N`.
+- `PROMPT`'s `$D` and `$T` give the date and time as `DATE` and `TIME`
+  show them, and nothing with the clock not set.
+- `MEM` still shows its numbers without separators, so `COUNTRY` does
+  not reach it.
 
 ## 4. The shell
 
@@ -972,7 +1318,8 @@ the default), gives them a command line that feels like DOS and an EDIT
 modelled on MS-DOS 5's. It is never called MS-DOS, which is Microsoft's
 mark; it is "the DOS flavour" of shell. Each flavour is its own
 `BOOT2350.UF2`, and the release ships both, as `shell-unix.uf2` and
-`shell-dos.uf2` *(settled 2026-10-16)*. The user copies the one they
+`shell-dos.uf2` *(settled 2026-10-16)*. *From M12* each also has a
+Pico 2 W build, with NTP (§3.8). The user copies the one they
 want to the card's root; neither flavour installs the other.
 
 **What is shared.** Everything below the command language: FatFs and the
@@ -1151,7 +1498,8 @@ rules for size, CR LF and safe save (§4.6).
     included, or sets and clears `+R -R +A -A +S -S +H -H`.
   - **SET**, **PATH** (in capitals, `;` between directories, `PATH ;`
     clears) and **PROMPT** (`$P $G $L $B $Q $$ $N $_ $E $H $V`; `$T` and
-    `$D` give nothing, with no clock). With PROMPT cleared the prompt is
+    `$D` the time and date, *from M12*, and nothing with the clock not
+    set, §3.8). With PROMPT cleared the prompt is
     `C>`, DOS's own. **ECHO** prints the rest of the line as typed,
     `ECHO.` a blank line, and `ECHO OFF` hides the prompt.
   - **VER**, **VOL**, **MEM** (the port's static SRAM and PSRAM, 0 if none,
@@ -1713,3 +2061,46 @@ in [milestones.md](milestones.md).
   *Done 2026-10-18* (milestones.md): host tests, Claude's runs on the
   Plus 2 W from SRAM, and the owner's on a Pico 2 W, both flavours'
   release builds.
+- **M12 — Date and time (settled 2026-10-22, §3.8; in progress on
+  branch `m12-time`: step 1's UART move checked on the Plus 2 W, and
+  the clock kept through stage3, a program round trip and `REBOOT` there
+  (HW §8.4); step 2's core, commands and host tests done).** The AON
+  timer and its record, the DS3231, `ntp.uf2`, the commands of each
+  flavour, FAT timestamps, and the header's two functions (§3.8). In
+  steps:
+  1. The development build's UART moved to UART0 on GP2 and GP3, with the
+     Debug Probe rewired, and the checks in §3.8, on the Plus 2 W. The
+     design is changed where they disagree.
+  2. `src/port/clock.c` and the core's clock hooks, faked on the host as
+     `now_us` is; `date`, `DATE`, `TIME`, `TZ`, `get_fattime()`, `ls -l`
+     and `DIR`. Host tests cover setting and showing in each form and its
+     mistakes, `TZ` across a change of daylight saving, the six-month
+     rule in `ls -l`, timestamps written by each command over FAT16 and
+     FAT32, `COPY` keeping the source's date, and the clock not set.
+  3. The DS3231, with a fake on the host: present, absent, `OSF` set, and
+     written when the time is set and when NTP marked it.
+  4. `ntp.uf2`, the W builds (`-DPICO_BOARD=pico2_w`) and their `ntp`
+     builtin. Host tests cover the builtin's
+     once-per-power-on rule with a fake record, so a startup file cannot
+     loop.
+  5. The header's functions, and `test/pico/clock_test.c`, which builds
+     `clock-test.uf2`: a program that shows the time it was given, sets
+     it forward a minute and exits to the shell.
+
+  Done when, on the board:
+  - a time set by hand is still right after running a program and coming
+    back, and after `reboot`; the loss per round trip is measured;
+  - `clock-test` shows the shell's time, and the shell shows the minute
+    it added;
+  - a file written by each flavour shows its time in `ls -l`, in `DIR`,
+    and on a computer through `usbdisk`;
+  - with a DS3231, the time survives `poweroff` and a power-on with Up
+    held;
+  - NTP sets the clock on a Plus 2 W and on a Pico 2 W; with the network
+    off it reports the failure, and `/etc/profile` and `AUTOEXEC.BAT`
+    with `ntp` in them do not loop;
+  - `AUTOEXEC.BAT` asks for the date and time at power-on with no clock
+    source, and not again after a program.
+
+  Measure each flavour's RAM, `ntp.uf2`'s size and its time from Enter to
+  the prompt, and the AON timer's drift against NTP over a day.
