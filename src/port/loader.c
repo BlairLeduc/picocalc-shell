@@ -195,20 +195,20 @@ void loader_init(shell_loader_t *ld, loader_status_t *st) {
     ld->flash = (uf2_flash_t){ XIP_BASE, end, fl_read, fl_erase, fl_program, NULL };
 
     if (!st->flash_end) {
-        ld->problem = "the shell was not started by UF2 Loader";
+        ld->problem = "not started by UF2 Loader";
         return;
     }
     if ((uintptr_t)s_ram_path + sizeof s_ram_path > STAGE3_RAM_BASE) {
-        ld->problem = "the shell's BOOT_RAM path lies in stage3's RAM";
+        ld->problem = "BOOT_RAM path in stage3's RAM";
         return;
     }
     bool known = false;
     for (size_t i = 0; st->version && i < sizeof k_known / sizeof k_known[0]; i++)
         known |= strcmp(st->version, k_known[i]) == 0;
     if (!st->version) {
-        ld->problem = "UF2 Loader's version cannot be read";
+        ld->problem = "UF2 Loader version unreadable";
     } else if (!known) {
-        snprintf(s_problem, sizeof s_problem, "UF2 Loader %s is not one this shell knows",
+        snprintf(s_problem, sizeof s_problem, "UF2 Loader %s is unknown",
                  st->version);
         ld->problem = s_problem;
     }

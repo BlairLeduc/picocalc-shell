@@ -849,9 +849,14 @@ shell, with none, says `not on this machine`:
   writes then reads it back, since the MCU's source steps and clamps the
   level, though firmware `0x00` was seen to keep it as written (HW §4.11).
 - `info` prints the shell's version, then the port's lines (chip and
-  clock, unique id, static SRAM, UF2 Loader and its partition, whether
-  programs can run, the keyboard's firmware version as read at bring-up),
-  then the card (`df`'s figures) and the battery.
+  clock, unique id, static SRAM, PSRAM (0 MB if none), UF2 Loader and its
+  partition, whether programs can run, the keyboard's firmware version as
+  read at bring-up), then the card (`df`'s figures) and the battery.
+  `board.c` finds the PSRAM at start, on an RP2350B only, by reading the
+  chip's id on QMI chip select 1, GPIO 47 (HW §2.4), with the SDK's
+  `psram_detect_size` (SDK 2.3 or later), then gives the pin back. The
+  shell neither sets up nor uses the PSRAM; the size is for `info`, `MEM`
+  and the UART banner.
 - `poweroff`, `reboot` and `bootsel` save the history, say what is
   happening, and call the port, which returns only on failure.
   `poweroff` writes 6 to `OFF` (HW §6), then waits 10 s for the power to
@@ -1149,9 +1154,9 @@ rules for size, CR LF and safe save (§4.6).
     `$D` give nothing, with no clock). With PROMPT cleared the prompt is
     `C>`, DOS's own. **ECHO** prints the rest of the line as typed,
     `ECHO.` a blank line, and `ECHO OFF` hides the prompt.
-  - **VER**, **VOL**, **MEM** (the port's static SRAM through
-    `shell_set_memory`, and the app partition's size as the largest
-    program), **CLS**, **PAUSE**, **HELP** (the shared `help`), **EXIT**
+  - **VER**, **VOL**, **MEM** (the port's static SRAM and PSRAM, 0 if none,
+    through `shell_set_memory`, and the app partition's size as the
+    largest program), **CLS**, **PAUSE**, **HELP** (the shared `help`), **EXIT**
     (`menu`), and the PicoCalc's own commands under their names, which
     take their words in either case.
 - **Programs.** A name that is not a builtin runs `NAME.UF2` from the

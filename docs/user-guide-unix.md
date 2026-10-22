@@ -382,7 +382,7 @@ have it every time.
 |---|---|
 | `battery` | the battery's charge, and `charging` when the charger is on |
 | `backlight [lcd\|kbd] [0-255]` | shows or sets the screen (`lcd`) or keyboard (`kbd`) backlight |
-| `info` | the shell's version, the chip, memory, UF2 Loader, the keyboard's firmware, the card and the battery |
+| `info` | the shell's version, the chip, memory and PSRAM (0 MB on a board without it), UF2 Loader, the keyboard's firmware, the card and the battery |
 
 `battery`:
 

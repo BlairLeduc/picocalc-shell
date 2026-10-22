@@ -132,6 +132,7 @@ static int dos_mem(shell_t *sh, int argc, char **argv) {
         out_printf(&sh->out, "\n%10lu bytes total memory\n", sh->mem_total);
         out_printf(&sh->out, "%10lu bytes used by the shell\n", sh->mem_used);
         out_printf(&sh->out, "%10lu bytes free\n", sh->mem_total - sh->mem_used);
+        out_printf(&sh->out, "%10lu bytes PSRAM\n", sh->mem_psram);
     }
     if (programs)
         out_printf(&sh->out, "%s%10lu bytes largest program\n", sh->mem_total ? "" : "\n",

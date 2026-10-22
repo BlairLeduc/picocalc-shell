@@ -796,10 +796,9 @@ static int test_shell(void) {
           "menu: '%s'", boot_ram);
 
     /* No loader, or one the shell cannot use. */
-    loader.problem = "UF2 Loader 2.2 is not one this shell knows";
+    loader.problem = "UF2 Loader 2.2 is unknown";
     CHECK(run("prog") == 1 && boots == 0 &&
-              strcmp(con, "prog: cannot run programs: UF2 Loader 2.2 is not one this shell "
-                          "knows\n") == 0,
+              strcmp(con, "prog: cannot run programs: UF2 Loader 2.2 is unknown\n") == 0,
           "problem: '%s'", con);
     CHECK(run("menu") == 1 && boots == 0, "menu with a problem: '%s'", con);
     loader.problem = NULL;

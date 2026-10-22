@@ -19,6 +19,7 @@ typedef struct {
     uint32_t    clk_sys_hz;
     uint32_t    clk_peri_hz;
     unsigned    vreg_mv;        /* the core rail, as set                 */
+    uint32_t    psram_bytes;    /* physical: by the chip's id; 0: none   */
 } board_info_t;
 
 /* Set clk_sys to 150 MHz with the core rail at its default, and put
