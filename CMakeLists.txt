@@ -187,6 +187,7 @@ else()
         src/port/board.c
         src/port/clock.c
         src/port/diskio.c
+        src/port/ds3231.c
         src/port/kbd.c
         src/port/lcd.c
         src/port/loader.c

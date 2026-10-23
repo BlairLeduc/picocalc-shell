@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "clock.h"
 #include "expand.h"
 #include "files.h"
 #include "flavour.h"
@@ -663,6 +664,8 @@ void flavour_init(shell_t *sh) {
 
 void flavour_start(shell_t *sh) {
     out_printf(&sh->con, "\033[1mPicoCalc shell\033[0m %s\n\n", sh->version);
+    const char *note = clock_note();
+    if (note) shell_error(sh, "shell: %s\n", note);
     script(sh, PROFILE);
 }
 

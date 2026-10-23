@@ -244,7 +244,12 @@ have it every time.
 `DATE` and `TIME`:
 
 - The clock keeps going while a program runs, and through `REBOOT`.
-  Switching the PicoCalc off loses it.
+  Switching the PicoCalc off loses it, unless a DS3231 clock chip is
+  fitted, on GP4 (SDA) and GP5 (SCL): setting the time sets the chip
+  too, and the shell reads it back at power-on. If the chip lost its
+  time (it is new, or its battery is flat), the shell says
+  `Warning: the DS3231 lost its time` at power-on, but not again after a
+  program, until the clock is set. The chip holds 2000 to 2199.
 - The date is typed in the country's order, `mm-dd-yy` in the United
   States (see `CONFIG.SYS`, section 6), with `-`, `/` or `.` between. The
   year is 1980 to 2099, in two digits or four.

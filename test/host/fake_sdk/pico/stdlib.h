@@ -1,7 +1,8 @@
 /* pico/stdlib.h, hardware/spi.h and hardware/gpio.h on the host: the
  * parts src/port/sd.c uses, over the card model in fake_sd.c. Time is
  * the model's: it moves only as bytes cross the bus and as sd.c waits,
- * so every bound sd.c keeps can be checked exactly. */
+ * so every bound sd.c keeps can be checked exactly. The DS3231's test
+ * uses the GPIO calls and sleep_ms, over fake_ds3231.c. */
 #ifndef SHELL_FAKE_SDK_H
 #define SHELL_FAKE_SDK_H
 
@@ -14,6 +15,7 @@ absolute_time_t get_absolute_time(void);
 absolute_time_t make_timeout_time_ms(uint32_t ms);
 int64_t absolute_time_diff_us(absolute_time_t from, absolute_time_t to);
 void busy_wait_us_32(uint32_t us);
+void sleep_ms(uint32_t ms);
 
 typedef struct spi_inst spi_inst_t;
 #define spi0 ((spi_inst_t *)0)
@@ -25,7 +27,7 @@ int spi_write_read_blocking(spi_inst_t *spi, const uint8_t *src, uint8_t *dst, s
 int spi_write_blocking(spi_inst_t *spi, const uint8_t *src, size_t len);
 int spi_read_blocking(spi_inst_t *spi, uint8_t repeated_tx, uint8_t *dst, size_t len);
 
-enum { GPIO_FUNC_SPI };
+enum { GPIO_FUNC_SPI, GPIO_FUNC_I2C };
 enum { GPIO_IN = 0, GPIO_OUT = 1 };
 void gpio_set_function(unsigned gpio, int fn);
 void gpio_pull_up(unsigned gpio);

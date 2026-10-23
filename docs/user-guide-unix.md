@@ -407,7 +407,12 @@ have it every time.
 `date`:
 
 - The clock keeps going while a program runs, and through `reboot`.
-  Switching the PicoCalc off loses it.
+  Switching the PicoCalc off loses it, unless a DS3231 clock chip is
+  fitted, on GP4 (SDA) and GP5 (SCL): setting the time sets the chip
+  too, and the shell reads it back at power-on. If the chip lost its
+  time (it is new, or its battery is flat), the shell says
+  `shell: the DS3231 lost its time` at power-on, but not again after a
+  program, until the clock is set. The chip holds 2000 to 2199.
 - The time is set to the minute, in local time, given by `TZ` (below).
   The year is 1980 to 2099; `yy` from 69 to 99 is the 1900s.
 - `date` in `/etc/profile` with a test can remind you to set it:

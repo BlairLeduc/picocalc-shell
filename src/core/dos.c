@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "clock.h"
 #include "dos.h"
 #include "edit.h"
 #include "files.h"
@@ -393,6 +394,8 @@ void flavour_start(shell_t *sh) {
     /* $P shows each name as the card spells it: C:\HOME, not C:\home. */
     files_chdir(sh, sh->cwd);
     out_printf(&sh->con, "\033[1mPicoCalc shell\033[0m %s (DOS)\n\n", sh->version);
+    const char *note = clock_note();
+    if (note) shell_error(sh, "Warning: %s\n", note);
     dos_config(sh);
     dos_autoexec(sh);
 }

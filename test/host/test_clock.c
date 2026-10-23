@@ -333,6 +333,19 @@ static int file_tests(bool fat32) {
     return 0;
 }
 
+/* The port's note, after the banner and before the startup file, once. */
+static int note_tests(const char *want) {
+    const shell_clock_t clock = { fake_get, fake_set, NULL, "the DS3231 lost its time" };
+    shell_set_clock(&sh, &clock);
+    con_len = 0;
+    shell_start(&sh);
+    CHECK(strstr(con, want), "note: '%s'", con);
+    con_len = 0;
+    shell_start(&sh);
+    CHECK(!strstr(con, "DS3231"), "once: '%s'", con);
+    return 0;
+}
+
 int main(void) {
     const out_t out = { sink, NULL, false };
     const shell_hooks_t hooks = { now_us, interrupted, NULL, NULL, NULL, NULL };
@@ -346,10 +359,11 @@ int main(void) {
     CHECK(run("date 1022143026") == 1 && strcmp(con, "date: no clock here\n") == 0,
           "no clock, set: '%s'", con);
 
-    const shell_clock_t clock = { fake_get, fake_set, NULL };
+    const shell_clock_t clock = { fake_get, fake_set, NULL, NULL };
     shell_set_clock(&sh, &clock);
     if (date_tests()) return 1;
     if (file_tests(false)) return 1;
     if (file_tests(true)) return 1;
+    if (note_tests(" test\n\nshell: the DS3231 lost its time\n")) return 1;
     TEST_DONE();
 }

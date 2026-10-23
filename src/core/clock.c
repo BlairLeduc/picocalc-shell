@@ -26,6 +26,12 @@ const char *clock_set(int64_t utc_s) {
     return s_port.set(s_port.ctx, utc_s * 1000);
 }
 
+const char *clock_note(void) {
+    const char *note = s_port.note;
+    s_port.note = NULL;
+    return note;
+}
+
 /* ---- the calendar ----------------------------------------------------- */
 
 static bool leap(int y) {

@@ -25,8 +25,19 @@ typedef enum {
 /* The time: false if the clock is not set. */
 bool aon_get(int64_t *utc_ms);
 
-/* Set it, starting the timer from the crystal if it was not running. */
+/* Set it, starting the timer from the crystal if it was not running.
+ * Unless the time came from the DS3231, the chip needs it: aon_rtc_sync
+ * writes it, or the next aon_start does. */
 void aon_set(int64_t utc_ms, aon_source_t source);
+
+/* At each start of the shell. With the clock set, write the DS3231 if it
+ * needs it. Otherwise, once per power-on, read the chip into the clock:
+ * NULL, or what to tell the user (the chip lost its time). */
+const char *aon_start(void);
+
+/* Write the DS3231, if there is one and it needs it, to the nearest
+ * second. */
+void aon_rtc_sync(void);
 
 /* Who set it, AON_SRC_NONE if it is not set; and in words. */
 aon_source_t aon_source(void);

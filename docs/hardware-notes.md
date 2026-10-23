@@ -103,7 +103,7 @@ Design around these from the start; each one has cost a project time.
   synthesize or decode in software.
 - **No battery-backed real-time clock.** The RP2350's AON timer (RP2040's RTC)
   loses time at power-off. Wall-clock time comes from the network on a W board,
-  or from the user.
+  or from the user, or from a DS3231 added on GP4 and GP5 (§8.5).
 
 ---
 
@@ -1448,6 +1448,50 @@ second, with no loss seen at that resolution:
 Not yet checked: the loss per trip below a second; power-off; the RUN
 pin; BOOTSEL; OpenOCD's `reset halt`; and what the timer does if XOSC
 stops.
+
+### 8.5 A DS3231 on i2c0
+
+The PicoCalc has no clock chip of its own (§1.2). A DS3231 can be added
+on `i2c0`, SDA on GP4 and SCL on GP5, which were the development UART's
+before it moved to GP2 and GP3. It answers at `0x68`. The time is in
+BCD in registers `0x00`-`0x06`, with the century in bit 7 of the month;
+`0x0E` is control, where bit 7, `EOSC`, stops the oscillator on the
+battery; `0x0F` is status, where bit 7, `OSF`, says the oscillator
+stopped and the time is lost. `OSF` is cleared only by writing it 0.
+Writing the seconds starts a new second (Maxim's data sheet, 19-5170).
+
+Measured on the Plus 2 W, 2026-10-22, with the UNIX flavour's
+development build run from SRAM (`tools/swd-ram.sh`), at 100 kHz with
+the RP2350's pull-ups:
+
+- with POWMAN's scratch 0 cleared over SWD, as a power-on clears it, a
+  chip answered at `0x68` with `OSF` set, so it had not kept a time
+  (`out/m12-ds3231-absent-2.log`);
+- `date` set the clock, and the shell wrote the chip and cleared `OSF`
+  (scratch 1 then read `0x890000`: *the RTC needs writing* clear);
+- with scratch 0 cleared again and the shell restarted, the clock came
+  from the chip, 1 s from the Mac's, less the minute it was set
+  behind, at the readings' one-second resolution (`out/m12-ds3231-set-2.log`);
+- reading it added about 1 ms to the bring-up: the panel was up at
+  438.2 ms from reset, against 436.8-437.2 ms with the clock already
+  set.
+
+Checked by the owner on the same Plus 2 W, 2026-10-22, with the DOS
+flavour's development build on the card as `/BOOT2350.UF2` under UF2
+Loader 2.5: the time set with `DATE` and `TIME` was still right after a
+power cycle, read from the chip. (The build before M12 step 3, which
+had no DS3231 code, lost it, as it should.)
+
+Checked by the owner on a Pico 2 W with no DS3231, 2026-10-22, with the
+release build: setting the time returned to the prompt with no pause,
+once the write no longer waited for the next second (design.md §3.8),
+and `info` said the clock was set by hand.
+
+The southbridge did not answer in the SRAM runs (`version read failed
+(-2)`); the cause was not looked into, and the DS3231 is on the other
+bus. Not yet checked: `poweroff` and a power-on with Up held; the time
+lost per power cycle, below a second; the module's own pull-ups; its
+drift; and a board with no chip, which only the host tests cover.
 
 ---
 

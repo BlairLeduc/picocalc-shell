@@ -37,6 +37,9 @@ bool clock_utc(int64_t *utc_s);
 /* Set the clock: NULL, or why not. */
 const char *clock_set(int64_t utc_s);
 
+/* The port's note about the clock (shell_clock_t), once: NULL after. */
+const char *clock_note(void);
+
 /* `utc_s` broken down in local time, by TZ; or in UTC, its zone "UTC". */
 void clock_local(int64_t utc_s, clock_tm_t *tm);
 void clock_gmt(int64_t utc_s, clock_tm_t *tm);

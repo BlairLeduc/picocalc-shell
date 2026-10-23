@@ -512,7 +512,7 @@ POWMAN's are a bank of their own (`powman_hw->scratch[]`, at
 | Register | Holds |
 |---|---|
 | scratch 0 | a magic word |
-| scratch 1 | the local offset from UTC in minutes (16 bits, signed); the source (user, RTC, NTP, a program); *set*; *NTP tried since power-on* and its result; *the RTC needs writing* |
+| scratch 1 | the local offset from UTC in minutes (16 bits, signed); the source (user, RTC, NTP, a program); *set*; *NTP tried since power-on* and its result; *the RTC needs writing*; *the RTC was read since power-on* |
 | scratch 2 | the complement of scratch 0 XOR scratch 1, as a check |
 
 The clock is set when the magic, the check and *set* agree and the timer
@@ -527,7 +527,27 @@ time, and the shell says so once. Whenever the time is set (by `date`,
 `DATE`, `TIME` or NTP), the shell writes it to the DS3231 and clears
 `OSF`. NTP runs in a program that has no I²C driver, so it marks *the RTC
 needs writing*, and the shell writes the chip when it comes back. Every
-I²C wait stays bounded, as the southbridge's are (HW §6.1). *Settled
+I²C wait stays bounded, as the southbridge's are (HW §6.1).
+
+*As built, M12 step 3* (`src/port/ds3231.c`, and the rules in
+`src/port/clock.c`): the chip is probed once per power-on, recorded as
+*the RTC was read since power-on* in scratch 1 (bit 23), so a chip that
+lost its time is reported once and not after every program, and a
+startup with no chip costs one NACK. Registers that are not a time (bad
+BCD, 30 February) count as lost. The report is the port's note to the
+core (`shell_clock_t.note`), printed after the banner and before the
+startup file: `shell: the DS3231 lost its time`, or `Warning: ...` in
+the DOS flavour. The chip gives whole seconds, so the timer is set to
+the middle of the one read, at most half a second out. A write is made
+at once, with the timer's nearest second, since writing the seconds
+starts the chip's second: at most half a second out, too. (Waiting for
+the next second would be exact, but held up the prompt after `DATE` or
+`TIME` by up to a second, with no chip as well: the owner, on a Pico 2
+W, 2026-10-22.) Then it clears `EOSC` if set, so the oscillator runs on
+the battery, and `OSF`. The hours are written in 24-hour form and read in
+either; the century bit counts 2000–2199, and a time outside that is not
+written. A stuck bus leaves *the RTC needs writing* set for the next
+start; anything else clears it. *Settled
 2026-10-22:* the DS3231 is on `i2c0`, on GP4 (SDA) and GP5 (SCL), at
 100 kHz, and only on the bus. Its `SQW` pin
 is not connected, so the timer is not locked to its seconds (POWMAN
@@ -2064,7 +2084,10 @@ in [milestones.md](milestones.md).
 - **M12 — Date and time (settled 2026-10-22, §3.8; in progress on
   branch `m12-time`: step 1's UART move checked on the Plus 2 W, and
   the clock kept through stage3, a program round trip and `REBOOT` there
-  (HW §8.4); step 2's core, commands and host tests done).** The AON
+  (HW §8.4); step 2's core, commands and host tests done; step 3's
+  DS3231 driver and `test_ds3231` done, and the chip on the Plus 2 W
+  written and read back, and the time kept through a power cycle there
+  (HW §8.5)).** The AON
   timer and its record, the DS3231, `ntp.uf2`, the commands of each
   flavour, FAT timestamps, and the header's two functions (§3.8). In
   steps:

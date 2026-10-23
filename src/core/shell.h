@@ -65,11 +65,14 @@ typedef struct {
 
 /* The port's clock (clock.h; design.md §3.8): UTC in milliseconds since
  * 1970. get is false while the clock is not set; set gives NULL, or why
- * not. Either may be NULL: no clock, or one that cannot be set. */
+ * not. Either may be NULL: no clock, or one that cannot be set. note,
+ * if not NULL, is said once when the shell starts: "the DS3231 lost its
+ * time". */
 typedef struct {
     bool (*get)(void *ctx, int64_t *utc_ms);
     const char *(*set)(void *ctx, int64_t utc_ms);
     void *ctx;
+    const char *note;
 } shell_clock_t;
 
 /* The line being edited at the prompt (line.c). */
