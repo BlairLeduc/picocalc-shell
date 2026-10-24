@@ -103,8 +103,10 @@ from the command line.
 - `CD..`, `CD\` and `DIR/W` work with no space, as in DOS.
 - Put a name with spaces in quotes: `TYPE "my notes.txt"`.
 - Names on the card are case-insensitive, and are shown as the card
-  spells them. The PicoCalc has no clock, so every file gets the same
-  fixed date, and `DIR` leaves the date out.
+  spells them.
+- A file written or made gets the date and time, in local time, as a PC
+  does. With the clock not set (see `DATE`), every file gets the same
+  fixed date, 1 January 2026.
 
 ### Wildcards
 
@@ -150,6 +152,8 @@ hello world
 - Variables last until the shell is left. There is room for 1 KB of them.
 - `PATH` and `PROMPT` are variables too, with commands of their own
   (section 4).
+- `TZ` is the time zone, as a POSIX string: `SET TZ=EST5EDT`. Without
+  it, the time is UTC. See `DATE` and `TIME` in section 4.
 
 ### ERRORLEVEL
 
@@ -165,11 +169,23 @@ batch file or a program (section 5).
 
 | Command | Does |
 |---|---|
-| `DIR [path] [/W] [/P] [/S] [/A] [/B]` | lists files: `/W` wide, `/P` a screen at a time, `/S` in every directory below, `/A` hidden files too, `/B` names only |
+| `DIR [path] [/W] [/P] [/S] [/A] [/B]` | lists files with their size, date and time: `/W` wide, names only, `/P` a screen at a time, `/S` in every directory below, `/A` hidden files too, `/B` names only |
 | `CD [path]`, `CHDIR` | changes directory; with none, shows the current one |
 | `MD path`, `MKDIR` | makes a directory |
 | `RD path`, `RMDIR` | removes an empty directory |
 | `DELTREE [/Y] path...` | deletes a directory and everything in it, after asking (not with `/Y`). **There is no undo** |
+
+```
+C:\HOME>DIR
+ ...
+NOTES        <DIR>      10-22-26  2:30p
+README   TXT      1,024 10-20-26  9:12a
+my long file name.txt
+                     24 10-22-26  2:31p
+```
+
+A name that is not 8.3, or a file of 1 GB or more, puts its size, date
+and time on the next row, so every row fits the 40 columns.
 
 ### Files
 
@@ -177,6 +193,9 @@ batch file or a program (section 5).
 |---|---|
 | `COPY source [destination]` | copies files: `COPY A.TXT B.TXT`, `COPY *.TXT \BACKUP`, `COPY *.TXT *.BAK` |
 | `XCOPY source [destination] [/S]` | copies files and, with `/S`, every directory below |
+
+`COPY` and `XCOPY` give each copy the date and time of the file it was
+copied from, as DOS did.
 | `DEL path`, `ERASE` | deletes files. `DEL *.*` asks first; `/P` asks for each. **There is no undo** |
 | `REN path name`, `RENAME` | renames files: `REN *.TXT *.OLD` |
 | `MOVE source... destination` | moves files into a directory, or renames a file or directory |
@@ -198,7 +217,7 @@ batch file or a program (section 5).
 |---|---|
 | `SET [name=[value]]` | lists the variables, sets one, or with nothing after `=`, clears it |
 | `PATH [dir;dir...]` | shows or sets where programs are found; `PATH ;` clears it |
-| `PROMPT [text]` | sets the prompt: `$P` the path, `$G` `>`, `$_` a new line, `$N` the drive. `PROMPT` alone puts back `$P$G` |
+| `PROMPT [text]` | sets the prompt: `$P` the path, `$G` `>`, `$_` a new line, `$N` the drive, `$D` the date, `$T` the time. `PROMPT` alone puts back `$P$G` |
 | `ECHO [ON\|OFF\|message]` | prints a message; `ECHO.` prints a blank line; `ECHO OFF` hides the prompt |
 | `PAUSE` | waits for a key |
 | `CHOICE [/C:keys] [/N] [/S] [/T:c,nn] [text]` | waits for one of the keys; ERRORLEVEL is which (section 6) |
@@ -215,11 +234,95 @@ batch file or a program (section 5).
 | `BACKLIGHT [lcd\|kbd] [0-255]` | shows or sets the screen (`lcd`) or keyboard (`kbd`) backlight |
 | `VER` | the shell's version |
 | `MEM` | the memory in use and free, and the PSRAM: 8 MB on the Pimoroni Pico Plus 2 W, 0 on a board without it |
-| `INFO` | the shell's version, the chip, memory and PSRAM (0 MB on a board without it), UF2 Loader, the keyboard's firmware, the card and the battery |
+| `INFO` | the shell's version, its build (Pico 2 or Pico 2 W), the chip, memory and PSRAM (0 MB on a board without it), UF2 Loader, the clock, the keyboard's firmware, the card and the battery |
+| `DATE [/T \| date]` | shows the date and asks for a new one; Enter keeps it. `DATE 10-22-26` sets it, `DATE /T` only shows it |
+| `TIME [/T \| time]` | the same for the time: `TIME 14:30`, `TIME 2:30p`, `TIME 9:05:30` |
+| `NTP [/F]` | in the Pico 2 W build: sets the clock from the network, once each power-on; `/F` tries again |
 
 `PHOSPHOR` lasts until the shell is left. Put it in `AUTOEXEC.BAT` to
-have it every time. There is no `DATE` or `TIME`: the PicoCalc has no
-clock.
+have it every time.
+
+`DATE` and `TIME`:
+
+- The clock keeps going while a program runs, and through `REBOOT`.
+  Switching the PicoCalc off loses it, unless a DS3231 clock chip is
+  fitted, on GP4 (SDA) and GP5 (SCL): setting the time sets the chip
+  too, and the shell reads it back at power-on. If the chip lost its
+  time (it is new, or its battery is flat), the shell says
+  `Warning: the DS3231 lost its time` at power-on, but not again after a
+  program, until the clock is set. The chip holds 2000 to 2199.
+- The date is typed in the country's order, `mm-dd-yy` in the United
+  States (see `CONFIG.SYS`, section 6), with `-`, `/` or `.` between. The
+  year is 1980 to 2099, in two digits or four.
+- The time is `hh:mm`, with seconds and hundredths if you like, and `a`
+  or `p` for a 12-hour clock.
+- With the clock not set, they say `Current date is not set`, and
+  `DATE /T` and `TIME /T` set ERRORLEVEL 1, so `AUTOEXEC.BAT` can ask
+  for the date only when it is needed (section 6).
+- The time is local time, by the variable `TZ`: `SET TZ=EST5EDT` in
+  `AUTOEXEC.BAT`. `TZ` names the standard zone and how many hours it is
+  behind UTC, then the summer zone, and optionally when summer time
+  starts and ends (`EST5EDT,M3.2.0,M11.1.0`: the second Sunday of March
+  and the first of November; these are the dates used when none are
+  given). Others: `CST6CDT`, `PST8PDT`, `GMT0BST,M3.5.0/1,M10.5.0`,
+  `CET-1CEST,M3.5.0,M10.5.0/3`. Without `TZ`, the time is UTC.
+
+```
+C:\>DATE
+Current date is Thu 10-22-2026
+Enter new date (mm-dd-yy):
+C:\>TIME /T
+Current time is  2:30:05.00p
+```
+
+`NTP`:
+
+- The shell comes in two builds of each flavour: one for the Pico 2,
+  and one for the Pico 2 W (`shell-dos-w.uf2`, copied to the card as
+  `C:\BOOT2350.UF2`), which also has `NTP`. The Pimoroni Pico Plus 2 W
+  takes the W build. `INFO` names the build.
+- `NTP` sets the clock over Wi-Fi from an NTP server. It runs the
+  program `NTP.UF2`, found in the current directory or `PATH` as any
+  program is (put it in `C:\PICO2-APPS`), which shows what it is
+  doing, and comes back to the shell. Esc stops it. Without it, `NTP`
+  says `Bad command or file name`, with ERRORLEVEL 127.
+- It runs once each power-on, and `NTP.UF2` shows how it went before it
+  comes back. After that, `NTP` says nothing if NTP set the clock, with
+  ERRORLEVEL 0, and why not if it did not (as below, `NTP: no time from
+  the server`), with ERRORLEVEL 1. So `NTP` in `AUTOEXEC.BAT` does not
+  run it again each time the shell comes back from a program, or loop
+  when the network is down. `NTP /F` runs it again.
+- With a DS3231 fitted, the shell writes the time NTP gave to the chip
+  when it comes back.
+- Its settings are in `C:\NTP\NTP.CFG`, which you write with EDIT:
+
+```
+# /ntp/ntp.cfg
+ssid     = Home                 # the network's name
+password = "my # password"      # left out for an open network
+server   = pool.ntp.org         # the default
+country  = CA                   # Wi-Fi's country; worldwide if left out
+timeout  = 20                   # seconds to join and get the time, 5 to 60
+```
+
+- Only `ssid` is needed. A `#` after a space starts a comment, so a
+  value holding one, or starting or ending with a space, goes in
+  double quotes. The password is kept on the card as written: WPA2's 8
+  to 63 characters, or 64 hex digits. Each key once. `country` is the
+  radio's two-letter country, not `COUNTRY=`'s number.
+
+| `NTP.UF2` and `NTP` say | Means |
+|---|---|
+| `no /ntp/ntp.cfg` | write the file, as above |
+| `a mistake in /ntp/ntp.cfg` | `NTP /F` shows which line, and what is wrong with it |
+| `no Wi-Fi on this board` | a Pico 2 W build on a Pico 2 |
+| `the network was not joined` | no network by that name in range, or it would not take the PicoCalc |
+| `the network refused the password` | check `password` |
+| `the network gave no address` | joined, but its DHCP server did not answer in time |
+| `the server was not found` | the server's name is wrong, or the network's DNS did not answer |
+| `no time from the server` | the server did not answer in time |
+| `stopped` | Esc, Break or Ctrl-C |
+| `ntp.uf2 did not finish` | the program was cut off: power, or a reset |
 
 `BATTERY`:
 
@@ -410,6 +513,60 @@ A program run from it would run at every start, so keep that to a
 program you can leave. If the shell can no longer be reached, take the
 card out and edit the file on a computer.
 
+To ask for the date and time at power-on, only when the clock is not
+set:
+
+```
+@ECHO OFF
+SET TZ=EST5EDT
+DATE /T > NUL
+IF NOT ERRORLEVEL 1 GOTO SET
+DATE
+TIME
+:SET
+```
+
+With the Pico 2 W build, `NTP` first sets it from the network when it
+can:
+
+```
+@ECHO OFF
+SET TZ=EST5EDT
+NTP
+DATE /T > NUL
+IF NOT ERRORLEVEL 1 GOTO SET
+DATE
+TIME
+:SET
+```
+
+### CONFIG.SYS
+
+`C:\CONFIG.SYS`, if the card has one, is read before `AUTOEXEC.BAT`. Its
+one working line is `COUNTRY=`, which sets how dates, times and numbers
+are written, as in DOS:
+
+```
+COUNTRY=044
+```
+
+| Code | Country | Date | Time | Numbers |
+|---|---|---|---|---|
+| 001 | United States (the default) | `10-22-2026` | ` 2:30:05.00p` | `1,234` |
+| 002 | Canadian-French | `2026-10-22` | `14:30:05,00` | `1 234` |
+| 033 | France | `22.10.2026` | `14:30:05,00` | `1 234` |
+| 044 | United Kingdom | `22/10/2026` | `14:30:05.00` | `1,234` |
+| 049 | Germany | `22.10.2026` | `14:30:05,00` | `1.234` |
+| 081 | Japan | `2026-10-22` | `14:30:05.00` | `1,234` |
+
+`COUNTRY=044,850,C:\DOS\COUNTRY.SYS`, as DOS wrote it, works: only the
+code is read. It affects `DATE`, `TIME`, `PROMPT`'s `$D` and `$T`, and
+`DIR`. `FILES=`, `BUFFERS=`, `DEVICE=`, `DEVICEHIGH=`, `DOS=`,
+`LASTDRIVE=`, `BREAK=`, `SHELL=`, `INSTALL=`, `FCBS=` and `STACKS=` mean
+nothing here and are passed over, so a `CONFIG.SYS` from an old PC works.
+`REM` and `;` start a comment. Any other line gets `Unrecognized command
+in CONFIG.SYS` and its line number.
+
 ## 7. EDIT
 
 `EDIT NAME.TXT` opens a file to edit, or a new one by that name; `EDIT`
@@ -477,6 +634,8 @@ opens, but must be saved under another name.
 C:\BOOT2350.UF2       the shell
 C:\BOOT2350.ORG       UF2 Loader's own menu, run with EXIT
 C:\PICO2-APPS\        programs, run by name
+C:\PICO2-APPS\NTP.UF2 the Pico 2 W build's NTP
+C:\NTP\NTP.CFG        NTP's settings
 C:\AUTOEXEC.BAT       run each time the shell starts
 C:\HOME\              where the shell starts
 C:\.shell\            the shell's history, and large pipes while they run

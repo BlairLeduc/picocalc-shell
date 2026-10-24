@@ -18,6 +18,7 @@ The same licence as this project, and the same owner.
 | `src/port/sd.c`, `sd.h` | the same | `sd_sectors()`, the card's size from its CSD, for `usbdisk`; multi-block reads and writes (CMD18, CMD25) |
 | `src/port/diskio.c` | the same | `card_poll()`, for one mount held while the card stays in; runs of sectors in one transfer |
 | `src/fatfs/ffconf.h` | `src/port/fatfs/ffconf.h` | the values its header lists |
+| `src/core/ntp.c` (`/ntp/ntp.cfg`'s parser) | `src/core/settings.c` | cut down to five keys; quoted values |
 | `test/host/test_util.h` | the same | the include guard |
 | `tools/build.sh`, `uart-log.sh`, `uart-type.sh`, `uart-screen.sh` | `tools/` | names, keys and pacing |
 
@@ -132,3 +133,74 @@ records in its header which values were changed.
 `cmake/pico_sdk_import.cmake` is the Raspberry Pi Pico SDK's own
 `external/pico_sdk_import.cmake`, copied as the SDK's instructions direct,
 under the SDK's BSD-3-Clause licence.
+
+## ntp.uf2: the CYW43 driver, its firmware, and lwIP
+
+`ntp.uf2` (design.md §3.8), built only in the Pico 2 W build, links three
+things from the Pico SDK that the shell itself does not. None is in the
+tree.
+
+- **lwIP**, Copyright (c) 2001, 2002 Swedish Institute of Computer
+  Science, under a BSD-3-Clause licence (`lib/lwip/COPYING`), compatible
+  with the GPL-3.0. `src/ntp/lwipopts.h` is this project's, after the
+  SDK examples' `lwipopts_examples_common.h` (BSD-3-Clause).
+- **The CYW43 driver and the CYW43439's firmware** (`lib/cyw43-driver`),
+  Copyright (C) 2019-2022 George Robotics Pty Ltd, offered under either
+  of two licences: `LICENSE.RP`, which permits use and redistribution
+  only with Raspberry Pi's chips, or `LICENSE`, which permits them only
+  for personal, non-commercial use.
+
+### Additional permission under GNU GPL version 3 section 7
+
+*Settled 2026-10-24.* Each of the driver's two licences adds a
+restriction the GPL-3.0 does not allow on a work it covers (its §10), so
+the copyright holder of this project's own code, Blair Leduc, adds this
+permission to the GPL-3.0 for that code:
+
+> If you modify this Program, or any covered work, by linking or
+> combining it with the CYW43 driver (`cyw43-driver`, Copyright (C)
+> 2019-2022 George Robotics Pty Ltd), including the CYW43439 firmware it
+> carries, as distributed with the Raspberry Pi Pico SDK, or a modified
+> version of that driver, containing parts covered by the terms of the
+> driver's `LICENSE.RP` or `LICENSE`, the licensors of this Program grant
+> you additional permission to convey the resulting work.
+
+It covers only code the owner holds the copyright to: not the files
+taken from UF2 Loader or TinyUSB (above), whose authors have not given
+it. `ntp.uf2` links none of them. It returns to the shell by writing
+UF2 Loader's `BOOT_SD` command with `include/picocalc_shell.h`'s values,
+not through `src/port/loader.c`, and the shell core's `uf2.c` is not
+linked into it. A change to `ntp.uf2` must keep it that way.
+
+A release of `ntp.uf2` uses the driver under `LICENSE.RP` (the RP2350 is
+Raspberry Pi's chip), whose third condition asks for this notice with
+the binary:
+
+> Copyright (C) 2019-2022 George Robotics Pty Ltd
+>
+> Raspberry Pi Ltd (Licensor) hereby grants to you a non-exclusive license to
+> use this software solely with the Licensor's microcontroller chip (RP2040) or
+> any other semiconductor device produced by the Licensor. No other use is
+> permitted under the terms of this licence.
+>
+> Redistribution and use in source and binary forms, with or without
+> modification, are permitted provided that the following conditions are met:
+>
+> 1. The software can only be used and redistributed in conjunction with RP2040
+>    or any other semiconductor device produced by the Licensor.
+> 2. Redistributions of source code must retain the above copyright notice,
+>    this list of conditions and the following disclaimer.
+> 3. Redistributions in binary form must reproduce the above copyright notice,
+>    this list of conditions and the following disclaimer in the documentation
+>    and/or other materials provided with the distribution.
+>
+> THIS SOFTWARE IS PROVIDED BY THE LICENSOR AND COPYRIGHT OWNER "AS IS" AND ANY
+> EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+> WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+> DISCLAIMED. IN NO EVENT SHALL THE LICENSOR OR COPYRIGHT OWNER BE LIABLE FOR
+> ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+> DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+> SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+> CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+> OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+> OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

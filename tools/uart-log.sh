@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# uart-log.sh — capture UART1 through the Debug Probe to a file
+# uart-log.sh — capture UART0 through the Debug Probe to a file
 # (hardware-notes.md §2.7; EL §13.1). Copied from pico-oric.
 #
 #   tools/uart-log.sh 60 out/run.log      # 60 s, then stop

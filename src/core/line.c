@@ -402,3 +402,22 @@ bool line_key(shell_t *sh, int key) {
     }
     return false;
 }
+
+int line_read(shell_t *sh, const char *prompt) {
+    if (!sh->at_bol) out_puts(&sh->con, "\n");
+    out_puts(&sh->con, prompt);
+    line_start(sh, strlen(prompt));
+    for (;;) {
+        int key = sh->hooks.getkey(sh->hooks.ctx);
+        if (key < 0) {
+            out_puts(&sh->con, "\n");
+            return 0;
+        }
+        if (key == 0x03 || key == 0x1B || key == KEY_BREAK) {
+            line_key(sh, KEY_END);
+            sh->stop = true;
+            return -1;
+        }
+        if (line_key(sh, key)) return 1;
+    }
+}

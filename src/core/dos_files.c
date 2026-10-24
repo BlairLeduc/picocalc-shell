@@ -35,8 +35,8 @@ static const char *show(const char *path) {
     return b;
 }
 
-/* 64 bits in decimal with a comma every three digits, as DIR shows
- * them (the board's printf may not do 64 bits). */
+/* 64 bits in decimal with the country's separator every three digits,
+ * as DIR shows them (the board's printf may not do 64 bits). */
 static const char *num(uint64_t v) {
     static char bufs[2][32];
     static unsigned next;
@@ -44,7 +44,7 @@ static const char *num(uint64_t v) {
     unsigned digits = 0;
     *b = '\0';
     do {
-        if (digits && digits % 3u == 0) *--b = ',';
+        if (digits && digits % 3u == 0) *--b = dos_country()->thousands;
         *--b = (char)('0' + v % 10u);
         v /= 10u;
         digits++;
@@ -216,7 +216,6 @@ int dos_rd(shell_t *sh, int argc, char **argv) {
 
 /* ---- DIR -------------------------------------------------------------- */
 
-#define DIR_COL   15u   /* where <DIR> starts, after a name of 8.3 */
 #define DIR_TOTAL "%5u file(s) %14s bytes"   /* its number ends where "%28s bytes free"'s does */
 #define DIR_WIDTH TERM_COLS   /* the screen's columns */
 
@@ -248,18 +247,33 @@ static void dir_text(shell_t *sh, dir_t *d, const char *text) {
     dir_row(sh, d);
 }
 
-/* NAME     EXT, as DOS lined them up, for a name that fits 8.3; any
- * other name as it is. */
-static const char *dir_name(const char *name, bool pad) {
-    static char buf[SHELL_PATH_MAX + 16];
+/* NAME     EXT, 12 columns, as DOS lined them up, for a name that fits
+ * 8.3: true. Any other name as it is: false. */
+static bool dir_name(const char *name, char *buf, size_t size) {
     const char *dot = strrchr(name, '.');
     size_t base = dot ? (size_t)(dot - name) : strlen(name);
     size_t ext = dot ? strlen(dot + 1) : 0;
-    if (pad && base >= 1 && base <= 8 && ext <= 3 && (!dot || strchr(name, '.') == dot))
-        snprintf(buf, sizeof buf, "%-8.*s %-3s", (int)base, name, dot ? dot + 1 : "");
-    else
-        snprintf(buf, sizeof buf, "%s", name);
-    return buf;
+    if (base >= 1 && base <= 8 && ext <= 3 && (!dot || strchr(name, '.') == dot)) {
+        snprintf(buf, size, "%-8.*s %-3s", (int)base, name, dot ? dot + 1 : "");
+        return true;
+    }
+    snprintf(buf, size, "%s", name);
+    return false;
+}
+
+/* What follows the name: the size or <DIR> in 11 columns (wider for a
+ * file of 1 GB or more), the date in 9 and the time in 7, or 6 on a
+ * 24-hour clock (design.md §3.8). */
+static void dir_details(shell_t *sh, const FILINFO *fno) {
+    if (fno->fattrib & AM_DIR) out_puts(&sh->out, " <DIR>     ");
+    else out_printf(&sh->out, "%11s", num(fno->fsize));
+    if (!fno->fdate) return;   /* an entry with no date */
+    clock_tm_t tm;
+    char date[16], time[16];
+    clock_from_fat(fno->fdate, fno->ftime, &tm);
+    dos_format_date(date, sizeof date, &tm, false);
+    dos_format_time(time, sizeof time, &tm, false);
+    out_printf(&sh->out, " %s %s", date, time);
 }
 
 static bool dir_wants(const dir_t *d, const FILINFO *fno) {
@@ -310,21 +324,20 @@ static bool dir_list(shell_t *sh, dir_t *d, const char *dir, bool header) {
                 for (; w < cell; w++) out_puts(&sh->out, " ");
             }
         } else {
-            /* <DIR> in its own column after the name, as DOS had it; the
-             * size at the right of 40 columns, short of the 40th, where
-             * the terminal wraps in the 40-column font. A name too long
-             * for the line leaves either to the next. */
-            const char *name = dir_name(s_ent.fname, true);
-            const char *what = sub ? "<DIR>" : num(s_ent.fsize);
-            size_t w = strlen(name), n = strlen(what), width = DIR_WIDTH - 1u;
-            size_t at = sub ? (w < DIR_COL ? DIR_COL : w + 1u) : width - n;
+            /* DOS's row in 39 columns, short of the 40th, where the
+             * terminal wraps. A name that is not 8.3, or a size too wide
+             * for its field, leaves the rest to the next row, where the
+             * size still ends in its column. */
+            char name[SHELL_PATH_MAX + 16];
+            bool fits = dir_name(s_ent.fname, name, sizeof name) &&
+                        (sub || strlen(num(s_ent.fsize)) <= 11u);
             out_puts(&sh->out, name);
-            if (at < w + 1u || at + n > width) {
+            if (!fits) {
                 dir_row(sh, d);
-                w = 0;
-                at = sub ? DIR_COL : width - n;
+                size_t n = sub ? 11u : strlen(num(s_ent.fsize));
+                out_printf(&sh->out, "%*s", (int)(n <= 11u ? 12u : 23u - n), "");
             }
-            out_printf(&sh->out, "%*s%s", (int)(at - w), "", what);
+            dir_details(sh, &s_ent);
             dir_row(sh, d);
         }
         if (shell_interrupted(sh)) d->stopped = true;
@@ -449,8 +462,10 @@ typedef struct {
     unsigned copied;
 } copy_t;
 
-/* One file to dst; DOS's error and -1 to stop, or 0. */
+/* One file to dst, keeping its date and time, as DOS's COPY and XCOPY
+ * did; DOS's error and -1 to stop, or 0. */
 static int copy_one(shell_t *sh, const char *src, const char *dst) {
+    static FILINFO when;
     if (path_same(src, dst)) {
         dos_error(sh, "File cannot be copied onto itself", NULL);
         return -1;
@@ -462,6 +477,7 @@ static int copy_one(shell_t *sh, const char *src, const char *dst) {
         dos_error(sh, dos_say(why), show(which));
         return -1;
     }
+    if (f_stat(src, &when) == FR_OK) f_utime(dst, &when);
     return 0;
 }
 

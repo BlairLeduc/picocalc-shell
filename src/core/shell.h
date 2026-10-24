@@ -63,6 +63,25 @@ typedef struct {
     void *ctx;
 } shell_system_t;
 
+/* The port's clock (clock.h; design.md §3.8): UTC in milliseconds since
+ * 1970. get is false while the clock is not set; set gives NULL, or why
+ * not. Either may be NULL: no clock, or one that cannot be set. note,
+ * if not NULL, is said once when the shell starts: "the DS3231 lost its
+ * time". ntp is what NTP did since power-on (ntp.h's ntp_result_t), or
+ * -1 if it was not tried, and ntp_keep keeps a result, -1 to forget
+ * it; both NULL where there is no NTP, as in the Pico 2 build. offset,
+ * if not NULL, keeps the local offset from UTC in minutes for the next
+ * program, before the shell is left. */
+typedef struct {
+    bool (*get)(void *ctx, int64_t *utc_ms);
+    const char *(*set)(void *ctx, int64_t utc_ms);
+    void *ctx;
+    const char *note;
+    int (*ntp)(void *ctx);
+    void (*ntp_keep)(void *ctx, int result);
+    void (*offset)(void *ctx, int off_min);
+} shell_clock_t;
+
 /* The line being edited at the prompt (line.c). */
 typedef struct {
     char   text[SHELL_LINE_MAX + 1];
@@ -107,6 +126,9 @@ void shell_set_loader(shell_t *sh, const struct shell_loader *loader);
 /* The port's link to the PicoCalc's southbridge, ink and power. */
 void shell_set_system(shell_t *sh, const shell_system_t *sys);
 
+/* The port's clock; without one, the clock is never set. */
+void shell_set_clock(shell_t *sh, const shell_clock_t *clock);
+
 /* The SRAM the shell uses, the SRAM there is and the PSRAM there is (0
  * for none), in bytes, for MEM. */
 void shell_set_memory(shell_t *sh, unsigned long used, unsigned long total, unsigned long psram);
@@ -124,8 +146,8 @@ void shell_input(shell_t *sh, int key);
  * status. For tests, and for scripts at the level below. */
 int shell_run(shell_t *sh, const char *line);
 
-/* Before the shell is left for a program, the menu or USB: save the
- * history. */
+/* Before the shell is left for a program, the menu or USB: give the
+ * port the clock's local offset, and save the history. */
 void shell_leaving(shell_t *sh);
 
 /* For builtins: an error to the terminal, never to a redirection. */

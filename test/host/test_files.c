@@ -162,10 +162,11 @@ static int files_tests(bool fat32) {
     s = slurp("/out.txt");
     CHECK(s && strcmp(s, "a\nb\nC\nD/\n") == 0, "ls > file: '%s'", s ? s : "");
     CHECK(run("echo abc > a") == 0 && run("ls -l") == 0 &&
-              strcmp(con, "-rw        4 a\n-rw        0 b\n-rw        0 C\ndrw          D/\n") == 0,
+              strcmp(con, "-rw        4 Jan  1 00:00 a\n-rw        0 Jan  1 00:00 b\n"
+                          "-rw        0 Jan  1 00:00 C\ndrw          Jan  1 00:00 D/\n") == 0,
           "ls -l:\n%s", con);
     CHECK(f_chmod("/l/b", AM_RDO, AM_RDO) == FR_OK, "chmod");
-    CHECK(run("ls -l b") == 0 && strcmp(con, "-r-        0 b\n") == 0, "ls -l read-only: '%s'",
+    CHECK(run("ls -l b") == 0 && strcmp(con, "-r-        0 Jan  1 00:00 b\n") == 0, "ls -l read-only: '%s'",
           con);
     CHECK(run("ls -la /l/D") == 0 && strcmp(con, "") == 0, "ls an empty dir: '%s'", con);
     CHECK(run("ls a D") == 0 && strcmp(con, "a\n\nD:\n") == 0, "ls a file and a dir: '%s'", con);

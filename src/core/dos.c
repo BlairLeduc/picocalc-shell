@@ -6,11 +6,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "clock.h"
 #include "dos.h"
 #include "edit.h"
 #include "files.h"
 #include "flavour.h"
 #include "keycodes.h"
+#include "ntp.h"
 #include "path.h"
 #include "pipe.h"
 #include "run.h"
@@ -269,6 +271,7 @@ const shell_builtin_t flavour_builtins[] = {
     { "CHOICE",    dos_choice,    "CHOICE [/C[:]keys] [/N] [/S] [/T[:]c,nn] [text]", "Waits for one of a set of keys" },
     { "CLS",       dos_cls,       "CLS", "Clears the screen" },
     { "COPY",      dos_copy,      "COPY source [destination]", "Copy one or more files" },
+    { "DATE",      dos_date,      "DATE [/T | date]", "Displays or sets the date" },
     { "DEL",       dos_del,       "DEL [/P] path", "Removes one or more files" },
     { "DELTREE",   dos_deltree,   "DELTREE [/Y] path...", "Deletes a directory and its contents" },
     { "DIR",       dos_dir,       "DIR [path] [/W] [/P] [/S] [/A] [/B]", "Displays the contents of a directory" },
@@ -287,6 +290,9 @@ const shell_builtin_t flavour_builtins[] = {
     { "MKDIR",     dos_md,        "MKDIR path", "Creates a directory" },
     { "MORE",      dos_more,      "MORE [file] (or < file, or | MORE)", "Displays text one screen at a time" },
     { "MOVE",      dos_move,      "MOVE source... destination", "Move files or rename a directory" },
+#if SHELL_NTP
+    { "NTP",       cmd_ntp,       "NTP [/F]", "Sets the clock from the network, once" },
+#endif
     { "PATH",      dos_path,      "PATH [dir[;dir...]] (PATH ; clears)", "Displays or sets the search path" },
     { "PAUSE",     dos_pause_cmd, "PAUSE", "Waits for a key" },
     { "PHOSPHOR",  dos_phosphor,  "PHOSPHOR [white|green|amber|default]", "Sets the colour of the text" },
@@ -300,6 +306,7 @@ const shell_builtin_t flavour_builtins[] = {
     { "RMDIR",     dos_rd,        "RMDIR path", "Removes an empty directory" },
     { "SET",       dos_set,       "SET [name=[value]]", "Displays, sets or clears variables" },
     { "SHIFT",     dos_shift,     "SHIFT", "Change the position of parameters" },
+    { "TIME",      dos_time,      "TIME [/T | time]", "Displays or sets the time" },
     { "TYPE",      dos_type,      "TYPE file", "Displays the contents of a text file" },
     { "USBDISK",   cmd_usbdisk,   "USBDISK", "Exposes the SD Card to a computer" },
     { "VER",       dos_ver,       "VER", "Displays the shell's version" },
@@ -391,12 +398,16 @@ void flavour_start(shell_t *sh) {
     /* $P shows each name as the card spells it: C:\HOME, not C:\home. */
     files_chdir(sh, sh->cwd);
     out_printf(&sh->con, "\033[1mPicoCalc shell\033[0m %s (DOS)\n\n", sh->version);
+    const char *note = clock_note();
+    if (note) shell_error(sh, "Warning: %s\n", note);
+    dos_config(sh);
     dos_autoexec(sh);
 }
 
 /* PROMPT's codes: $P the drive and directory, $G >, $L <, $B |, $Q =,
  * $$ $, $N the drive, $_ a new line, $E Esc, $H a backspace, $V the
- * version. $T and $D give nothing, since there is no clock. With no
+ * version, $D the date and $T the time, as DATE and TIME show them, or
+ * nothing with the clock not set. With no
  * PROMPT it is $N$G, C>, as in DOS; with ECHO OFF there is none. */
 void flavour_prompt(shell_t *sh, char *buf, size_t size) {
     size_t n = 0;
@@ -422,6 +433,21 @@ void flavour_prompt(shell_t *sh, char *buf, size_t size) {
             case 'E': strcpy(piece, "\033"); break;
             case 'H': strcpy(piece, "\b"); break;
             case 'V': snprintf(piece, sizeof piece, "PicoCalc shell %s", sh->version); break;
+            case 'D':
+            case 'T': {
+                clock_tm_t tm;
+                char when[24];
+                piece[0] = '\0';
+                if (!clock_now(&tm)) break;
+                if (upper(*p) == 'T') {
+                    dos_format_time(when, sizeof when, &tm, true);
+                    strcpy(piece, when);
+                } else {
+                    dos_format_date(when, sizeof when, &tm, true);
+                    snprintf(piece, sizeof piece, "%s %s", clock_wday_name(tm.wday), when);
+                }
+                break;
+            }
             default:  piece[0] = '\0'; break;
             }
         }

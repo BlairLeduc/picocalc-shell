@@ -109,9 +109,21 @@ static bool put(const char *path, const char *text) {
 
 /* A line of DIR as it is in 40 columns: the name, then the size at the
  * right, short of the last column. */
+/* With the clock not set, every entry has FatFs's fixed date. */
+#define FIXED_DATE "01-01-26 12:00a"
+
+/* DIR's row for an 8.3 name, in 39 columns (design.md §3.8): the name,
+ * the size or <DIR> in 11, the date and the time. */
 static const char *dir_line(const char *name, const char *size) {
     static char buf[128];
-    snprintf(buf, sizeof buf, "\n%s%*s\n", name, (int)(39 - strlen(name)), size);
+    snprintf(buf, sizeof buf, "\n%-12s%11s " FIXED_DATE "\n", name, size);
+    return buf;
+}
+
+/* ...and for any other name, the rest on the next row in its columns. */
+static const char *dir_next(const char *name, const char *size) {
+    static char buf[160];
+    snprintf(buf, sizeof buf, "\n%s\n%12s%11s " FIXED_DATE "\n", name, "", size);
     return buf;
 }
 
@@ -506,7 +518,7 @@ static int dos_tests(bool fat32) {
     CHECK(has(" Volume in drive C is PICOCALC\n Volume Serial Number is ") &&
               has(" Directory of C:\\HOME\n\n"),
           "header: '%s'", con);
-    CHECK(has(dir_line("A        TXT", "26")) && has("\nDOCS           <DIR>\n") &&
+    CHECK(has(dir_line("A        TXT", "26")) && has(dir_line("DOCS", " <DIR>     ")) &&
               has("\n    4 file(s)            104 bytes\n") && has(" bytes free\n") &&
               column_of("file(s)", " bytes") == column_of("bytes free", " bytes free") &&
               column_of("file(s)", " bytes") == 28,
@@ -536,19 +548,19 @@ static int dos_tests(bool fat32) {
     memset(huge, 'x', sizeof huge - 1);
     CHECK(put("/HOME/BIG.DAT", huge) && f_mkdir("/HOME/a directory with a long name") == FR_OK, "big");
     CHECK(run("DIR") == 0 && has(dir_line("BIG      DAT", "1,234,566")) &&
-              has("\na directory with a long name <DIR>\n") && has("1,234,670 bytes\n") && strstr(con, "file(s)      1,234,670 bytes\n") &&
+              has(dir_next("a directory with a long name", " <DIR>     ")) && has("1,234,670 bytes\n") && strstr(con, "file(s)      1,234,670 bytes\n") &&
               has(",") && !has(" ,"),
           "separators, a long directory: '%s'", con);
     CHECK(run("DEL BIG.DAT") == 0 && run("RD \"a directory with a long name\"") == 0, "gone");
     CHECK(f_mkdir("/HOME/a directory with a name much, much too long") == FR_OK, "longer");
-    CHECK(run("DIR") == 0 && has("\na directory with a name much, much too long\n               <DIR>\n"),
+    CHECK(run("DIR") == 0 && has(dir_next("a directory with a name much, much too long", " <DIR>     ")),
           "<DIR> on the next line: '%s'", con);
     CHECK(run("RD \"a directory with a name much, much too long\"") == 0, "gone");
     CHECK(put("/HOME/asteroids-deluxe.lua", "123456") &&
               put("/HOME/4D1F8172 - MacPlus v3 with a long name.ROM", "1234567"),
           "long names");
-    CHECK(run("DIR") == 0 && has(dir_line("asteroids-deluxe.lua", "6")) &&
-              has("\n4D1F8172 - MacPlus v3 with a long name.ROM\n                                      7\n"),
+    CHECK(run("DIR") == 0 && has(dir_next("asteroids-deluxe.lua", "6")) &&
+              has(dir_next("4D1F8172 - MacPlus v3 with a long name.ROM", "7")),
           "long names: '%s'", con);
     CHECK(run("DEL asteroids-deluxe.lua") == 0 && run("DEL \"4D1F8172 - MacPlus v3 with a long name.ROM\"") == 0,
           "long names gone");
@@ -562,7 +574,7 @@ static int dos_tests(bool fat32) {
     }
     keys = " ";
     char f26[128];
-    snprintf(f26, sizeof f26, "F26      TXT%27s\nPress any key to continue . . .\nF27", "1");
+    snprintf(f26, sizeof f26, "F26      TXT%11s " FIXED_DATE "\nPress any key to continue . . .\nF27", "1");
     CHECK(run("DIR \\MANY /P") == 0 && has(f26) &&
               has("bytes free"),
           "pauses: '%s'", con);

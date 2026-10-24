@@ -82,6 +82,27 @@ static int pollkey(void *ctx) {
     return c;
 }
 
+/* The host's clock: the computer's, moved by whatever `date` sets. */
+static int64_t s_clock_skew_ms;
+
+static int64_t host_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+static bool clock_get(void *ctx, int64_t *utc_ms) {
+    (void)ctx;
+    *utc_ms = host_ms() + s_clock_skew_ms;
+    return true;
+}
+
+static const char *clock_set(void *ctx, int64_t utc_ms) {
+    (void)ctx;
+    s_clock_skew_ms = utc_ms - host_ms();
+    return NULL;
+}
+
 static void restore(void) {
     if (s_raw) tcsetattr(STDIN_FILENO, TCSAFLUSH, &s_saved);
     s_raw = false;
@@ -117,6 +138,8 @@ int main(int argc, char **argv) {
     const out_t out = { con_write, NULL, false };
     const shell_hooks_t hooks = { now_us, interrupted, getkey, pollkey, NULL, NULL };
     shell_init(&sh, &out, &hooks, "host");
+    const shell_clock_t clock = { clock_get, clock_set, NULL, NULL, NULL, NULL, NULL };
+    shell_set_clock(&sh, &clock);
     shell_start(&sh);
 
     int c;

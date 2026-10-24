@@ -10,12 +10,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "clock.h"
 #include "expand.h"
 #include "files.h"
 #include "flavour.h"
 #include "history.h"
 #include "keycodes.h"
 #include "line.h"
+#include "ntp.h"
 #include "parse.h"
 #include "path.h"
 #include "pipe.h"
@@ -120,6 +122,7 @@ const shell_builtin_t flavour_builtins[] = {
     { "cd",         cmd_cd,         "cd [dir]", "Change directory; $HOME with none" },
     { "clear",      cmd_clear,      "clear", "Clears the screen" },
     { "cp",         cmd_cp,         "cp [-r] from... to", "Copies files, -r directories" },
+    { "date",       cmd_date,       "date [-u] [mmddHHMM[[cc]yy]]", "Displays or sets the date and time" },
     { "df",         cmd_df,         "df", "Displays the card's size and free space" },
     { "echo",       cmd_echo,       "echo [-n] [word...]", "Print words; -n no line break" },
     { "export",     cmd_export,     "export [NAME=value...]", "Displays, sets or lists variables" },
@@ -133,6 +136,9 @@ const shell_builtin_t flavour_builtins[] = {
     { "mkdir",      cmd_mkdir,      "mkdir [-p] dir...", "Makes directories" },
     { "more",       cmd_more,       "more file... (or < file, or | more)", "Displays text a screen at a time" },
     { "mv",         cmd_mv,         "mv from... to", "Move or rename" },
+#if SHELL_NTP
+    { "ntp",        cmd_ntp,        "ntp [-f]", "Sets the clock from the network, once" },
+#endif
     { "phosphor",   cmd_phosphor,   "phosphor [white|green|amber|default]", "Sets the colour of the text" },
     { "poweroff",   cmd_poweroff,   "poweroff", "Switches the PicoCalc off" },
     { "pwd",        cmd_pwd,        "pwd", "Print the current directory" },
@@ -425,27 +431,10 @@ static void show_menu(shell_t *sh, const compound_t *k, unsigned first, unsigned
     }
 }
 
-/* A line typed after $PS3, into sh->line: 1; 0 at the end of the input;
- * -1 when stopped by Break, Esc or Ctrl-C. */
+/* A line typed after $PS3, into sh->line (line_read). */
 static int read_reply(shell_t *sh) {
     const char *ps3 = vars_get("PS3", 3);
-    if (!ps3) ps3 = "#? ";
-    if (!sh->at_bol) out_puts(&sh->con, "\n");
-    out_puts(&sh->con, ps3);
-    line_start(sh, strlen(ps3));
-    for (;;) {
-        int key = sh->hooks.getkey(sh->hooks.ctx);
-        if (key < 0) {
-            out_puts(&sh->con, "\n");
-            return 0;
-        }
-        if (key == 0x03 || key == 0x1B || key == KEY_BREAK) {
-            line_key(sh, KEY_END);
-            sh->stop = true;
-            return -1;
-        }
-        if (line_key(sh, key)) return 1;
-    }
+    return line_read(sh, ps3 ? ps3 : "#? ");
 }
 
 static int run_parts(shell_t *sh, compound_t *k, unsigned i, unsigned end);
@@ -679,6 +668,8 @@ void flavour_init(shell_t *sh) {
 
 void flavour_start(shell_t *sh) {
     out_printf(&sh->con, "\033[1mPicoCalc shell\033[0m %s\n\n", sh->version);
+    const char *note = clock_note();
+    if (note) shell_error(sh, "shell: %s\n", note);
     script(sh, PROFILE);
 }
 

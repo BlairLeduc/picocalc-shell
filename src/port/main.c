@@ -2,7 +2,7 @@
  *
  * One core. Bring-up follows hardware-notes.md §10: the southbridge, the
  * panel, the keyboard. The shell's output goes to the terminal's grid,
- * then, in the development build, to UART1 as the same bytes, so a
+ * then, in the development build, to UART0 as the same bytes, so a
  * terminal on the other end shows what the panel does; then the panel is
  * brought up to date. Waiting for a key, at the prompt or in vi, polls
  * the keyboard and card detect at about 30 Hz, takes the UART's bytes as
@@ -21,8 +21,10 @@
 #include "pico/bootrom.h"
 #include "pico/stdlib.h"
 
+#include "aon.h"
 #include "board.h"
 #include "card.h"
+#include "ds3231.h"
 #include "kbd.h"
 #include "keycodes.h"
 #include "keys.h"
@@ -112,6 +114,40 @@ static const char *usbdisk(void *ctx) {
     return usbdisk_run(usb_stop, ctx);
 }
 
+/* ---- the clock (design.md §3.8) ----------------------------------------- */
+
+static bool clock_get(void *ctx, int64_t *utc_ms) {
+    (void)ctx;
+    return aon_get(utc_ms);
+}
+
+static const char *clock_set(void *ctx, int64_t utc_ms) {
+    (void)ctx;
+    aon_set(utc_ms, AON_SRC_USER);
+    aon_rtc_sync();
+    return NULL;
+}
+
+static void clock_offset(void *ctx, int off_min) {
+    (void)ctx;
+    aon_offset(off_min);
+}
+
+#if SHELL_NTP
+static int clock_ntp(void *ctx) {
+    (void)ctx;
+    return aon_ntp();
+}
+
+static void clock_ntp_keep(void *ctx, int result) {
+    (void)ctx;
+    aon_ntp_keep(result);
+}
+#else
+#define clock_ntp      NULL
+#define clock_ntp_keep NULL
+#endif
+
 /* ---- the PicoCalc, for system.h ---------------------------------------- */
 
 static const char *sb_why(sb_status_t st) {
@@ -149,6 +185,8 @@ static void info(void *ctx, const out_t *o) {
     (void)ctx;
     out_printf(o, "chip      %s rev %u, %lu MHz\n", g_board.chip, g_board.chip_version,
                (unsigned long)(g_board.clk_sys_hz / 1000000u));
+    /* The build, which the user chose by its file (design.md §3.8). */
+    out_printf(o, "build     %s\n", SHELL_NTP ? "Pico 2 W, with NTP" : "Pico 2, without NTP");
     out_printf(o, "id        %s\n", g_board.unique_id);
     out_printf(o, "memory    %lu KB of %lu KB SRAM\n",
                (unsigned long)(((uintptr_t)&__end__ - SRAM_BASE) >> 10),
@@ -162,6 +200,7 @@ static void info(void *ctx, const out_t *o) {
     } else
         out_puts(o, "loader    none in flash\n");
     out_printf(o, "programs  %s\n", g_loader.problem ? g_loader.problem : "can be run");
+    out_printf(o, "clock     %s\n", aon_source_name(aon_source()));
     if (g_sb == SB_OK) out_printf(o, "keyboard  firmware 0x%02x\n", g_sb_ver[1]);
     else out_printf(o, "keyboard  %s\n", sb_why(g_sb));
 }
@@ -268,7 +307,7 @@ static int pollkey(void *ctx) {
 }
 
 static void log_banner(bool clocks_ok, uint32_t i2c_hz, sb_status_t sb, const uint8_t ver[2],
-                       uint32_t spi_hz) {
+                       uint32_t spi_hz, const char *clock_note) {
 #if PICO_SHELL_UART
     printf("\nshell %s, a no_flash RAM program (BOOT2350.UF2)\n", SHELL_VERSION);
     /* Build target and physical identity, labelled as such
@@ -285,6 +324,8 @@ static void log_banner(bool clocks_ok, uint32_t i2c_hz, sb_status_t sb, const ui
         printf("  southbridge  : i2c %lu Hz, version read failed (%d)\n", (unsigned long)i2c_hz,
                (int)sb);
     printf("  lcd          : spi %lu Hz configured\n", (unsigned long)spi_hz);
+    printf("  clock        : %s%s%s\n", aon_source_name(aon_source()), clock_note ? ", " : "",
+           clock_note ? clock_note : "");
     if (g_loader_st.part_size)
         printf("  loader       : stage3 %s, app partition 0x%06lx + %lu KB, flash end 0x%08lx\n",
                g_loader_st.version ? g_loader_st.version : "(no version)",
@@ -302,6 +343,7 @@ static void log_banner(bool clocks_ok, uint32_t i2c_hz, sb_status_t sb, const ui
     (void)sb;
     (void)ver;
     (void)spi_hz;
+    (void)clock_note;
 #endif
 }
 
@@ -313,7 +355,7 @@ int main(void) {
     bool clocks_ok = board_init_clocks();
     stdio_init_all();
 #if PICO_SHELL_UART
-    /* Bytes on UART1 are keys: with nothing on GP5, as on a PicoCalc with
+    /* Bytes on UART0 are keys: with nothing on GP3, as on a PicoCalc with
      * no probe attached, a floating line could type them. */
     gpio_pull_up(PICO_DEFAULT_UART_RX_PIN);
 #endif
@@ -322,12 +364,14 @@ int main(void) {
 
     uint32_t i2c_hz = sb_init();
     g_sb = sb_read(SB_REG_VER, g_sb_ver);
+    ds3231_init();
+    const char *clock_note = aon_start();
 
     uint32_t spi_hz = lcd_init();
     screen_init();
     s_lcd_us = time_us_64();
 
-    log_banner(clocks_ok, i2c_hz, g_sb, g_sb_ver, spi_hz);
+    log_banner(clocks_ok, i2c_hz, g_sb, g_sb_ver, spi_hz, clock_note);
 
     term_init(&g_term);
     keys_init(&g_keys);
@@ -337,6 +381,9 @@ int main(void) {
     shell_set_loader(&g_shell, &g_loader);
     const shell_system_t sys = { battery, backlight, phosphor, info, power, NULL };
     shell_set_system(&g_shell, &sys);
+    const shell_clock_t clock = { clock_get, clock_set, NULL, clock_note, clock_ntp, clock_ntp_keep,
+                                  clock_offset };
+    shell_set_clock(&g_shell, &clock);
     shell_set_memory(&g_shell, (unsigned long)((uintptr_t)&__end__ - SRAM_BASE),
                      (unsigned long)(SRAM_END - SRAM_BASE), (unsigned long)g_board.psram_bytes);
     shell_start(&g_shell);

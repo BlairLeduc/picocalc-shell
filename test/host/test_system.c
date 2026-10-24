@@ -147,7 +147,7 @@ int main(void) {
     /* ---- man ---- */
     CHECK(run("man") == 0, "man");
     CHECK(strncmp(con, "backlight  battery    bootsel\nbreak      cat", 40) == 0, "columns: '%.60s'", con);
-    CHECK(strstr(con, "\n`man name` for one.") && strstr(con, "\nwc\n") && strstr(con, "tail"),
+    CHECK(strstr(con, "\n`man name` for one.") && strstr(con, "wc\n") && strstr(con, "tail"),
           "man: '%s'", con);
     for (unsigned i = 0; shell_builtin_at(i); i++) {
         char line[32];

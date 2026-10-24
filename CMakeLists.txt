@@ -16,6 +16,7 @@ option(PICO_SHELL_HOST "Build the portable core and its host tests, with no Pico
 # What both flavours share (design.md §4.7)...
 set(SHELL_CORE_SOURCES
     src/core/bininfo.c
+    src/core/clock.c
     src/core/editor_file.c
     src/core/editor_pattern.c
     src/core/files.c
@@ -23,6 +24,7 @@ set(SHELL_CORE_SOURCES
     src/core/input.c
     src/core/keys.c
     src/core/line.c
+    src/core/ntp.c
     src/core/out.c
     src/core/path.c
     src/core/pipe.c
@@ -53,6 +55,7 @@ set(SHELL_DOS_SOURCES
     src/core/dos_parse.c
     src/core/dos_path.c
     src/core/dos_text.c
+    src/core/dos_time.c
     src/core/edit.c
     src/core/editor_lines.c
     src/core/font-ibm-8x10.c
@@ -62,10 +65,11 @@ set(SHELL_WARNINGS -Wall -Wextra -Werror)
 
 include(cmake/fatfs.cmake)
 
-# The core in one flavour, unix or dos, as the library `name`. It uses
-# FatFs's API for files (design.md §5); the disk under it is the port's
-# (the SD card) or the host's (an image file).
-function(shell_core_library name flavour)
+# The core in one flavour, unix or dos, as the library `name`, with the
+# `ntp` builtin if ntp is 1 (design.md §3.8). It uses FatFs's API for
+# files (design.md §5); the disk under it is the port's (the SD card) or
+# the host's (an image file).
+function(shell_core_library name flavour ntp)
     if (flavour STREQUAL "unix")
         add_library(${name} STATIC ${SHELL_CORE_SOURCES} ${SHELL_UNIX_SOURCES})
         target_compile_definitions(${name} PUBLIC SHELL_DOS=0)
@@ -75,6 +79,7 @@ function(shell_core_library name flavour)
     else()
         message(FATAL_ERROR "shell: PICO_SHELL_FLAVOUR is unix or dos, not ${flavour}")
     endif()
+    target_compile_definitions(${name} PUBLIC SHELL_NTP=${ntp})
     target_include_directories(${name} PUBLIC src/core)
     target_compile_options(${name} PRIVATE ${SHELL_WARNINGS})
     # Pico Logo's key layer cuts its Ctrl-G report to the status row on
@@ -99,8 +104,9 @@ if (PICO_SHELL_HOST)
     endif()
 
     shell_fatfs_library()
-    shell_core_library(shell_core unix)
-    shell_core_library(shell_core_dos dos)
+    # The host has the W build's `ntp`, so its tests run (design.md §3.8).
+    shell_core_library(shell_core unix 1)
+    shell_core_library(shell_core_dos dos 1)
     # Only the host formats disks: the tests' FAT16 and FAT32 images.
     target_compile_definitions(shell_fatfs PUBLIC SHELL_FATFS_MKFS=1)
 
@@ -124,11 +130,20 @@ if (PICO_SHELL_HOST)
     enable_testing()
     add_subdirectory(test/host)
 else()
-    # RP2350 only (design.md §1): one pico2 image for every RP2350 board.
+    # RP2350 only (design.md §1). pico2 is the Pico 2 build, for every
+    # RP2350 board; pico2_w is the W build, which adds `ntp` and builds
+    # ntp.uf2 (design.md §3.8). Each is built in its own directory.
     if (NOT DEFINED PICO_BOARD)
         set(PICO_BOARD pico2)
     endif()
-    if (NOT DEFINED PICO_PLATFORM AND PICO_BOARD STREQUAL "pico2")
+    if (PICO_BOARD STREQUAL "pico2")
+        set(SHELL_W 0)
+    elseif (PICO_BOARD STREQUAL "pico2_w")
+        set(SHELL_W 1)
+    else()
+        message(FATAL_ERROR "shell: PICO_BOARD is pico2 or pico2_w, not ${PICO_BOARD}")
+    endif()
+    if (NOT DEFINED PICO_PLATFORM)
         set(PICO_PLATFORM rp2350)
     endif()
 
@@ -148,7 +163,7 @@ else()
     # its own directory.
     set(PICO_SHELL_FLAVOUR unix CACHE STRING "The command line's flavour: unix or dos")
     shell_fatfs_library()
-    shell_core_library(shell_core ${PICO_SHELL_FLAVOUR})
+    shell_core_library(shell_core ${PICO_SHELL_FLAVOUR} ${SHELL_W})
 
     # The version for the banner, git describe --always --dirty, taken at
     # build time; the header only changes when the text does.
@@ -161,10 +176,11 @@ else()
         COMMENT "shell: version from git describe"
         VERBATIM)
 
-    # PICO_SHELL_UART=OFF is the build that ships: nothing on UART1, so GP4
-    # and GP5 are free. ON, the default, is the development build: the log,
-    # the screen mirrored and keys typed over UART1 (design.md §6, EL §13.2).
-    option(PICO_SHELL_UART "Log, mirror the screen and take keys over UART1 on GP4/GP5" ON)
+    # PICO_SHELL_UART=OFF is the build that ships: nothing on UART0, so GP2
+    # and GP3 are free. ON, the default, is the development build: the log,
+    # the screen mirrored and keys typed over UART0 (design.md §3.8, §6,
+    # EL §13.2). GP4 and GP5 are i2c0's, for a DS3231 (design.md §3.8).
+    option(PICO_SHELL_UART "Log, mirror the screen and take keys over UART0 on GP2/GP3" ON)
     if (PICO_SHELL_UART)
         set(PICO_SHELL_UART_ON 1)
     else()
@@ -182,7 +198,9 @@ else()
 
     add_executable(shell
         src/port/board.c
+        src/port/clock.c
         src/port/diskio.c
+        src/port/ds3231.c
         src/port/kbd.c
         src/port/lcd.c
         src/port/loader.c
@@ -215,10 +233,11 @@ else()
         PICO_SHELL_LCD_SPI_HZ=${PICO_SHELL_LCD_SPI_HZ}
         # clk_peri does not follow clk_sys by default (hardware-notes.md §3).
         PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1
-        # UART1 at 115200 8-N-1, TX GP4 / RX GP5 (hardware-notes.md §2.7).
-        PICO_DEFAULT_UART=1
-        PICO_DEFAULT_UART_TX_PIN=4
-        PICO_DEFAULT_UART_RX_PIN=5
+        # UART0 at 115200 8-N-1, TX GP2 / RX GP3, through UART_AUX
+        # (design.md §3.8; hardware-notes.md §2.7).
+        PICO_DEFAULT_UART=0
+        PICO_DEFAULT_UART_TX_PIN=2
+        PICO_DEFAULT_UART_RX_PIN=3
         # board.c only reads the PSRAM's id, for info and MEM; nothing
         # sets it up or uses it (hardware-notes.md §2.4).
         PICO_RUNTIME_NO_INIT_PSRAM=1
@@ -231,6 +250,7 @@ else()
         hardware_dma
         hardware_flash
         hardware_i2c
+        hardware_powman
         hardware_psram
         hardware_spi
         hardware_vreg
@@ -255,14 +275,112 @@ else()
     target_compile_definitions(exit-test PRIVATE
         PICO_SHELL_LCD_SPI_HZ=${PICO_SHELL_LCD_SPI_HZ}
         PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1
-        PICO_DEFAULT_UART=1
-        PICO_DEFAULT_UART_TX_PIN=4
-        PICO_DEFAULT_UART_RX_PIN=5
+        PICO_DEFAULT_UART=0
+        PICO_DEFAULT_UART_TX_PIN=2
+        PICO_DEFAULT_UART_RX_PIN=3
     )
     target_link_libraries(exit-test shell_core pico_stdlib hardware_dma hardware_i2c hardware_spi)
     pico_enable_stdio_uart(exit-test 1)
     pico_enable_stdio_usb(exit-test 0)
     pico_add_extra_outputs(exit-test)
+
+    # A flash program that shows the time the shell gave it, sets it a
+    # minute forward and returns: the board check of the header's clock
+    # (design.md §3.8). exit-test, which does not link hardware_powman,
+    # checks the header still builds without it.
+    add_executable(clock-test
+        test/pico/clock_test.c
+        src/port/kbd.c
+        src/port/lcd.c
+        src/port/screen.c
+        src/port/southbridge.c
+    )
+    target_include_directories(clock-test PRIVATE include src/port)
+    target_compile_options(clock-test PRIVATE ${SHELL_WARNINGS})
+    target_compile_definitions(clock-test PRIVATE
+        PICO_SHELL_LCD_SPI_HZ=${PICO_SHELL_LCD_SPI_HZ}
+        PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1
+        PICO_DEFAULT_UART=0
+        PICO_DEFAULT_UART_TX_PIN=2
+        PICO_DEFAULT_UART_RX_PIN=3
+    )
+    target_link_libraries(clock-test shell_core pico_stdlib hardware_dma hardware_i2c hardware_powman
+        hardware_spi)
+    pico_enable_stdio_uart(clock-test 1)
+    pico_enable_stdio_usb(clock-test 0)
+    pico_add_extra_outputs(clock-test)
+
+    # A flash program that sets the DS3231's EOSC, so the chip loses its
+    # time at the next power-off: the board check of a PicoCalc with no
+    # clock source, where the chip cannot be taken out (design.md §3.8).
+    add_executable(rtc-stop
+        test/pico/rtc_stop.c
+        src/port/ds3231.c
+        src/port/kbd.c
+        src/port/lcd.c
+        src/port/screen.c
+        src/port/southbridge.c
+    )
+    target_include_directories(rtc-stop PRIVATE include src/port)
+    target_compile_options(rtc-stop PRIVATE ${SHELL_WARNINGS})
+    target_compile_definitions(rtc-stop PRIVATE
+        PICO_SHELL_LCD_SPI_HZ=${PICO_SHELL_LCD_SPI_HZ}
+        PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1
+        PICO_DEFAULT_UART=0
+        PICO_DEFAULT_UART_TX_PIN=2
+        PICO_DEFAULT_UART_RX_PIN=3
+    )
+    target_link_libraries(rtc-stop shell_core pico_stdlib hardware_dma hardware_i2c hardware_spi)
+    pico_enable_stdio_uart(rtc-stop 1)
+    pico_enable_stdio_usb(rtc-stop 0)
+    pico_add_extra_outputs(rtc-stop)
+
+    # ntp.uf2, for /pico2-apps/ in the W build: Wi-Fi and NTP in a RAM
+    # program of its own, which the shell's `ntp` runs (design.md §3.8).
+    # It uses the shell's card, panel, keyboard and clock code. It links
+    # the CYW43 driver under the owner's GPL-3.0 section 7 permission
+    # (THIRD-PARTY.md), so it must link nothing from UF2 Loader (loader.c,
+    # core/uf2.c, usbdisk.c) or another GPL-3.0 author.
+    if (SHELL_W)
+        add_executable(ntp
+            src/ntp/main.c
+            src/port/clock.c
+            src/port/diskio.c
+            src/port/ds3231.c
+            src/port/kbd.c
+            src/port/lcd.c
+            src/port/screen.c
+            src/port/sd.c
+            src/port/southbridge.c
+        )
+        pico_set_binary_type(ntp no_flash)
+        pico_set_program_name(ntp "ntp")
+        pico_set_program_description(ntp "Sets the PicoCalc shell's clock from NTP")
+        target_include_directories(ntp PRIVATE src/ntp src/port include)
+        target_compile_options(ntp PRIVATE ${SHELL_WARNINGS})
+        target_compile_definitions(ntp PRIVATE
+            PICO_SHELL_UART=${PICO_SHELL_UART_ON}
+            PICO_SHELL_LCD_SPI_HZ=${PICO_SHELL_LCD_SPI_HZ}
+            PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1
+            PICO_DEFAULT_UART=0
+            PICO_DEFAULT_UART_TX_PIN=2
+            PICO_DEFAULT_UART_RX_PIN=3
+        )
+        target_link_libraries(ntp
+            shell_core
+            pico_stdlib
+            pico_rand
+            pico_cyw43_arch_lwip_poll
+            hardware_dma
+            hardware_i2c
+            hardware_powman
+            hardware_spi
+        )
+        pico_enable_stdio_uart(ntp ${PICO_SHELL_UART_ON})
+        pico_enable_stdio_usb(ntp 0)
+        pico_add_extra_outputs(ntp)
+        target_link_options(ntp PRIVATE -Wl,--print-memory-usage)
+    endif()
 
     # Memory use on every build (design.md §7, EL §2.1).
     target_link_options(shell PRIVATE -Wl,--print-memory-usage)

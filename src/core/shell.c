@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "clock.h"
 #include "files.h"
 #include "flavour.h"
 #include "history.h"
@@ -129,6 +130,7 @@ void shell_start(shell_t *sh) {
 }
 
 void shell_leaving(shell_t *sh) {
+    clock_leaving();
     const char *err = history_save();
     if (err) shell_error(sh, "shell: %s: %s\n", HISTORY_FILE, err);
 }

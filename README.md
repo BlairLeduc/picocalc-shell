@@ -177,6 +177,21 @@ in BOOTSEL). The program can then do something else, such as power off.
 tell it beforehand, to label its menu item. The header is under the MIT licence as well
 as the GPL-3.0, so a program under any licence can include it.
 
+A program that links `hardware_powman` also gets the shell's clock:
+
+```c
+int64_t utc_ms;
+int offset_min;                  // the shell's TZ, when it started the program
+if (picocalc_shell_time(&utc_ms, &offset_min))
+    show_clock(utc_ms / 1000 + offset_min * 60);
+
+picocalc_shell_set_time(utc_ms); // a time the program learnt itself
+```
+
+`picocalc_shell_time()` returns false if the clock is not set. A time a
+program sets is kept when it returns, and written to a DS3231 if there
+is one.
+
 ## Building
 
 The firmware needs the [Pico SDK](https://github.com/raspberrypi/pico-sdk)
@@ -186,7 +201,7 @@ and the Arm toolchain; `tools/build.sh` uses the newest it finds under
 ```sh
 tools/build.sh -DPICO_SHELL_UART=OFF build/pico-release                               # UNIX flavour, release
 tools/build.sh -DPICO_SHELL_UART=OFF -DPICO_SHELL_FLAVOUR=dos build/pico-dos-release  # DOS flavour, release
-tools/build.sh                                                                        # development: UART1 log, mirror and typed keys
+tools/build.sh                                                                        # development: UART0 log, mirror and typed keys
 ```
 
 The output is `build/<variant>/BOOT2350.uf2`. A release offers the two

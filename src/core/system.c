@@ -2,10 +2,14 @@
 
 #include "system.h"
 
+#include <ctype.h>
 #include <string.h>
 
+#include "clock.h"
 #include "files.h"
 #include "flavour.h"
+#include "ntp.h"
+#include "run.h"
 #include "term.h"
 
 static int usage(shell_t *sh, const char *text) {
@@ -214,5 +218,112 @@ int cmd_bootsel(shell_t *sh, int argc, char **argv) {
 }
 
 bool system_leaves(shell_cmd_fn fn) {
-    return fn == cmd_poweroff || fn == cmd_reboot || fn == cmd_bootsel;
+    return fn == cmd_poweroff || fn == cmd_reboot || fn == cmd_bootsel ||
+           (SHELL_NTP && fn == cmd_ntp);
+}
+
+#if SHELL_NTP
+/* ---- ntp -------------------------------------------------------------- */
+
+/* ntp.uf2, once per power-on (design.md §3.8). A startup file runs each
+ * time the shell comes back, from ntp.uf2 as from any program, so once
+ * NTP was tried `ntp` only says why it did not set the clock, with status
+ * 1; when it did, it says nothing (the owner, 2026-10-23). -f (/F) tries
+ * again. NTP_UNFINISHED is kept before ntp.uf2 starts, so one
+ * that never reports cannot make a loop either. */
+int cmd_ntp(shell_t *sh, int argc, char **argv) {
+    const char *name = SHELL_DOS ? "NTP" : "ntp";
+    bool force = argc == 2 && (SHELL_DOS ? argv[1][0] == '/' && toupper((unsigned char)argv[1][1]) == 'F' &&
+                                               !argv[1][2]
+                                         : strcmp(argv[1], "-f") == 0);
+    if (argc != 1 && !(argc == 2 && force)) return usage(sh, SHELL_DOS ? "NTP [/F]" : "ntp [-f]");
+    if (!clock_has_ntp()) return not_here(sh, name);
+    int was = clock_ntp();
+    if (was >= 0 && !force) {
+        if (was == NTP_SET) return 0;
+        shell_error(sh, "%s: %s\n", name, ntp_result_str((ntp_result_t)was));
+        return 1;
+    }
+    clock_ntp_keep(NTP_UNFINISHED);
+    /* ntp.uf2, found as a program is: in $PATH, /pico2-apps by default. */
+    int status = run_ram_program(sh, name);
+    /* Back without rebooting: ntp.uf2 did not run, so NTP was not tried. */
+    if (status != 0) clock_ntp_keep(was);
+    return status;
+}
+#endif
+
+/* ---- date ------------------------------------------------------------- */
+
+static void date_show(shell_t *sh, const clock_tm_t *tm) {
+    out_printf(&sh->out, "%s %s %2d %02d:%02d:%02d %s %d\n", clock_wday_name(tm->wday),
+               clock_mon_name(tm->mon), tm->mday, tm->hour, tm->min, tm->sec, tm->zone, tm->year);
+}
+
+/* Two digits from s, into *v. */
+static bool two(const char *s, int *v) {
+    if (s[0] < '0' || s[0] > '9' || s[1] < '0' || s[1] > '9') return false;
+    *v = (s[0] - '0') * 10 + (s[1] - '0');
+    return true;
+}
+
+/* mmddHHMM[[cc]yy], POSIX's form, in local time or UTC. Without a year,
+ * this year, or the fixed date's with the clock not set. Seconds are 0.
+ * The years are FAT's and DOS's, 1980-2099; yy of 69-99 is the 1900s,
+ * as POSIX has it. */
+static int date_set(shell_t *sh, const char *arg, bool utc) {
+    clock_tm_t tm;
+    int64_t t;
+    if (clock_utc(&t)) {
+        if (utc) clock_gmt(t, &tm);
+        else clock_local(t, &tm);
+    } else {
+        clock_now(&tm);
+    }
+    size_t n = strlen(arg);
+    int cc = 0, yy = 0;
+    bool ok = (n == 8 || n == 10 || n == 12) && two(arg, &tm.mon) && two(arg + 2, &tm.mday) &&
+              two(arg + 4, &tm.hour) && two(arg + 6, &tm.min);
+    if (ok && n == 10) {
+        ok = two(arg + 8, &yy);
+        tm.year = yy + (yy >= 69 ? 1900 : 2000);
+    } else if (ok && n == 12) {
+        ok = two(arg + 8, &cc) && two(arg + 10, &yy);
+        tm.year = cc * 100 + yy;
+    }
+    tm.sec = 0;
+    if (!ok || tm.year < 1980 || tm.year > 2099 || !clock_valid(tm.year, tm.mon, tm.mday) ||
+        tm.hour > 23 || tm.min > 59) {
+        shell_error(sh, "date: %s: not a date: mmddHHMM[[cc]yy]\n", arg);
+        return 1;
+    }
+    t = utc ? clock_seconds(&tm) : clock_from_local(&tm);
+    const char *why = clock_set(t);
+    if (why) {
+        shell_error(sh, "date: %s\n", why);
+        return 1;
+    }
+    if (utc) clock_gmt(t, &tm);
+    else clock_local(t, &tm);
+    date_show(sh, &tm);
+    return 0;
+}
+
+int cmd_date(shell_t *sh, int argc, char **argv) {
+    static const char use[] = "date [-u] [mmddHHMM[[cc]yy]]";
+    int i = 1;
+    bool utc = i < argc && strcmp(argv[i], "-u") == 0;
+    if (utc) i++;
+    if (argc - i > 1 || (i < argc && argv[i][0] == '-')) return usage(sh, use);
+    if (i < argc) return date_set(sh, argv[i], utc);
+    int64_t t;
+    if (!clock_utc(&t)) {
+        shell_error(sh, "date: clock not set\n");
+        return 1;
+    }
+    clock_tm_t tm;
+    if (utc) clock_gmt(t, &tm);
+    else clock_local(t, &tm);
+    date_show(sh, &tm);
+    return 0;
 }

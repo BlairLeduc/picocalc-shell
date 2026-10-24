@@ -50,7 +50,7 @@ puts them. Use the module's board definition for its on-board peripherals.
 
 | GP | Used by | Function |
 |---:|---|---|
-| 0–5 | — | GP4/GP5 are used for UART1 debug through the Debug Probe; GP0/GP1 are free |
+| 0–5 | — | GP2/GP3 carry UART0 debug through the Debug Probe (GP4/GP5, UART1, until 2026-10-22); GP0/GP1 and GP4/GP5 are free |
 | 6 | carrier | `i2c1` SDA → southbridge |
 | 7 | carrier | `i2c1` SCL → southbridge |
 | 8–9 | — | free |
@@ -80,8 +80,8 @@ So a PicoCalc application has roughly **eleven free GPIOs** (0–5, 8–9, 20–
 PicoCalc schematic before you route a signal to one, because the carrier may
 still connect it.
 
-GP4 and GP5 are only free in a build that leaves UART1 alone, and UART1 is
-how the Debug Probe gets your log (§2.7). Either keep a development build
+The pins the Debug Probe's UART uses are only free in a build that leaves
+that UART alone, and it is how the probe gets your log (§2.7). Either keep a development build
 with the UART and a release build without it, or hand the pins back and forth
 at run time and say which is lost. The pads are 3.3 V at default drive
 strength; a circuit built for a 5 V port may need a level shifter or a
@@ -103,7 +103,7 @@ Design around these from the start; each one has cost a project time.
   synthesize or decode in software.
 - **No battery-backed real-time clock.** The RP2350's AON timer (RP2040's RTC)
   loses time at power-off. Wall-clock time comes from the network on a W board,
-  or from the user.
+  or from the user, or from a DS3231 added on GP4 and GP5 (§8.5).
 
 ---
 
@@ -266,6 +266,12 @@ The driver reaches the chip over a **PIO SPI whose divider is fixed against
   failure: diagnostic firmware may deliberately start blank and silent.
 - **UART is a separate connection from SWD.** UART1 at **115200, 8-N-1**, TX
   GP4 and RX GP5, was verified in both directions through the Debug Probe.
+  So was **UART0 on TX GP2 and RX GP3**, through function 11 (`UART_AUX`),
+  which the SDK picks itself for those pins on RP2350 (`UART_FUNCSEL_NUM`)
+  from `PICO_DEFAULT_UART=0` and the two pin numbers: the shell's log, its
+  screen mirrored, typed keys and the FS screen dump, on a Plus 2 W,
+  2026-10-22 (`out/m12-uart0-1.log`). Not yet checked there: that the RX
+  pull-up keeps a floating GP3 quiet with the probe unplugged.
   Cross TX/RX and share ground. Discover the serial endpoint rather than
   hardcoding a workstation path.
 - **Keep a Mac's display awake while the probe is in use.** On a Mac, when
@@ -1407,6 +1413,188 @@ battery gauge on the southbridge (§6) is a better source anyway.
 The module's USB port is reachable through the case. It is available for CDC
 stdio, for mass storage, or for a USB host stack — but see §2.7: nothing routes
 `printf` there unless you ask.
+
+### 8.4 The AON timer and POWMAN's scratch registers across a reset
+
+The RP2350's always-on timer (POWMAN's 64-bit millisecond count) and
+POWMAN's eight scratch registers (`powman_hw->scratch[]`, at `0x401000b0`,
+a bank separate from the watchdog's) are in the always-on domain. A
+program that does not touch them leaves them as they were. The scratch
+registers take a plain 32-bit write; unlike POWMAN's other registers,
+they need no password in the top half. The SDK's `pico_low_power` uses
+scratch 6 and 7.
+
+Measured on a Plus 2 W, 2026-10-22, with the shell's release build run
+from SRAM: the timer was started from the crystal at a set time, and the
+shell wrote a record to scratch 0-2. Then `tools/swd-ram.sh` loaded
+another image and rebooted by the watchdog, with `PSM_WDSEL` at
+`0x01fffff3`. That value leaves bits 2 and 3, ROSC and XOSC, out of the
+reset. The new image found the record whole, and the timer still
+counting from the time it was given.
+
+Measured on the same Plus 2 W, 2026-10-22, with the DOS flavour's
+development build on the card as `/BOOT2350.UF2` under UF2 Loader 2.5:
+the clock was set with `DATE` and `TIME`, then kept its time through each
+of these, read back with `TIME /T` against the Mac's clock to the
+second, with no loss seen at that resolution:
+
+- the loader's `BOOT_SD` and a watchdog reboot (`tools/swd-shell.sh`),
+  stage3 loading the shell from the card (`out/m12-card-roundtrip-1.log`);
+- a program round trip: the shell flashed `exit-test.uf2` and rebooted,
+  stage3 started it, and a key typed on UART0 sent it back through
+  `picocalc_shell_exit()` (`out/m12-card-program-2.log`);
+- the shell's `REBOOT` (`out/m12-card-reboot-1.log`).
+
+Checked by the owner on the same Plus 2 W, 2026-10-23, with the DOS
+flavour's W release build on the card and `TZ=EST5EDT` set and `NTP` run
+in `AUTOEXEC.BAT`: `clock-test.uf2`, a flash program, read the shell's
+time and offset through `picocalc_shell_time()` and showed the same time
+as `TIME /T` before it; it set the clock a minute forward with
+`picocalc_shell_set_time()` and returned, and the shell showed the minute
+added, and wrote it to the DS3231 (design.md §3.8, M12 step 5).
+
+Measured on the same Plus 2 W, 2026-10-24, with the DOS flavour's W
+development build on the card under UF2 Loader 2.5, the clock set by
+NTP: the AON timer read over SWD while the board ran (POWMAN
+`READ_TIME_UPPER` and `LOWER`, 0x40100070), each read between two
+readings of the Mac's NTP-disciplined clock, which bound it to 1 ms; 20
+reads a sample, their median taken. **Each watchdog reboot loses 2.0 ms**
+(±0.5 ms), the same every time:
+
+- the loader's `BOOT_SD` and a watchdog reboot, stage3 loading the shell
+  from the card: -1.0 to -3.0 ms against the Mac;
+- the shell flashing `exit-test.uf2` and rebooting into it: -3.0 to
+  -5.0 ms; `exit-test` returning through `picocalc_shell_exit()`: -5.0
+  to -7.0 ms. A program round trip loses 4 ms;
+- the shell's `REBOOT`: -7.0 to -9.0 ms.
+
+Between reboots the offset held to 0.5 ms over 65 s and over 68 s, so
+the crystal's drift does not show at this resolution. The cause of the
+2 ms was not looked into; that the timer's 1 kHz tick stops while the
+boot code restarts the crystal is a guess. Just after NTP set it, the
+clock was 1 ms from the Mac's (`out/m12-roundtrip-ms-samples.txt`,
+`out/m12-aon-sample.sh`).
+
+Not yet checked: the cause of the 2 ms; power-off; the RUN pin;
+BOOTSEL; OpenOCD's `reset halt`; and what the timer does if XOSC stops.
+
+### 8.5 A DS3231 on i2c0
+
+The PicoCalc has no clock chip of its own (§1.2). A DS3231 can be added
+on `i2c0`, SDA on GP4 and SCL on GP5, which were the development UART's
+before it moved to GP2 and GP3. It answers at `0x68`. The time is in
+BCD in registers `0x00`-`0x06`, with the century in bit 7 of the month;
+`0x0E` is control, where bit 7, `EOSC`, stops the oscillator on the
+battery; `0x0F` is status, where bit 7, `OSF`, says the oscillator
+stopped and the time is lost. `OSF` is cleared only by writing it 0.
+Writing the seconds starts a new second (Maxim's data sheet, 19-5170).
+
+Measured on the Plus 2 W, 2026-10-22, with the UNIX flavour's
+development build run from SRAM (`tools/swd-ram.sh`), at 100 kHz with
+the RP2350's pull-ups:
+
+- with POWMAN's scratch 0 cleared over SWD, as a power-on clears it, a
+  chip answered at `0x68` with `OSF` set, so it had not kept a time
+  (`out/m12-ds3231-absent-2.log`);
+- `date` set the clock, and the shell wrote the chip and cleared `OSF`
+  (scratch 1 then read `0x890000`: *the RTC needs writing* clear);
+- with scratch 0 cleared again and the shell restarted, the clock came
+  from the chip, 1 s from the Mac's, less the minute it was set
+  behind, at the readings' one-second resolution (`out/m12-ds3231-set-2.log`);
+- reading it added about 1 ms to the bring-up: the panel was up at
+  438.2 ms from reset, against 436.8-437.2 ms with the clock already
+  set.
+
+Checked by the owner on the same Plus 2 W, 2026-10-22, with the DOS
+flavour's development build on the card as `/BOOT2350.UF2` under UF2
+Loader 2.5: the time set with `DATE` and `TIME` was still right after a
+power cycle, read from the chip. (The build before M12 step 3, which
+had no DS3231 code, lost it, as it should.)
+
+Checked by the owner on a Pico 2 W with no DS3231, 2026-10-22, with the
+release build: setting the time returned to the prompt with no pause,
+once the write no longer waited for the next second (design.md §3.8),
+and `info` said the clock was set by hand.
+
+The southbridge did not answer in the SRAM runs (`version read failed
+(-2)`); the cause was not looked into, and the DS3231 is on the other
+bus.
+
+Checked by the owner on the same Plus 2 W, 2026-10-23, with the DOS
+flavour's W release build: the time was still right after `POWEROFF`
+(the southbridge cutting the power) and a power-on with Up held, read
+from the chip.
+
+Checked by the owner on a Pimoroni Pico Plus 2 PicoCalc (no radio),
+2026-10-24, with the DOS flavour's W release build: `rtc-stop.uf2` set
+`EOSC`, and after `POWEROFF` and a power-on the chip had stopped on its
+battery, as the data sheet says: the shell said the DS3231 lost its
+time, and the clock was not set. The chip is sealed in the case, so this
+is the only way to take it away there.
+
+Not yet checked: the time lost per power cycle, below a second; the module's own pull-ups; its drift; and a
+board with no chip, which only the host tests cover.
+
+### 8.6 Wi-Fi and NTP on the Plus 2 W
+
+Measured by Claude on the Pimoroni Pico Plus 2 W (RP2350B, its CYW43439
+on GP23, 24, 25 and 29, as the Pico 2 W's), 2026-10-22, with the DOS
+flavour's W development build (`-DPICO_BOARD=pico2_w`) on the test card
+as `/BOOT2350.UF2` and `ntp.uf2` (design.md §3.8) in `/pico2-apps/`,
+under UF2 Loader 2.5, logged over UART0 (`out/m12-step4-a.log`, `-b.log`):
+
+- The `pico2_w` build runs on the RP2350B as the `pico2` build does, and
+  `cyw43_arch_init_with_country()` brings the radio up.
+- stage3 loads `ntp.uf2` (1,363 blocks) with `BOOT_RAM`; the shell's
+  check of it took 597-598 ms.
+- **The first join attempt can report `CYW43_LINK_NONET` with the
+  network in range**, about 1.4 s after `cyw43_arch_wifi_connect_async()`:
+  the scan missed it. The SDK's own `cyw43_arch_wifi_connect_timeout_ms()`
+  asks again on `NONET` until its timeout; a loop that takes `NONET` as
+  final fails every time. With a name that is not in range, the same
+  answer came after 1.4 s.
+- Joining a WPA2 home network, DHCP, a DNS lookup of `pool.ntp.org` and
+  one SNTP exchange: 7.6 s from `ntp.uf2`'s start to the clock set, with
+  a half round trip of 23 ms. From Enter on `NTP /F` to the shell's
+  prompt: 13.8 s, which includes the check, stage3's two loads, and the
+  1.5 s the result stays on the panel. The design's estimate was 5-10 s.
+- The time set agreed with the Mac's (NTP-synchronised) to the second
+  shown by `TIME /T`, 11 s later.
+- The development build mirrors the screen to UART0, so anything typed
+  in EDIT or vi, such as `ntp.cfg`'s password, is in the UART log.
+
+Checked by the owner on a Pico 2 W with no DS3231, 2026-10-22, with
+the DOS flavour's W release build: `NTP` set the clock, with `ntp.uf2`
+in `C:\BIN`, found through `PATH C:\BIN;C:\pico2-apps`. A first
+attempt said `no /ntp/ntp.cfg` with the file there: macOS had saved it
+as ` ntp.cfg`, with a leading space, which FAT keeps in a long name and
+`DIR` does not show in the 8.3 one.
+
+Checked by the owner on the Plus 2 W, reported 2026-10-23: after NTP
+set the clock, the shell wrote the DS3231 when it came back (*the RTC
+needs writing*, design.md §3.8), and the chip held NTP's time.
+
+Checked by the owner on a Pimoroni Pico Plus 2 (RP2350B, no radio)
+with a DS3231, reported 2026-10-23:
+
+- with the DOS flavour's W release build and `NTP` in `AUTOEXEC.BAT`,
+  power-on ran `ntp.uf2`, which reported no radio
+  (`cyw43_arch_init_with_country()` failed), after about 392 ms as the
+  owner recalls the panel, and returned to the shell;
+  `AUTOEXEC.BAT` ran on to the prompt without starting it again, and
+  `INFO` said the clock was not set;
+- with the Pico 2 release build, the date and time set by hand were
+  kept through a power cycle, read back from the DS3231.
+
+Checked by the owner on the Plus 2 W with a W release build, reported
+2026-10-23: with a wrong password in `ntp.cfg`, the join reported
+`CYW43_LINK_BADAUTH`, and `ntp.uf2` gave "the network refused the
+password" after 3,862 ms (as its panel said) and returned to the shell.
+
+Not yet checked: a Pico 2 (RP2350A) with the W build, and what driving
+its GP23-25 and GP29 does there (the owner has no Pico 2; the Plus 2 is
+the nearest board checked); WPA3-only networks, which the WPA2-AES join
+does not support.
 
 ---
 

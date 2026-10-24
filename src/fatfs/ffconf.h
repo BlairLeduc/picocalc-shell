@@ -20,6 +20,9 @@
  *                                the DOS flavour's VOL and DIR (§4.7)
  *   FF_USE_FIND 0, STRFUNC 0     not needed
  *   FF_USE_LFN 1                 long names, static buffer, not reentrant
+ *   FF_FS_NORTC 0                timestamps from the shell's clock, whose
+ *                                get_fattime (src/core/clock.c) falls back
+ *                                to FF_NORTC_* when it is not set (§3.8)
  */
 /*----------------------------------------------------------------------------/
 /  FatFs - Generic FAT Filesystem Module  R0.15 w/patch1                      /
@@ -283,7 +286,7 @@
 /  Note that enabling exFAT discards ANSI C (C89) compatibility. */
 
 
-#define FF_FS_NORTC		1
+#define FF_FS_NORTC		0
 #define FF_NORTC_MON	1
 #define FF_NORTC_MDAY	1
 #define FF_NORTC_YEAR	2026

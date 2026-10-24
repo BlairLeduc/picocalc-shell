@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "clock.h"
 #include "flavour.h"
 #include "path.h"
 #include "vars.h"
@@ -298,6 +299,7 @@ typedef struct {
     uint16_t name;     /* offset in s_names */
     uint8_t  attr;
     uint32_t size;
+    uint16_t fdate, ftime;   /* FAT's, in local time */
 } ent_t;
 
 static ent_t s_ents[SHELL_LS_MAX];
@@ -324,10 +326,28 @@ bool files_hidden(const FILINFO *fno) {
     return fno->fname[0] == '.' || (fno->fattrib & (AM_HID | AM_SYS));
 }
 
-static void ls_long(shell_t *sh, const char *name, uint8_t attr, uint32_t size) {
+/* About six months, as ls takes it: half of an average Gregorian year. */
+#define SIX_MONTHS 15778476
+
+/* One entry of ls -l: mode, size, date and name (design.md §3.8). The
+ * date is POSIX's %b %e %H:%M, or the year in place of the time for one
+ * more than six months from now, either way. */
+static void ls_long(shell_t *sh, const char *name, const FILINFO *fno) {
+    uint8_t attr = fno->fattrib;
     char mode[4] = { (attr & AM_DIR) ? 'd' : '-', 'r', (attr & AM_RDO) ? '-' : 'w', '\0' };
     if (attr & AM_DIR) out_printf(&sh->out, "%s %8s ", mode, "");
-    else out_printf(&sh->out, "%s %8lu ", mode, (unsigned long)size);
+    else out_printf(&sh->out, "%s %8lu ", mode, (unsigned long)fno->fsize);
+    if (fno->fdate) {
+        clock_tm_t now, t;
+        clock_now(&now);
+        clock_from_fat(fno->fdate, fno->ftime, &t);
+        int64_t away = clock_seconds(&t) - clock_seconds(&now);
+        out_printf(&sh->out, "%s %2d ", clock_mon_name(t.mon), t.mday);
+        if (away > SIX_MONTHS || away < -SIX_MONTHS) out_printf(&sh->out, " %4d ", t.year);
+        else out_printf(&sh->out, "%02d:%02d ", t.hour, t.min);
+    } else {
+        out_printf(&sh->out, "%13s", "");
+    }
     out_puts(&sh->out, name);
     out_puts(&sh->out, (attr & AM_DIR) ? "/\n" : "\n");
 }
@@ -387,7 +407,8 @@ static int ls_dir(shell_t *sh, const char *shown, const char *path, unsigned fla
             break;
         }
         memcpy(s_names + used, s_fno.fname, len);
-        s_ents[n++] = (ent_t){ (uint16_t)used, s_fno.fattrib, (uint32_t)s_fno.fsize };
+        s_ents[n++] = (ent_t){ (uint16_t)used, s_fno.fattrib, (uint32_t)s_fno.fsize,
+                               s_fno.fdate, s_fno.ftime };
         used += len;
     }
     f_closedir(&d);
@@ -402,7 +423,7 @@ static int ls_dir(shell_t *sh, const char *shown, const char *path, unsigned fla
         r = f_opendir(&d, path);
         while (r == FR_OK && (r = f_readdir(&d, &s_fno)) == FR_OK && s_fno.fname[0]) {
             if (!(flags & LS_A) && files_hidden(&s_fno)) continue;
-            if (flags & LS_L) ls_long(sh, s_fno.fname, s_fno.fattrib, (uint32_t)s_fno.fsize);
+            if (flags & LS_L) ls_long(sh, s_fno.fname, &s_fno);
             else out_printf(&sh->out, "%s%s\n", s_fno.fname, (s_fno.fattrib & AM_DIR) ? "/" : "");
             if (shell_interrupted(sh)) break;
         }
@@ -412,8 +433,14 @@ static int ls_dir(shell_t *sh, const char *shown, const char *path, unsigned fla
 
     qsort(s_ents, n, sizeof s_ents[0], ent_cmp);
     if (flags & LS_L) {
-        for (unsigned i = 0; i < n; i++)
-            ls_long(sh, s_names + s_ents[i].name, s_ents[i].attr, s_ents[i].size);
+        for (unsigned i = 0; i < n; i++) {
+            const ent_t *e = &s_ents[i];
+            s_fno.fattrib = e->attr;
+            s_fno.fsize = e->size;
+            s_fno.fdate = e->fdate;
+            s_fno.ftime = e->ftime;
+            ls_long(sh, s_names + e->name, &s_fno);
+        }
     } else {
         ls_names(sh, n);
     }
@@ -438,7 +465,7 @@ int cmd_ls(shell_t *sh, int argc, char **argv) {
             shell_error(sh, "ls: %s: %s\n", argv[i], files_why(r));
             status = 1;
         } else if (!(s_fno.fattrib & AM_DIR)) {
-            if (flags & LS_L) ls_long(sh, argv[i], s_fno.fattrib, (uint32_t)s_fno.fsize);
+            if (flags & LS_L) ls_long(sh, argv[i], &s_fno);
             else out_printf(&sh->out, "%s\n", argv[i]);
         } else {
             if (headers) out_printf(&sh->out, "%s%s:\n", i > first ? "\n" : "", argv[i]);
@@ -1008,11 +1035,18 @@ int cmd_touch(shell_t *sh, int argc, char **argv) {
             status = 1;
             continue;
         }
-        /* No clock (design.md §4.2): a file already there is left as it is. */
+        /* A file already there gets the time now, if the clock is set;
+         * otherwise it is left as it is (design.md §3.8). */
         FRESULT r = files_stat(s_a, &s_fno);
         if (r == FR_NO_FILE) {
             r = f_open(&s_src, s_a, FA_CREATE_NEW | FA_WRITE);
             if (r == FR_OK) r = f_close(&s_src);
+        } else if (r == FR_OK && strcmp(s_a, "/") != 0) {
+            clock_tm_t now;
+            if (clock_now(&now)) {
+                clock_to_fat(&now, &s_fno.fdate, &s_fno.ftime);
+                r = f_utime(s_a, &s_fno);
+            }
         }
         if (r != FR_OK) {
             shell_error(sh, "touch: %s: %s\n", argv[i], files_why(r));

@@ -38,4 +38,10 @@ void line_start(shell_t *sh, size_t prompt);
  * at the start of the next row. */
 bool line_key(shell_t *sh, int key);
 
+/* A line typed after `prompt`, for a command that asks, such as select
+ * or DOS's DATE, into sh->line.text: 1; 0 at the end of the input; -1
+ * when stopped by Break, Esc or Ctrl-C, with sh->stop set. The caller
+ * makes sure there is a keyboard (sh->hooks.getkey). */
+int line_read(shell_t *sh, const char *prompt);
+
 #endif /* SHELL_LINE_H */
