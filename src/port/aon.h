@@ -39,6 +39,10 @@ const char *aon_start(void);
  * second. */
 void aon_rtc_sync(void);
 
+/* The local offset from UTC in minutes, for the next program
+ * (picocalc_shell_time()); kept only while the clock is set. */
+void aon_offset(int off_min);
+
 /* What NTP did since power-on, an ntp_result_t (ntp.h), or -1 if it was
  * not tried; and keep a result, -1 to forget it. */
 int aon_ntp(void);

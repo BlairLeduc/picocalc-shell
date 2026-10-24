@@ -1445,9 +1445,38 @@ second, with no loss seen at that resolution:
   `picocalc_shell_exit()` (`out/m12-card-program-2.log`);
 - the shell's `REBOOT` (`out/m12-card-reboot-1.log`).
 
-Not yet checked: the loss per trip below a second; power-off; the RUN
-pin; BOOTSEL; OpenOCD's `reset halt`; and what the timer does if XOSC
-stops.
+Checked by the owner on the same Plus 2 W, 2026-10-23, with the DOS
+flavour's W release build on the card and `TZ=EST5EDT` set and `NTP` run
+in `AUTOEXEC.BAT`: `clock-test.uf2`, a flash program, read the shell's
+time and offset through `picocalc_shell_time()` and showed the same time
+as `TIME /T` before it; it set the clock a minute forward with
+`picocalc_shell_set_time()` and returned, and the shell showed the minute
+added, and wrote it to the DS3231 (design.md §3.8, M12 step 5).
+
+Measured on the same Plus 2 W, 2026-10-24, with the DOS flavour's W
+development build on the card under UF2 Loader 2.5, the clock set by
+NTP: the AON timer read over SWD while the board ran (POWMAN
+`READ_TIME_UPPER` and `LOWER`, 0x40100070), each read between two
+readings of the Mac's NTP-disciplined clock, which bound it to 1 ms; 20
+reads a sample, their median taken. **Each watchdog reboot loses 2.0 ms**
+(±0.5 ms), the same every time:
+
+- the loader's `BOOT_SD` and a watchdog reboot, stage3 loading the shell
+  from the card: -1.0 to -3.0 ms against the Mac;
+- the shell flashing `exit-test.uf2` and rebooting into it: -3.0 to
+  -5.0 ms; `exit-test` returning through `picocalc_shell_exit()`: -5.0
+  to -7.0 ms. A program round trip loses 4 ms;
+- the shell's `REBOOT`: -7.0 to -9.0 ms.
+
+Between reboots the offset held to 0.5 ms over 65 s and over 68 s, so
+the crystal's drift does not show at this resolution. The cause of the
+2 ms was not looked into; that the timer's 1 kHz tick stops while the
+boot code restarts the crystal is a guess. Just after NTP set it, the
+clock was 1 ms from the Mac's (`out/m12-roundtrip-ms-samples.txt`,
+`out/m12-aon-sample.sh`).
+
+Not yet checked: the cause of the 2 ms; power-off; the RUN pin;
+BOOTSEL; OpenOCD's `reset halt`; and what the timer does if XOSC stops.
 
 ### 8.5 A DS3231 on i2c0
 
@@ -1489,9 +1518,22 @@ and `info` said the clock was set by hand.
 
 The southbridge did not answer in the SRAM runs (`version read failed
 (-2)`); the cause was not looked into, and the DS3231 is on the other
-bus. Not yet checked: `poweroff` and a power-on with Up held; the time
-lost per power cycle, below a second; the module's own pull-ups; its
-drift; and a board with no chip, which only the host tests cover.
+bus.
+
+Checked by the owner on the same Plus 2 W, 2026-10-23, with the DOS
+flavour's W release build: the time was still right after `POWEROFF`
+(the southbridge cutting the power) and a power-on with Up held, read
+from the chip.
+
+Checked by the owner on a Pimoroni Pico Plus 2 PicoCalc (no radio),
+2026-10-24, with the DOS flavour's W release build: `rtc-stop.uf2` set
+`EOSC`, and after `POWEROFF` and a power-on the chip had stopped on its
+battery, as the data sheet says: the shell said the DS3231 lost its
+time, and the clock was not set. The chip is sealed in the case, so this
+is the only way to take it away there.
+
+Not yet checked: the time lost per power cycle, below a second; the module's own pull-ups; its drift; and a
+board with no chip, which only the host tests cover.
 
 ### 8.6 Wi-Fi and NTP on the Plus 2 W
 

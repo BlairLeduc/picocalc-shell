@@ -40,6 +40,10 @@ const char *clock_set(int64_t utc_s);
 /* The port's note about the clock (shell_clock_t), once: NULL after. */
 const char *clock_note(void);
 
+/* Before the shell is left for a program: give the port the local
+ * offset now, by TZ, if the clock is set. */
+void clock_leaving(void);
+
 /* NTP (ntp.h): whether the port has it; what it did since power-on, -1
  * if it was not tried; and keep a result, -1 to forget it. */
 bool clock_has_ntp(void);

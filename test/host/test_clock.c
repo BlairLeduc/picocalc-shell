@@ -63,6 +63,15 @@ static const char *fake_set(void *ctx, int64_t utc_ms) {
     return NULL;
 }
 
+static int fake_offset;      /* what the offset hook was given */
+static int fake_offsets;     /* and how often */
+
+static void fake_offset_keep(void *ctx, int off_min) {
+    (void)ctx;
+    fake_offset = off_min;
+    fake_offsets++;
+}
+
 /* A moment in UTC, in seconds. */
 static int64_t utc(int y, int mo, int d, int h, int mi, int s) {
     return clock_days(y, mo, d) * 86400 + h * 3600 + mi * 60 + s;
@@ -333,9 +342,36 @@ static int file_tests(bool fat32) {
     return 0;
 }
 
+/* The offset a program is given (picocalc_shell_time()), by TZ when the
+ * shell is left, and none with the clock not set. */
+static int offset_tests(void) {
+    const shell_clock_t clock = { fake_get, fake_set, NULL, NULL, NULL, NULL, fake_offset_keep };
+    shell_set_clock(&sh, &clock);
+    fake_offsets = 0;
+    fake_is_set = false;
+    shell_leaving(&sh);
+    CHECK(fake_offsets == 0, "not set: %d", fake_offsets);
+
+    tz("EST5EDT,M3.2.0,M11.1.0");
+    set_at(utc(2026, 10, 22, 18, 30, 0));
+    shell_leaving(&sh);
+    CHECK(fake_offsets == 1 && fake_offset == -240, "EDT: %d", fake_offset);
+    set_at(utc(2026, 12, 22, 18, 30, 0));
+    shell_leaving(&sh);
+    CHECK(fake_offset == -300, "EST: %d", fake_offset);
+    tz("IST-5:30");
+    shell_leaving(&sh);
+    CHECK(fake_offset == 330, "IST: %d", fake_offset);
+    tz(NULL);
+    shell_leaving(&sh);
+    CHECK(fake_offsets == 4 && fake_offset == 0, "UTC: %d", fake_offset);
+    return 0;
+}
+
 /* The port's note, after the banner and before the startup file, once. */
 static int note_tests(const char *want) {
-    const shell_clock_t clock = { fake_get, fake_set, NULL, "the DS3231 lost its time", NULL, NULL };
+    const shell_clock_t clock = { fake_get, fake_set, NULL, "the DS3231 lost its time",
+                                  NULL, NULL, NULL };
     shell_set_clock(&sh, &clock);
     con_len = 0;
     shell_start(&sh);
@@ -359,11 +395,12 @@ int main(void) {
     CHECK(run("date 1022143026") == 1 && strcmp(con, "date: no clock here\n") == 0,
           "no clock, set: '%s'", con);
 
-    const shell_clock_t clock = { fake_get, fake_set, NULL, NULL, NULL, NULL };
+    const shell_clock_t clock = { fake_get, fake_set, NULL, NULL, NULL, NULL, NULL };
     shell_set_clock(&sh, &clock);
     if (date_tests()) return 1;
     if (file_tests(false)) return 1;
     if (file_tests(true)) return 1;
+    if (offset_tests()) return 1;
     if (note_tests(" test\n\nshell: the DS3231 lost its time\n")) return 1;
     TEST_DONE();
 }

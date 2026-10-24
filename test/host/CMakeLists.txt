@@ -93,6 +93,6 @@ add_executable(test_ds3231 test_ds3231.c fake_ds3231.c ${CMAKE_SOURCE_DIR}/src/p
     ${CMAKE_SOURCE_DIR}/src/port/clock.c)
 target_link_libraries(test_ds3231 PRIVATE shell_core shell_host_disk)
 target_include_directories(test_ds3231 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/fake_sdk ${CMAKE_SOURCE_DIR}/src/port)
+    ${CMAKE_CURRENT_SOURCE_DIR}/fake_sdk ${CMAKE_SOURCE_DIR}/src/port ${CMAKE_SOURCE_DIR}/include)
 target_compile_options(test_ds3231 PRIVATE ${SHELL_WARNINGS})
 add_test(NAME test_ds3231 COMMAND test_ds3231)

@@ -1,4 +1,5 @@
-/* picocalc_shell.h — return from a program to the PicoCalc shell.
+/* picocalc_shell.h — return from a program to the PicoCalc shell, and
+ * the time it keeps.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later OR MIT
  *
@@ -29,8 +30,25 @@
  * picocalc_shell_card_present() tell it beforehand, to name its menu
  * item.
  *
- * The values below are UF2 Loader's (common/bootloader/proginfo.c); the
- * shell's src/port/loader.c checks it agrees with them.
+ * The time (design.md §3.8): the shell keeps UTC in the RP2350's
+ * always-on timer, which survives the reboot into the program, and a
+ * record of it in POWMAN's scratch registers 0-2:
+ *
+ *     int64_t utc_ms;
+ *     int offset_min;
+ *     if (picocalc_shell_time(&utc_ms, &offset_min))
+ *         show_clock(utc_ms / 1000 + offset_min * 60);   // local time
+ *
+ * These two functions are here when the program links hardware_powman
+ * (target_link_libraries(... hardware_powman)), so a program that only
+ * returns to the shell needs nothing more. A program may read the time
+ * at any moment; it must not stop the timer, change its tick source,
+ * set it except through picocalc_shell_set_time(), or write POWMAN
+ * scratch 0-2.
+ *
+ * The loader's values below are UF2 Loader's
+ * (common/bootloader/proginfo.c); the shell's src/port/loader.c checks
+ * it agrees with them, and src/port/clock.c with the clock's.
  */
 #ifndef PICOCALC_SHELL_H
 #define PICOCALC_SHELL_H
@@ -84,5 +102,61 @@ static inline bool picocalc_shell_exit(void) {
     watchdog_reboot(0, 0, 0);
     for (;;) tight_loop_contents();
 }
+
+#if defined(__has_include)
+#if __has_include("hardware/powman.h")
+#define PICOCALC_SHELL_HAS_TIME 1
+#endif
+#endif
+
+#ifdef PICOCALC_SHELL_HAS_TIME
+#include <stdint.h>
+
+#include "hardware/powman.h"
+
+/* The record: scratch[0] the magic, scratch[2] ~(scratch[0] ^
+ * scratch[1]) as a check, and in scratch[1] these, among the shell's
+ * own. */
+#define PICOCALC_SHELL_CLOCK_MAGIC   0x434c4b31u   /* "CLK1" */
+#define PICOCALC_SHELL_CLOCK_OFFSET  0x0000ffffu   /* minutes from UTC, signed */
+#define PICOCALC_SHELL_CLOCK_SOURCE  0x00070000u   /* who set it */
+#define PICOCALC_SHELL_CLOCK_PROGRAM 0x00040000u   /* a program */
+#define PICOCALC_SHELL_CLOCK_SET     0x00080000u
+#define PICOCALC_SHELL_CLOCK_RTC_DUE 0x00400000u   /* the shell writes the DS3231 */
+
+/* scratch[1], or 0 if the record is not whole: power-on cleared it. */
+static inline uint32_t picocalc_shell_clock_record(void) {
+    uint32_t magic = powman_hw->scratch[0], bits = powman_hw->scratch[1];
+    if (magic != PICOCALC_SHELL_CLOCK_MAGIC || powman_hw->scratch[2] != ~(magic ^ bits)) return 0;
+    return bits;
+}
+
+/* The time the shell keeps: UTC milliseconds since 1970, and the local
+ * offset in minutes when the shell started the program (its TZ then).
+ * Returns false, and leaves both alone, if the clock is not set: as
+ * after power-on with the stock loader, which starts the last program
+ * without the shell. */
+static inline bool picocalc_shell_time(int64_t *utc_ms, int *offset_min) {
+    uint32_t bits = picocalc_shell_clock_record();
+    if (!(bits & PICOCALC_SHELL_CLOCK_SET) || !powman_timer_is_running()) return false;
+    *utc_ms = (int64_t)powman_timer_get_ms();
+    *offset_min = (int16_t)(bits & PICOCALC_SHELL_CLOCK_OFFSET);
+    return true;
+}
+
+/* Set the time, for a program that learns it itself (its own NTP or
+ * RTC). The shell writes the DS3231, if there is one, when it comes
+ * back. The offset is left as the shell gave it, 0 if it did not. */
+static inline void picocalc_shell_set_time(int64_t utc_ms) {
+    powman_timer_set_1khz_tick_source_xosc();
+    powman_timer_set_ms((uint64_t)utc_ms);
+    powman_timer_start();
+    uint32_t bits = picocalc_shell_clock_record() & ~PICOCALC_SHELL_CLOCK_SOURCE;
+    bits |= PICOCALC_SHELL_CLOCK_SET | PICOCALC_SHELL_CLOCK_PROGRAM | PICOCALC_SHELL_CLOCK_RTC_DUE;
+    powman_hw->scratch[0] = PICOCALC_SHELL_CLOCK_MAGIC;
+    powman_hw->scratch[1] = bits;
+    powman_hw->scratch[2] = ~(PICOCALC_SHELL_CLOCK_MAGIC ^ bits);
+}
+#endif /* PICOCALC_SHELL_HAS_TIME */
 
 #endif /* PICOCALC_SHELL_H */

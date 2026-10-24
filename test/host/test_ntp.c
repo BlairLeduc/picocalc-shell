@@ -254,7 +254,7 @@ static int test_builtin(void) {
     /* No NTP in the port: as the Pico 2 build would be, had it the word. */
     CHECK(run(NTP) == 1 && strstr(con, "not on this machine"), "no NTP: '%s'", con);
 
-    const shell_clock_t clock = { fake_get, NULL, NULL, NULL, fake_ntp, fake_ntp_keep };
+    const shell_clock_t clock = { fake_get, NULL, NULL, NULL, fake_ntp, fake_ntp_keep, NULL };
     shell_set_clock(&sh, &clock);
     shell_set_loader(&sh, &loader);
 

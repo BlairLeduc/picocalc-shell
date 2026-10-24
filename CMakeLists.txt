@@ -284,6 +284,57 @@ else()
     pico_enable_stdio_usb(exit-test 0)
     pico_add_extra_outputs(exit-test)
 
+    # A flash program that shows the time the shell gave it, sets it a
+    # minute forward and returns: the board check of the header's clock
+    # (design.md §3.8). exit-test, which does not link hardware_powman,
+    # checks the header still builds without it.
+    add_executable(clock-test
+        test/pico/clock_test.c
+        src/port/kbd.c
+        src/port/lcd.c
+        src/port/screen.c
+        src/port/southbridge.c
+    )
+    target_include_directories(clock-test PRIVATE include src/port)
+    target_compile_options(clock-test PRIVATE ${SHELL_WARNINGS})
+    target_compile_definitions(clock-test PRIVATE
+        PICO_SHELL_LCD_SPI_HZ=${PICO_SHELL_LCD_SPI_HZ}
+        PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1
+        PICO_DEFAULT_UART=0
+        PICO_DEFAULT_UART_TX_PIN=2
+        PICO_DEFAULT_UART_RX_PIN=3
+    )
+    target_link_libraries(clock-test shell_core pico_stdlib hardware_dma hardware_i2c hardware_powman
+        hardware_spi)
+    pico_enable_stdio_uart(clock-test 1)
+    pico_enable_stdio_usb(clock-test 0)
+    pico_add_extra_outputs(clock-test)
+
+    # A flash program that sets the DS3231's EOSC, so the chip loses its
+    # time at the next power-off: the board check of a PicoCalc with no
+    # clock source, where the chip cannot be taken out (design.md §3.8).
+    add_executable(rtc-stop
+        test/pico/rtc_stop.c
+        src/port/ds3231.c
+        src/port/kbd.c
+        src/port/lcd.c
+        src/port/screen.c
+        src/port/southbridge.c
+    )
+    target_include_directories(rtc-stop PRIVATE include src/port)
+    target_compile_options(rtc-stop PRIVATE ${SHELL_WARNINGS})
+    target_compile_definitions(rtc-stop PRIVATE
+        PICO_SHELL_LCD_SPI_HZ=${PICO_SHELL_LCD_SPI_HZ}
+        PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1
+        PICO_DEFAULT_UART=0
+        PICO_DEFAULT_UART_TX_PIN=2
+        PICO_DEFAULT_UART_RX_PIN=3
+    )
+    target_link_libraries(rtc-stop shell_core pico_stdlib hardware_dma hardware_i2c hardware_spi)
+    pico_enable_stdio_uart(rtc-stop 1)
+    pico_enable_stdio_usb(rtc-stop 0)
+    pico_add_extra_outputs(rtc-stop)
+
     # ntp.uf2, for /pico2-apps/ in the W build: Wi-Fi and NTP in a RAM
     # program of its own, which the shell's `ntp` runs (design.md §3.8).
     # It uses the shell's card, panel, keyboard and clock code, and

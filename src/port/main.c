@@ -128,6 +128,11 @@ static const char *clock_set(void *ctx, int64_t utc_ms) {
     return NULL;
 }
 
+static void clock_offset(void *ctx, int off_min) {
+    (void)ctx;
+    aon_offset(off_min);
+}
+
 #if SHELL_NTP
 static int clock_ntp(void *ctx) {
     (void)ctx;
@@ -376,7 +381,8 @@ int main(void) {
     shell_set_loader(&g_shell, &g_loader);
     const shell_system_t sys = { battery, backlight, phosphor, info, power, NULL };
     shell_set_system(&g_shell, &sys);
-    const shell_clock_t clock = { clock_get, clock_set, NULL, clock_note, clock_ntp, clock_ntp_keep };
+    const shell_clock_t clock = { clock_get, clock_set, NULL, clock_note, clock_ntp, clock_ntp_keep,
+                                  clock_offset };
     shell_set_clock(&g_shell, &clock);
     shell_set_memory(&g_shell, (unsigned long)((uintptr_t)&__end__ - SRAM_BASE),
                      (unsigned long)(SRAM_END - SRAM_BASE), (unsigned long)g_board.psram_bytes);

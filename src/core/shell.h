@@ -69,7 +69,9 @@ typedef struct {
  * if not NULL, is said once when the shell starts: "the DS3231 lost its
  * time". ntp is what NTP did since power-on (ntp.h's ntp_result_t), or
  * -1 if it was not tried, and ntp_keep keeps a result, -1 to forget
- * it; both NULL where there is no NTP, as in the Pico 2 build. */
+ * it; both NULL where there is no NTP, as in the Pico 2 build. offset,
+ * if not NULL, keeps the local offset from UTC in minutes for the next
+ * program, before the shell is left. */
 typedef struct {
     bool (*get)(void *ctx, int64_t *utc_ms);
     const char *(*set)(void *ctx, int64_t utc_ms);
@@ -77,6 +79,7 @@ typedef struct {
     const char *note;
     int (*ntp)(void *ctx);
     void (*ntp_keep)(void *ctx, int result);
+    void (*offset)(void *ctx, int off_min);
 } shell_clock_t;
 
 /* The line being edited at the prompt (line.c). */
@@ -143,8 +146,8 @@ void shell_input(shell_t *sh, int key);
  * status. For tests, and for scripts at the level below. */
 int shell_run(shell_t *sh, const char *line);
 
-/* Before the shell is left for a program, the menu or USB: save the
- * history. */
+/* Before the shell is left for a program, the menu or USB: give the
+ * port the clock's local offset, and save the history. */
 void shell_leaving(shell_t *sh);
 
 /* For builtins: an error to the terminal, never to a redirection. */

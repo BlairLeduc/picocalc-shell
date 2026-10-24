@@ -32,6 +32,14 @@ const char *clock_note(void) {
     return note;
 }
 
+void clock_leaving(void) {
+    int64_t s;
+    clock_tm_t tm;
+    if (!s_port.offset || !clock_utc(&s)) return;
+    clock_local(s, &tm);
+    s_port.offset(s_port.ctx, tm.off_min);
+}
+
 bool clock_has_ntp(void) {
     return s_port.ntp && s_port.ntp_keep;
 }

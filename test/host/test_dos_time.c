@@ -132,13 +132,15 @@ static int date_time_tests(void) {
           "Enter, not set: '%s'", con);
 
     /* AUTOEXEC.BAT's way of asking only when needed (design.md §3.8). */
-    CHECK(put("/ASK.BAT", "@ECHO OFF\r\nDATE /T\r\nIF NOT ERRORLEVEL 1 GOTO SET\r\nDATE\r\n"
+    CHECK(put("/ASK.BAT", "@ECHO OFF\r\nDATE /T > NUL\r\nIF NOT ERRORLEVEL 1 GOTO SET\r\nDATE\r\n"
                           "TIME\r\n:SET\r\nECHO done\r\n"),
           "ask.bat");
     keys = "10-22-26\r2:30p\r";
     CHECK(run("\\ASK") == 0 && has("Enter new date (mm-dd-yy): ") && has("Enter new time: ") &&
               has("done\n") && fake_is_set,
           "asked: '%s'", con);
+    const char *said = strstr(con, "Current date is not set\n");
+    CHECK(said && !strstr(said + 1, "Current date is not set"), "said once: '%s'", con);
     CHECK(fake_ms == utc(2026, 10, 22, 14, 30, 0) * 1000, "set in UTC with no TZ: %s",
           local_now());
     keys = "";
@@ -355,7 +357,8 @@ static int prompt_tests(void) {
 
 /* The port's note, after the banner and before the startup file, once. */
 static int note_tests(const char *want) {
-    const shell_clock_t clock = { fake_get, fake_set, NULL, "the DS3231 lost its time", NULL, NULL };
+    const shell_clock_t clock = { fake_get, fake_set, NULL, "the DS3231 lost its time",
+                                  NULL, NULL, NULL };
     shell_set_clock(&sh, &clock);
     con_len = 0;
     shell_start(&sh);
@@ -370,7 +373,7 @@ int main(void) {
     const out_t out = { sink, NULL, false };
     const shell_hooks_t hooks = { now_us, interrupted, getkey, NULL, NULL, NULL };
     shell_init(&sh, &out, &hooks, "test");
-    const shell_clock_t clock = { fake_get, fake_set, NULL, NULL, NULL, NULL };
+    const shell_clock_t clock = { fake_get, fake_set, NULL, NULL, NULL, NULL, NULL };
     shell_set_clock(&sh, &clock);
 
     CHECK(host_disk_create(NULL, 32u << 20, false), "image");

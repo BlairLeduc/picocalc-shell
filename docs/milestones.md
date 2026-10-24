@@ -16,6 +16,111 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M12 — Date and time (2026-10-22 to 2026-10-24, branch `m12-time`)
+
+**Done 2026-10-24.** Both flavours keep the date and time in the
+RP2350's AON timer, with its record in POWMAN scratch 0-2; read it from a
+DS3231 at power-on; set it by hand (`date`, `DATE`, `TIME`) or, in the
+W build, by NTP through `ntp.uf2`; stamp files with it; and hand it, with
+the local offset by `TZ`, to programs through `picocalc_shell.h`
+(design.md §3.8). Five steps, in four commits: steps 1 and 2 (aa322e6),
+step 3 (8c203eb), step 4 (f9e3e5d), and step 5.
+
+**The owner chose**, during the milestone:
+
+- `ntp` finds `ntp.uf2` through `PATH`, as any program is found, the DOS
+  flavour's current directory first (2026-10-22);
+- `ntp` is silent when it set the clock, and says why when it did not
+  (2026-10-23): first made silent in both cases, then corrected;
+- the AON timer's drift against NTP is not measured: the clock is for
+  general use (2026-10-23);
+- a RAM program returning to the shell at power-on cannot be done by the
+  shell with the stock loader, since power-off clears every scratch
+  register and stage3 clears its command as it reads it; noted under M7
+  (2026-10-23).
+
+**Checked on the host:** five new tests. `test_clock` (the UNIX flavour)
+and `test_dos_time` (the DOS flavour): the calendar, `TZ` across both
+changes of daylight saving and east of UTC, `date` and `DATE`/`TIME` in
+each form and their mistakes, `COUNTRY=`'s orders and separators,
+`ls -l`'s six-month rule, the times each command writes over FAT16 and
+FAT32, `COPY` keeping the source's date, the clock not set, the
+DS3231's note said once, `AUTOEXEC.BAT`'s ask-only-when-needed script
+(now checked to say "not set" once), and the offset given to a program
+when the shell is left. `test_ds3231`: the chip present, absent, stuck
+and with `OSF` set, its BCD in either hour form and century, written when
+the time is set and at the next start after NTP or a program set it,
+NTP's result in the record, and `picocalc_shell.h`'s two functions built
+against the model of POWMAN: a program's view of the time and offset, a
+program's time taken by the shell, set after a power-on with no record,
+and a broken record refused. `test_ntp` and `test_ntp_dos`: `ntp.cfg`'s
+parser and the builtin's once-per-power-on rule with a fake record and
+loader, the `PATH` lookup, redirection refused, and a program that never
+reports. All 28 host tests pass. Every firmware build compiles clean:
+UNIX and DOS, Pico 2 and W, development and release, with `exit-test`
+(which checks the header still builds without `hardware_powman`),
+`clock-test`, `rtc-stop` and `ntp`.
+
+**Checked on the board** (HW §8.4-8.6 hold each in full):
+
+- Claude, on the Plus 2 W on the probe (RP2350B), 2026-10-22: the
+  development UART moved to GP2/GP3 and the probe rewired; the clock kept
+  through stage3's `BOOT_SD`, a program round trip and `REBOOT`; the
+  DS3231 written and read back over SWD runs; NTP setting the clock
+  through `ntp.uf2` and its failures with no file and no network
+  (`out/m12-*.log`).
+- The owner, on the Plus 2 W: the DS3231 keeping the time through a power
+  cycle, and through `POWEROFF` and a power-on with Up held; written from
+  NTP's time; a wrong Wi-Fi password reported; `clock-test` showing the
+  shell's time and offset, and the shell the minute it added; a file's
+  time right in `DIR` and in `ls -l`, and on a Mac; `/etc/profile` with
+  `export TZ=EST5EDT` and `ntp` starting without a loop.
+- The owner, on a Pico 2 W with no DS3231, release build: NTP setting
+  the clock with `ntp.uf2` found through `PATH`; setting the time by hand
+  returning at once.
+- The owner, on a Pimoroni Pico Plus 2 (no radio) with the chip sealed in
+  the case: the W build's `NTP` in `AUTOEXEC.BAT` failing cleanly at
+  power-on, without a loop; the time set by hand kept through a power
+  cycle; and, after `rtc-stop` stopped the chip at power-off,
+  `AUTOEXEC.BAT` asking for the date and time at power-on and not again
+  after a program.
+
+**Found on the board, and fixed:** the first join reported "no network"
+with the network in range; `ntp.uf2` now asks again until its timeout,
+as the SDK's own join does. Setting the time on a board with no DS3231
+paused up to a second, waiting for the chip's next second; it now writes
+the nearest second at once. `AUTOEXEC.BAT`'s example said "Current date
+is not set" twice; the guide's example now sends `DATE /T` to `NUL`.
+
+**Measured:**
+
+- Each watchdog reboot loses 2.0 ms (±0.5) of the AON timer, so a
+  program round trip loses 4 ms (Plus 2 W, DOS W development build,
+  2026-10-24, read over SWD against the Mac's clock; HW §8.4). The design
+  asked for the loss per trip; the earlier runs showed only that it was
+  under a second.
+- NTP: 7.6 s in `ntp.uf2` and 13.8 s from Enter to the prompt, against
+  the estimate of 5-10 s; the clock within 1 ms of the Mac's after it
+  (Plus 2 W, HW §8.6).
+- `ntp.uf2`: 390,396 B text plus bss in the release build, against the
+  estimate of about 340 KB, within stage3's 512 KB.
+- The shell, release builds, `__end__`, 2026-10-24: the UNIX flavour
+  447,812 B (Pico 2) and 450,340 B (W); the DOS flavour 431,080 B and
+  433,600 B (design.md §7).
+
+**Not checked:**
+
+- a Pico 2 (RP2350A) with the W build: the owner has none;
+- WPA3-only networks, which the WPA2-AES join does not support;
+- the cause of the 2 ms per reboot; the time lost per power cycle with a
+  DS3231, below a second; the module's own pull-ups; the AON timer's and
+  the chip's drift (dropped by the owner);
+- a program calling `picocalc_shell_set_time()` after a power-on that
+  started it without the shell: on the host only.
+
+**Open:** the CYW43 driver's licence against GPL-3.0 (THIRD-PARTY.md)
+blocks releasing `ntp.uf2` until the owner decides.
+
 ## M11 — Menus (2026-10-18, branch `m11-menus`)
 
 **Done 2026-10-18.** The owner tested it on a Pico 2 W, with both

@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
     const out_t out = { con_write, NULL, false };
     const shell_hooks_t hooks = { now_us, interrupted, getkey, pollkey, NULL, NULL };
     shell_init(&sh, &out, &hooks, "host");
-    const shell_clock_t clock = { clock_get, clock_set, NULL, NULL, NULL, NULL };
+    const shell_clock_t clock = { clock_get, clock_set, NULL, NULL, NULL, NULL, NULL };
     shell_set_clock(&sh, &clock);
     shell_start(&sh);
 

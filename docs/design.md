@@ -690,6 +690,47 @@ each power-on that reaches the shell syncs once and corrects the chip.
   the estimate of about 340 KB; stage3 loads its 353 KB of code and
   data, well within the 512 KB it loads a RAM program into (`uf2.h`).
 
+*As built, M12 step 5* (`include/picocalc_shell.h`, `clock_leaving()`
+in `src/core/clock.c`, `aon_offset()` in `src/port/clock.c`,
+`test/pico/clock_test.c`; the host's `test_ds3231` and `test_clock`):
+
+- **The offset** is written into scratch 1's bits 0-15 by
+  `shell_leaving()`, which every way out of the shell to a program, the
+  menu, `ntp.uf2` or USB passes through: the core works out the offset
+  in effect by `TZ` and gives it to the port through
+  `shell_clock_t.offset`. With the clock not set nothing is written.
+- **The header's two functions** read and write the record and the
+  timer themselves, as the shell's port does, and `src/port/clock.c`
+  checks with `static_assert` that the header's magic and bits agree
+  with its own, as `loader.c` does the loader's. `picocalc_shell_set_time()`
+  keeps the shell's offset and NTP's result, marks the source *a
+  program* and *the RTC needs writing*; after a power-on with the stock
+  loader, with no record, it starts the timer from the crystal and makes
+  one, offset 0.
+- **They need `hardware_powman`.** The header offers them only when
+  `hardware/powman.h` is on the include path (`__has_include`), that is
+  when the program links `hardware_powman`, so a program that includes
+  the header only for `picocalc_shell_exit()`, as the emulators do,
+  builds as before; `exit-test`, which does not link it, checks that.
+  Copying the SDK's timer code into the header instead was rejected:
+  its change of tick source is register work best left in one place.
+- **On the host** `test_ds3231` builds the header against its model of
+  POWMAN (with small fakes of the QMI and watchdog headers for the rest
+  of it): the time and offset seen by a program, a program's time taken
+  by the shell and written to the chip at the next start, a program
+  setting the time after a power-on, and a broken record refused.
+  `test_clock` checks the offset given across daylight saving, east of
+  UTC and with no `TZ`.
+- **`clock-test.uf2`** is a flash program, built beside `exit-test`:
+  it shows `picocalc_shell_time()`'s UTC, local time and offset, and on
+  a key sets the time a minute forward and returns to the shell.
+  `rtc-stop.uf2`, beside it, sets the DS3231's EOSC so the chip loses
+  its time at the next power-off: the check of a PicoCalc with no clock
+  source, where the chip is sealed in the case (*the owner,
+  2026-10-23*). The
+  shell grew by 256 bytes (455,564, development, UNIX, Pico 2, built
+  2026-10-23).
+
 **Local time.** The offset comes from `TZ`, a POSIX string such as
 `EST5EDT,M3.2.0,M11.1.0`, set in `/etc/profile` (`export TZ=...`) or
 `AUTOEXEC.BAT` (`SET TZ=...`, as DOS's C libraries read it). newlib's
@@ -742,7 +783,7 @@ returns FatFs's fixed date, so nothing changes without a clock. In
 ```
 @ECHO OFF
 NTP
-DATE /T
+DATE /T > NUL
 IF NOT ERRORLEVEL 1 GOTO SET
 DATE
 TIME
@@ -1966,6 +2007,15 @@ directory): the UNIX flavour 432,068 B, 13,092 B more than 418,976 B:
 72 KB is left. The DOS flavour 409,244 B, 1,552 B more than 407,692 B:
 `CHOICE` and the port's `pollkey`.
 
+**Measured at M12** (the same tools, 2026-10-24, release builds,
+`__end__`, against M11's figures above, so with the PSRAM line in
+`info` and `MEM` between): the UNIX flavour 447,812 B, 15,744 B more,
+and 450,340 B in the W build; the DOS flavour 431,080 B, 21,836 B more,
+and 433,600 B in the W build. The clock, `TZ`, the commands' dates and
+the DS3231 in both, with `COUNTRY=` and `CONFIG.SYS` in the DOS flavour;
+the W build adds `ntp` (2.5 KB). About 56 KB is left in the UNIX
+flavour, 54 KB in its W build. NTP itself is in `ntp.uf2`, 390,396 B.
+
 **The stack** (*corrected at M3*). Core 0's stack starts at the top of
 scratch Y and may run down to `__StackLimit` at the bottom of scratch X:
 8 KB, because core 1 never starts and nothing is linked into scratch X.
@@ -2167,8 +2217,8 @@ in [milestones.md](milestones.md).
   *Done 2026-10-18* (milestones.md): host tests, Claude's runs on the
   Plus 2 W from SRAM, and the owner's on a Pico 2 W, both flavours'
   release builds.
-- **M12 — Date and time (settled 2026-10-22, §3.8; in progress on
-  branch `m12-time`: step 1's UART move checked on the Plus 2 W, and
+- **M12 — Date and time (settled 2026-10-22, §3.8; done 2026-10-24 on
+  branch `m12-time`, recorded in milestones.md: step 1's UART move checked on the Plus 2 W, and
   the clock kept through stage3, a program round trip and `REBOOT` there
   (HW §8.4); step 2's core, commands and host tests done; step 3's
   DS3231 driver and `test_ds3231` done, and the chip on the Plus 2 W
@@ -2181,7 +2231,20 @@ in [milestones.md](milestones.md).
   found through `PATH`; by the owner on the Plus 2 W, the DS3231
   written from NTP's time; and on a Pimoroni Pico Plus 2, with no
   radio, the W build's `ntp` failing cleanly at power-on without a
-  loop).** The AON
+  loop; step 5's header functions, the offset and `clock-test` built,
+  with host tests, and checked by the owner on the Plus 2 W, release
+  build: `clock-test` showed the shell's time, and the shell the minute
+  it added, written to the DS3231; and by the owner on the Plus 2 W,
+  2026-10-23, release build: a file written in the DOS flavour showed
+  the right time in `DIR` and on a Mac, and the DS3231 kept the time
+  through `POWEROFF` and a power-on with Up held; and in the UNIX
+  flavour, a file's time right in `ls -l` and on a Mac, and
+  `/etc/profile` with `export TZ=EST5EDT` and `ntp` in it starting
+  without a loop; and by the owner on a Pico Plus 2, 2026-10-24, with
+  the DS3231 stopped by `rtc-stop`: `AUTOEXEC.BAT` asked for the date
+  and time at power-on, and not again after a program; and on the Plus
+  2 W, 2026-10-24, 2.0 ms lost per watchdog reboot, 4 ms per program
+  round trip (HW §8.4)).** The AON
   timer and its record, the DS3231, `ntp.uf2`, the commands of each
   flavour, FAT timestamps, and the header's two functions (§3.8). In
   steps:

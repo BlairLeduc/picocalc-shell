@@ -4,7 +4,8 @@
  * absent or with its bus stuck; OSF set, and said once per power-on;
  * written when the time is set, and at the next start after NTP set it;
  * its registers in BCD, in either form of the hours and either century;
- * and NTP's result in the record (M12 step 4). */
+ * NTP's result in the record (M12 step 4); and the record as
+ * include/picocalc_shell.h reads and writes it for programs (step 5). */
 
 #include <string.h>
 
@@ -13,6 +14,7 @@
 #include "ds3231.h"
 #include "fake_ds3231.h"
 #include "ntp.h"
+#include "picocalc_shell.h"
 #include "test_util.h"
 
 /* A moment in UTC, in seconds. */
@@ -210,6 +212,55 @@ static int test_ntp_record(void) {
     return 0;
 }
 
+/* A program's view: the time and the offset the shell left, and the
+ * time it sets itself, which the shell takes as a program's and writes
+ * to the chip when it comes back. */
+static int test_header(void) {
+    fake_rtc_reset();
+    fake_rtc.present = false;
+    fake_power_cycle();
+    int64_t ms = 7;
+    int off = 9;
+    CHECK(!picocalc_shell_time(&ms, &off) && ms == 7 && off == 9, "power-on: left alone");
+
+    int64_t t = utc(2026, 10, 23, 14, 0, 0) * 1000 + 250;
+    aon_set(t, AON_SRC_USER);
+    aon_ntp_keep(NTP_NO_REPLY);
+    aon_offset(-240);
+    CHECK(picocalc_shell_time(&ms, &off) && ms == t && off == -240, "EDT: %lld %d", (long long)ms, off);
+    aon_offset(330);
+    CHECK(picocalc_shell_time(&ms, &off) && off == 330, "east: %d", off);
+    fake_aon_ms += 1500;
+    CHECK(picocalc_shell_time(&ms, &off) && ms == t + 1500, "ticking");
+
+    /* A program sets it; the record keeps the shell's offset and NTP's
+     * result, and the check still holds. */
+    fake_rtc.present = true;
+    picocalc_shell_set_time(t + 60000);
+    CHECK(is_set(&ms) && ms == t + 60000 && aon_source() == AON_SRC_PROGRAM, "set by a program");
+    CHECK(picocalc_shell_time(&ms, &off) && off == 330 && aon_ntp() == NTP_NO_REPLY, "kept");
+    CHECK(fake_rtc.time_writes == 0, "not by the program");
+    CHECK(aon_start() == NULL && fake_rtc.time_writes == 1, "by the shell: %u", fake_rtc.time_writes);
+
+    /* After power-on with the stock loader, no shell has run: the
+     * program starts the timer and makes the record. */
+    fake_power_cycle();
+    CHECK(!picocalc_shell_time(&ms, &off), "power-on");
+    picocalc_shell_set_time(t);
+    CHECK(fake_aon_running && picocalc_shell_time(&ms, &off) && ms == t && off == 0, "from nothing");
+    CHECK(aon_source() == AON_SRC_PROGRAM && aon_ntp() == -1, "a program's, NTP not tried");
+
+    /* The offset is not kept with the clock not set, and a broken
+     * record is not taken. */
+    fake_power_cycle();
+    aon_offset(60);
+    CHECK(fake_powman.scratch[0] == 0, "not set: no record");
+    aon_set(t, AON_SRC_USER);
+    fake_powman.scratch[1] ^= 1;
+    CHECK(!picocalc_shell_time(&ms, &off) && !is_set(NULL), "broken record");
+    return 0;
+}
+
 int main(void) {
     if (test_absent()) return 1;
     if (test_lost()) return 1;
@@ -217,5 +268,6 @@ int main(void) {
     if (test_write()) return 1;
     if (test_marked()) return 1;
     if (test_ntp_record()) return 1;
+    if (test_header()) return 1;
     TEST_DONE();
 }

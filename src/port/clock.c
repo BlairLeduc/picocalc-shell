@@ -13,7 +13,8 @@
  *   scratch 2  ~(scratch 0 ^ scratch 1), as a check
  *
  * The clock is set when the magic, the check and `set` agree and the
- * timer is running.
+ * timer is running. include/picocalc_shell.h reads and writes the same
+ * record for programs, and is checked against it below.
  *
  * The DS3231 (ds3231.c) is read when the shell starts with the clock not
  * set, once per power-on, so a chip that lost its time is reported once
@@ -23,11 +24,13 @@
 
 #include "aon.h"
 
+#include <assert.h>
 #include <stddef.h>
 
 #include "hardware/powman.h"
 
 #include "ds3231.h"
+#include "picocalc_shell.h"
 
 #define AON_MAGIC      0x434c4b31u   /* "CLK1" */
 #define REC_SOURCE_LSB 16u
@@ -38,6 +41,13 @@
 #define REC_RTC_READ   (1u << 23)
 #define REC_NTP_LSB    24u
 #define REC_NTP        (15u << REC_NTP_LSB)
+#define REC_OFFSET     0xffffu
+
+static_assert(PICOCALC_SHELL_CLOCK_MAGIC == AON_MAGIC, "picocalc_shell.h: the clock's magic");
+static_assert(PICOCALC_SHELL_CLOCK_OFFSET == REC_OFFSET && PICOCALC_SHELL_CLOCK_SOURCE == REC_SOURCE &&
+                  PICOCALC_SHELL_CLOCK_PROGRAM == (uint32_t)AON_SRC_PROGRAM << REC_SOURCE_LSB &&
+                  PICOCALC_SHELL_CLOCK_SET == REC_SET && PICOCALC_SHELL_CLOCK_RTC_DUE == REC_RTC_DUE,
+              "picocalc_shell.h: the clock's record");
 
 /* Scratch 1, or 0 if the record is not whole. */
 static uint32_t record(void) {
@@ -117,6 +127,12 @@ const char *aon_source_name(aon_source_t source) {
     case AON_SRC_PROGRAM: return "set by a program";
     default:              return "not set";
     }
+}
+
+void aon_offset(int off_min) {
+    uint32_t bits = record();
+    if (!(bits & REC_SET)) return;
+    write_record((bits & ~REC_OFFSET) | ((uint32_t)off_min & REC_OFFSET));
 }
 
 int aon_ntp(void) {
