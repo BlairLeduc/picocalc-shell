@@ -355,7 +355,7 @@ static int prompt_tests(void) {
 
 /* The port's note, after the banner and before the startup file, once. */
 static int note_tests(const char *want) {
-    const shell_clock_t clock = { fake_get, fake_set, NULL, "the DS3231 lost its time" };
+    const shell_clock_t clock = { fake_get, fake_set, NULL, "the DS3231 lost its time", NULL, NULL };
     shell_set_clock(&sh, &clock);
     con_len = 0;
     shell_start(&sh);
@@ -370,7 +370,7 @@ int main(void) {
     const out_t out = { sink, NULL, false };
     const shell_hooks_t hooks = { now_us, interrupted, getkey, NULL, NULL, NULL };
     shell_init(&sh, &out, &hooks, "test");
-    const shell_clock_t clock = { fake_get, fake_set, NULL, NULL };
+    const shell_clock_t clock = { fake_get, fake_set, NULL, NULL, NULL, NULL };
     shell_set_clock(&sh, &clock);
 
     CHECK(host_disk_create(NULL, 32u << 20, false), "image");

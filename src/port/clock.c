@@ -8,8 +8,8 @@
  *   scratch 0  AON_MAGIC
  *   scratch 1  bits 0-15 the local offset from UTC in minutes, signed;
  *              16-18 who set it (aon_source_t); 19 set; 20 NTP tried
- *              since power-on; 21 NTP set the clock; 22 the RTC needs
- *              writing; 23 the RTC was read since power-on
+ *              since power-on; 22 the RTC needs writing; 23 the RTC was
+ *              read since power-on; 24-27 what NTP did (ntp_result_t)
  *   scratch 2  ~(scratch 0 ^ scratch 1), as a check
  *
  * The clock is set when the magic, the check and `set` agree and the
@@ -33,8 +33,11 @@
 #define REC_SOURCE_LSB 16u
 #define REC_SOURCE     (7u << REC_SOURCE_LSB)
 #define REC_SET        (1u << 19)
+#define REC_NTP_TRIED  (1u << 20)
 #define REC_RTC_DUE    (1u << 22)
 #define REC_RTC_READ   (1u << 23)
+#define REC_NTP_LSB    24u
+#define REC_NTP        (15u << REC_NTP_LSB)
 
 /* Scratch 1, or 0 if the record is not whole. */
 static uint32_t record(void) {
@@ -114,4 +117,16 @@ const char *aon_source_name(aon_source_t source) {
     case AON_SRC_PROGRAM: return "set by a program";
     default:              return "not set";
     }
+}
+
+int aon_ntp(void) {
+    uint32_t bits = record();
+    if (!(bits & REC_NTP_TRIED)) return -1;
+    return (int)((bits & REC_NTP) >> REC_NTP_LSB);
+}
+
+void aon_ntp_keep(int result) {
+    uint32_t bits = record() & ~(REC_NTP_TRIED | REC_NTP);
+    if (result >= 0) bits |= REC_NTP_TRIED | ((uint32_t)result << REC_NTP_LSB & REC_NTP);
+    write_record(bits);
 }

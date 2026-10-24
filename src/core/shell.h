@@ -67,12 +67,16 @@ typedef struct {
  * 1970. get is false while the clock is not set; set gives NULL, or why
  * not. Either may be NULL: no clock, or one that cannot be set. note,
  * if not NULL, is said once when the shell starts: "the DS3231 lost its
- * time". */
+ * time". ntp is what NTP did since power-on (ntp.h's ntp_result_t), or
+ * -1 if it was not tried, and ntp_keep keeps a result, -1 to forget
+ * it; both NULL where there is no NTP, as in the Pico 2 build. */
 typedef struct {
     bool (*get)(void *ctx, int64_t *utc_ms);
     const char *(*set)(void *ctx, int64_t utc_ms);
     void *ctx;
     const char *note;
+    int (*ntp)(void *ctx);
+    void (*ntp_keep)(void *ctx, int result);
 } shell_clock_t;
 
 /* The line being edited at the prompt (line.c). */

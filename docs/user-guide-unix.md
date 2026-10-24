@@ -400,9 +400,10 @@ have it every time.
 |---|---|
 | `battery` | the battery's charge, and `charging` when the charger is on |
 | `backlight [lcd\|kbd] [0-255]` | shows or sets the screen (`lcd`) or keyboard (`kbd`) backlight |
-| `info` | the shell's version, the chip, memory and PSRAM (0 MB on a board without it), UF2 Loader, the clock, the keyboard's firmware, the card and the battery |
+| `info` | the shell's version, its build (Pico 2 or Pico 2 W), the chip, memory and PSRAM (0 MB on a board without it), UF2 Loader, the clock, the keyboard's firmware, the card and the battery |
 | `date [-u]` | the date and time; `-u` in UTC. Says `clock not set`, with status 1, when it is not |
 | `date [-u] mmddHHMM[[cc]yy]` | sets the date and time: month, day, hour, minute and the year, which may be left off. `-u` takes it as UTC |
+| `ntp [-f]` | in the Pico 2 W build: sets the clock from the network, once each power-on; `-f` tries again |
 
 `date`:
 
@@ -424,6 +425,56 @@ Thu Oct 22 14:30:00 EDT 2026
 />date -u
 Thu Oct 22 18:30:00 UTC 2026
 ```
+
+`ntp`:
+
+- The shell comes in two builds of each flavour: one for the Pico 2,
+  and one for the Pico 2 W (`shell-unix-w.uf2`, copied to the card as
+  `/BOOT2350.UF2`), which also has `ntp`. The Pimoroni Pico Plus 2 W
+  takes the W build. `info` names the build.
+- `ntp` sets the clock over Wi-Fi from an NTP server. It runs the
+  program `ntp.uf2`, found in `$PATH` as any program is (put it in
+  `/pico2-apps/`), which shows what it is doing, and comes back to the
+  shell. Esc stops it. Without it, `ntp` says `ntp: not found`, with
+  status 127.
+- It runs once each power-on, and `ntp.uf2` shows how it went before it
+  comes back. After that, `ntp` says nothing if NTP set the clock, with
+  status 0, and why not if it did not (as below, `ntp: no time from the
+  server`), with status 1. So `ntp` in `/etc/profile` does not run it
+  again each time the shell comes back from a program, or loop when the
+  network is down. `ntp -f` runs it again.
+- With a DS3231 fitted, the shell writes the time NTP gave to the chip
+  when it comes back.
+- Its settings are in `/ntp/ntp.cfg`, which you write with vi:
+
+```
+# /ntp/ntp.cfg
+ssid     = Home                 # the network's name
+password = "my # password"      # left out for an open network
+server   = pool.ntp.org         # the default
+country  = CA                   # Wi-Fi's country; worldwide if left out
+timeout  = 20                   # seconds to join and get the time, 5 to 60
+```
+
+- Only `ssid` is needed. A `#` after a space starts a comment, so a
+  value holding one, or starting or ending with a space, goes in
+  double quotes. The password is kept on the card as written: WPA2's 8
+  to 63 characters, or 64 hex digits. Each key once.
+- In `/etc/profile`, to set the clock at power-on, or else ask for it:
+  `ntp || date || echo set the clock: date mmddHHMM`.
+
+| `ntp.uf2` and `ntp` say | Means |
+|---|---|
+| `no /ntp/ntp.cfg` | write the file, as above |
+| `a mistake in /ntp/ntp.cfg` | `ntp -f` shows which line, and what is wrong with it |
+| `no Wi-Fi on this board` | a Pico 2 W build on a Pico 2 |
+| `the network was not joined` | no network by that name in range, or it would not take the PicoCalc |
+| `the network refused the password` | check `password` |
+| `the network gave no address` | joined, but its DHCP server did not answer in time |
+| `the server was not found` | the server's name is wrong, or the network's DNS did not answer |
+| `no time from the server` | the server did not answer in time |
+| `stopped` | Esc, Break or Ctrl-C |
+| `ntp.uf2 did not finish` | the program was cut off: power, or a reset |
 
 `battery`:
 
@@ -610,6 +661,8 @@ failed save leaves the old file as it was.
 /BOOT2350.UF2         the shell
 /BOOT2350.ORG         UF2 Loader's own menu, run with `menu`
 /pico2-apps/          programs, run by name
+/pico2-apps/ntp.uf2   the Pico 2 W build's ntp
+/ntp/ntp.cfg          ntp's settings
 /etc/profile          run each time the shell starts
 /home/                where the shell starts ($HOME)
 /.shell/              the shell's history, and large pipes while they run

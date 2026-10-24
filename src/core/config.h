@@ -63,6 +63,15 @@
  * one is cut. */
 #define SHELL_ZONE_MAX     15u
 
+/* /ntp/ntp.cfg (ntp.h): the file read, a line of it, and its values: a
+ * server's name, an SSID (802.11's 32 bytes) and a WPA2 passphrase (63
+ * characters, or 64 hex digits). */
+#define NTP_CFG_BYTES      2048u
+#define NTP_CFG_LINE_MAX   160u
+#define NTP_SERVER_MAX     127u
+#define NTP_SSID_MAX       32u
+#define NTP_PASSWORD_MAX   64u
+
 /* A line as grep and more read it; a longer one is taken in pieces. */
 #define SHELL_TEXT_LINE    512u
 

@@ -3,7 +3,8 @@
  * POWMAN (fake_ds3231.c; design.md §3.8, M12 step 3): a chip present,
  * absent or with its bus stuck; OSF set, and said once per power-on;
  * written when the time is set, and at the next start after NTP set it;
- * its registers in BCD, in either form of the hours and either century. */
+ * its registers in BCD, in either form of the hours and either century;
+ * and NTP's result in the record (M12 step 4). */
 
 #include <string.h>
 
@@ -11,6 +12,7 @@
 #include "clock.h"
 #include "ds3231.h"
 #include "fake_ds3231.h"
+#include "ntp.h"
 #include "test_util.h"
 
 /* A moment in UTC, in seconds. */
@@ -180,11 +182,40 @@ static int test_marked(void) {
     return 0;
 }
 
+/* What NTP did, kept beside the clock until power-off. */
+static int test_ntp_record(void) {
+    fake_rtc_reset();
+    fake_rtc.present = false;
+    fake_power_cycle();
+    CHECK(aon_ntp() == -1, "not tried: %d", aon_ntp());
+    aon_ntp_keep(NTP_UNFINISHED);
+    CHECK(aon_ntp() == NTP_UNFINISHED && !is_set(NULL), "unfinished: %d", aon_ntp());
+
+    /* As ntp.uf2 leaves it. */
+    int64_t t = utc(2026, 10, 22, 18, 30, 0) * 1000;
+    aon_set(t, AON_SRC_NTP);
+    aon_ntp_keep(NTP_SET);
+    int64_t ms;
+    CHECK(aon_ntp() == NTP_SET && is_set(&ms) && ms == t && aon_source() == AON_SRC_NTP,
+          "set: %d", aon_ntp());
+    CHECK(aon_start() == NULL && aon_ntp() == NTP_SET && is_set(NULL), "kept by a start");
+    aon_ntp_keep(NTP_NO_REPLY);
+    CHECK(aon_ntp() == NTP_NO_REPLY && is_set(NULL) && aon_source() == AON_SRC_NTP,
+          "the largest: %d", aon_ntp());
+    aon_ntp_keep(-1);
+    CHECK(aon_ntp() == -1 && is_set(NULL), "forgotten, the clock kept");
+    aon_ntp_keep(NTP_STOPPED);
+    fake_power_cycle();
+    CHECK(aon_ntp() == -1, "power-off: %d", aon_ntp());
+    return 0;
+}
+
 int main(void) {
     if (test_absent()) return 1;
     if (test_lost()) return 1;
     if (test_read()) return 1;
     if (test_write()) return 1;
     if (test_marked()) return 1;
+    if (test_ntp_record()) return 1;
     TEST_DONE();
 }

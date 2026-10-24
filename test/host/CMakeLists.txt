@@ -48,6 +48,18 @@ target_include_directories(test_dos_time PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(test_dos_time PRIVATE ${SHELL_WARNINGS})
 add_test(NAME test_dos_time COMMAND test_dos_time)
 
+# NTP's settings file and the W build's `ntp`, in each flavour (design.md
+# §3.8).
+add_executable(test_ntp test_ntp.c)
+target_link_libraries(test_ntp PRIVATE shell_core shell_host_disk)
+add_executable(test_ntp_dos test_ntp.c)
+target_link_libraries(test_ntp_dos PRIVATE shell_core_dos shell_host_disk)
+foreach(t test_ntp test_ntp_dos)
+    target_include_directories(${t} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_options(${t} PRIVATE ${SHELL_WARNINGS})
+    add_test(NAME ${t} COMMAND ${t})
+endforeach()
+
 # EDIT, the DOS flavour's editor (design.md §4.7).
 add_executable(test_edit test_edit.c)
 target_link_libraries(test_edit PRIVATE shell_core_dos shell_host_disk)

@@ -4,6 +4,7 @@
 #
 #   tools/build.sh                         # build/pico/BOOT2350.uf2
 #   tools/build.sh -DPICO_SHELL_UART=OFF build/pico-release   # the one that ships
+#   tools/build.sh -DPICO_BOARD=pico2_w build/pico-w   # the W build, and ntp.uf2
 #
 # Arguments starting -D are passed to CMake's configure step; another
 # argument names the build directory, which is configured first if it has
@@ -19,7 +20,7 @@ dir=
 defs=()
 while [ $# -gt 0 ]; do
     case "$1" in
-        -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         -D*) defs+=("$1"); shift ;;
         -*) echo "build.sh: unknown option $1" >&2; exit 2 ;;
         *) dir="$1"; shift ;;
@@ -53,7 +54,8 @@ echo "build.sh: $PICO_SDK_PATH, $(basename "$toolchain") -> $dir"
 # A cache made with another SDK or compiler keeps them: CMake prefers the
 # cached PICO_SDK_PATH to the environment's and will not switch compilers
 # in place. Start that cache afresh, keeping the variant's PICO_SHELL_*
-# options, so a directory configured before an SDK update follows it.
+# options and its board, so a directory configured before an SDK update
+# follows it.
 cache="$dir/CMakeCache.txt"
 fresh=()
 if [ -f "$cache" ]; then
@@ -64,12 +66,12 @@ if [ -f "$cache" ]; then
         fresh=(--fresh)
         while IFS= read -r opt; do
             defs=("-D$opt" ${defs[@]+"${defs[@]}"})
-        done < <(sed -n 's/^\(PICO_SHELL_[A-Z0-9_]*\):[A-Z]*=/\1=/p' "$cache")
+        done < <(sed -nE 's/^(PICO_SHELL_[A-Z0-9_]*|PICO_BOARD):[A-Z]*=/\1=/p' "$cache")
     fi
 fi
 if [ ! -f "$cache" ] || [ ${#fresh[@]} -gt 0 ] || [ ${#defs[@]} -gt 0 ]; then
     cmake ${fresh[@]+"${fresh[@]}"} -S "$root" -B "$dir" \
-        -DPICO_BOARD=pico2 -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_BUILD_TYPE=Release \
         -DPICO_SDK_PATH="$PICO_SDK_PATH" -DPICO_TOOLCHAIN_PATH="$toolchain" \
         ${defs[@]+"${defs[@]}"}
 fi
@@ -90,3 +92,7 @@ fi
 
 arm-none-eabi-size "$dir/BOOT2350.elf"
 echo "build.sh: $dir/BOOT2350.uf2, to be copied to the card as /BOOT2350.UF2"
+if [ -f "$dir/ntp.uf2" ]; then
+    arm-none-eabi-size "$dir/ntp.elf"
+    echo "build.sh: $dir/ntp.uf2, to be copied to the card as /pico2-apps/ntp.uf2"
+fi

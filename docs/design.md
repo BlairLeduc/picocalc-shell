@@ -613,12 +613,82 @@ its tests run, with the program run faked.
 
 **Running it.** `ntp` (`NTP` in the DOS flavour), in the W build, is a builtin, so it wins
 over the program of the same name (§3.3). It runs `ntp.uf2` once per
-power-on: if NTP has already been tried since power-on, it prints the
-result and returns, with status 0 if NTP set the clock and 1 if not. So
+power-on: if NTP has already been tried since power-on, it returns at
+once: silently with status 0 if NTP set the clock, and with why not and
+status 1 if not (*changed by the owner 2026-10-23:* it printed
+`ntp: set the clock` too, a line at every start of the shell from a
+startup file). So
 `ntp` in `/etc/profile` or `AUTOEXEC.BAT`, which run every time the shell
 starts, does not loop after the program returns, even when the network
 is down. `ntp -f` (`NTP /F`) runs it again. With a DS3231 and Wi-Fi,
 each power-on that reaches the shell syncs once and corrects the chip.
+
+*As built, M12 step 4* (`src/core/ntp.c`, `cmd_ntp` in
+`src/core/system.c`, `src/ntp/main.c`; the host's `test_ntp` and
+`test_ntp_dos`):
+
+- **The record** keeps *NTP tried since power-on* in scratch 1 bit 20,
+  and what it did in bits 24-27, one of eleven results (`ntp.h`): set
+  the clock, did not finish, stopped, no `ntp.cfg`, a mistake in it, no
+  radio, the network not joined, the password refused, no address from
+  DHCP, the server not found, no time from it. Bit 21, *its result*
+  above, is not used. The port gives the core the result through
+  `shell_clock_t.ntp` and `ntp_keep`, NULL in the Pico 2 build.
+- **The builtin** keeps *did not finish* before it starts `ntp.uf2`, so
+  a program that never reports (the power cut, a reset, a hang ended
+  with the power switch) does not make a startup file loop; if the
+  program cannot be started at all (no `ntp.uf2`, no loader), the
+  record is put back as it was, since nothing was tried. Once NTP was
+  tried, `ntp` is silent with status 0 if it set the clock, and
+  otherwise prints `ntp: ` and the result's words as an error, with
+  status 1. It is refused with a redirection or in a pipe, as
+  `menu` is; DOS's `> NUL` is dropped for it, as for a program. It
+  finds `ntp.uf2` as any program is found, in `$PATH` (and, in the DOS
+  flavour, the current directory first), so it may live anywhere `PATH`
+  names; `/pico2-apps/` is the default (*the owner, 2026-10-22*). Not
+  found, it says so as for a program, with status 127. It runs through
+  `run_ram_program()`, `menu`'s path after the lookup: refused if it is
+  not a RAM program.
+- **`ntp.cfg`'s parser** is the emulators' (pico-oric's `settings.c`),
+  in the core and tested on the host, with quoted values. `timeout` is 5
+  to 60 seconds and covers everything after the file is read: starting
+  the radio, joining, DHCP, DNS and the time. `password` is empty (an
+  open network), WPA2's 8 to 63 printable characters, or 64 hex digits.
+  Any mistake in the file stops `ntp.uf2`, which shows the line and the
+  problem on the panel; the shell's `ntp` says only that there is one.
+- **`ntp.uf2`** joins with WPA2-AES (`CYW43_AUTH_WPA2_AES_PSK`), asking
+  again whenever the radio reports no network, until the timeout, as the
+  SDK's own join does (HW §8.6), and
+  writes its own SNTP request over lwIP's raw UDP API (no TCP, no
+  sockets, `pico_cyw43_arch_lwip_poll`), sent again every 2 s until a
+  reply or the timeout. A reply counts if it is a server's (mode 4),
+  synchronised (leap indicator not 3), not a kiss-o'-death (stratum 0),
+  and echoes the request's transmit time, which carries a random nonce.
+  The time set is the server's transmit time plus half the round trip
+  less the server's own time, plus what passed since, rounded to the
+  millisecond; the panel shows it in UTC and the half round trip as
+  "to within". It shows its result for 1.5 s (3 s for a failure), waits
+  for the card if it was taken out, and sends `BOOT_SD` through
+  `loader.c`'s `loader_reboot_shell()`, which it links, so the protocol
+  is still known in one file. It uses the core's terminal and font,
+  so a `ntp.uf2` built in a DOS build directory shows IBM's font and
+  one built in a UNIX one the Master 512's; the release's is the UNIX
+  build's.
+- **The W build** is `-DPICO_BOARD=pico2_w`; CMake accepts `pico2` or
+  `pico2_w` and nothing else, and the core is built with `SHELL_NTP`
+  1 in the W build and on the host. `tools/build.sh` keeps a build
+  directory's board when it reconfigures, and names `ntp.uf2` when it
+  made one. `info` adds a line, `build     Pico 2 W, with NTP` (or
+  `Pico 2, without NTP`). The Pimoroni Plus 2 W's board file
+  (`pimoroni_pico_plus2_w_rp2350.h`) puts the radio on the Pico 2 W's
+  pins, 23, 24, 25 and 29, so the `pico2_w` build serves it.
+- **Sizes**, text plus bss, built 2026-10-22 against SDK 2.3.1: the W
+  build of the UNIX flavour 457,864 bytes (development) and 454,216
+  (release), against 455,308 for the Pico 2 build; the DOS flavour's W
+  build 441,156 and 437,508, against 438,580. `ntp.uf2` is 399,980
+  bytes in the development build and 390,296 in the release, against
+  the estimate of about 340 KB; stage3 loads its 353 KB of code and
+  data, well within the 512 KB it loads a RAM program into (`uf2.h`).
 
 **Local time.** The offset comes from `TZ`, a POSIX string such as
 `EST5EDT,M3.2.0,M11.1.0`, set in `/etc/profile` (`export TZ=...`) or
@@ -1983,7 +2053,23 @@ in [milestones.md](milestones.md).
   BOOTSEL; the shell never writes stage3's partition, and reinstalling
   the stock loader undoes M7. Check first whether the emulators reboot
   themselves with no command: with the patch, that would land in the
-  shell. Done when, on the board with the patched loader, power-on
+  shell.
+
+  *RAM programs (noted 2026-10-23, M12).* A RAM program (`ntp.uf2`,
+  `menu`, any `no_flash` UF2) is loaded with `BOOT_RAM` and never
+  written to flash, so with the stock loader a power cycle after one
+  starts the last *flashed* program, not the last one run. The owner
+  asked for power-on to return to the shell then. It cannot be done from
+  the shell: a power-off clears the watchdog's scratch registers (and
+  POWMAN's, HW §8.4), and stage3 clears its command as it reads it
+  (`bl_get_command`), so nothing the shell sets is there at the next
+  power-on, where stage3 decides from the keys and the flash alone. M7's
+  patch gives the shell at power-on in any case, which covers it; if
+  Up/F1/F5 is to start "the last program" including a RAM one, stage3
+  needs a record that survives power-off (on the card, or in flash
+  outside the app partition), which is a further change to the patch.
+
+  Done when, on the board with the patched loader, power-on
   gives the shell, Up held gives the last program, power-on with no card
   starts the program, and a program still runs, and comes back by its
   exit command, under both the patched and the stock loader. Offer the
@@ -2087,7 +2173,15 @@ in [milestones.md](milestones.md).
   (HW §8.4); step 2's core, commands and host tests done; step 3's
   DS3231 driver and `test_ds3231` done, and the chip on the Plus 2 W
   written and read back, and the time kept through a power cycle there
-  (HW §8.5)).** The AON
+  (HW §8.5); step 4's `ntp.uf2`, W builds, `ntp` builtin and host tests
+  built; NTP set the clock on the Plus 2 W, 7.6 s in `ntp.uf2` and
+  13.8 s from Enter to the prompt, the failures without a file and
+  without the network reported, and `NTP` after it only reporting (HW
+  §8.6); and by the owner on a Pico 2 W, release build, `ntp.uf2`
+  found through `PATH`; by the owner on the Plus 2 W, the DS3231
+  written from NTP's time; and on a Pimoroni Pico Plus 2, with no
+  radio, the W build's `ntp` failing cleanly at power-on without a
+  loop).** The AON
   timer and its record, the DS3231, `ntp.uf2`, the commands of each
   flavour, FAT timestamps, and the header's two functions (§3.8). In
   steps:
@@ -2126,4 +2220,5 @@ in [milestones.md](milestones.md).
     source, and not again after a program.
 
   Measure each flavour's RAM, `ntp.uf2`'s size and its time from Enter to
-  the prompt, and the AON timer's drift against NTP over a day.
+  the prompt. (*The owner, 2026-10-23:* the AON timer's drift against NTP
+  is not measured: the clock is for general use.)

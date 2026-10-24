@@ -12,6 +12,7 @@
 #include "files.h"
 #include "flavour.h"
 #include "keycodes.h"
+#include "ntp.h"
 #include "path.h"
 #include "pipe.h"
 #include "run.h"
@@ -289,6 +290,9 @@ const shell_builtin_t flavour_builtins[] = {
     { "MKDIR",     dos_md,        "MKDIR path", "Creates a directory" },
     { "MORE",      dos_more,      "MORE [file] (or < file, or | MORE)", "Displays text one screen at a time" },
     { "MOVE",      dos_move,      "MOVE source... destination", "Move files or rename a directory" },
+#if SHELL_NTP
+    { "NTP",       cmd_ntp,       "NTP [/F]", "Sets the clock from the network, once" },
+#endif
     { "PATH",      dos_path,      "PATH [dir[;dir...]] (PATH ; clears)", "Displays or sets the search path" },
     { "PAUSE",     dos_pause_cmd, "PAUSE", "Waits for a key" },
     { "PHOSPHOR",  dos_phosphor,  "PHOSPHOR [white|green|amber|default]", "Sets the colour of the text" },

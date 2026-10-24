@@ -17,6 +17,7 @@
 #include "history.h"
 #include "keycodes.h"
 #include "line.h"
+#include "ntp.h"
 #include "parse.h"
 #include "path.h"
 #include "pipe.h"
@@ -135,6 +136,9 @@ const shell_builtin_t flavour_builtins[] = {
     { "mkdir",      cmd_mkdir,      "mkdir [-p] dir...", "Makes directories" },
     { "more",       cmd_more,       "more file... (or < file, or | more)", "Displays text a screen at a time" },
     { "mv",         cmd_mv,         "mv from... to", "Move or rename" },
+#if SHELL_NTP
+    { "ntp",        cmd_ntp,        "ntp [-f]", "Sets the clock from the network, once" },
+#endif
     { "phosphor",   cmd_phosphor,   "phosphor [white|green|amber|default]", "Sets the colour of the text" },
     { "poweroff",   cmd_poweroff,   "poweroff", "Switches the PicoCalc off" },
     { "pwd",        cmd_pwd,        "pwd", "Print the current directory" },

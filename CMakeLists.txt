@@ -24,6 +24,7 @@ set(SHELL_CORE_SOURCES
     src/core/input.c
     src/core/keys.c
     src/core/line.c
+    src/core/ntp.c
     src/core/out.c
     src/core/path.c
     src/core/pipe.c
@@ -64,10 +65,11 @@ set(SHELL_WARNINGS -Wall -Wextra -Werror)
 
 include(cmake/fatfs.cmake)
 
-# The core in one flavour, unix or dos, as the library `name`. It uses
-# FatFs's API for files (design.md §5); the disk under it is the port's
-# (the SD card) or the host's (an image file).
-function(shell_core_library name flavour)
+# The core in one flavour, unix or dos, as the library `name`, with the
+# `ntp` builtin if ntp is 1 (design.md §3.8). It uses FatFs's API for
+# files (design.md §5); the disk under it is the port's (the SD card) or
+# the host's (an image file).
+function(shell_core_library name flavour ntp)
     if (flavour STREQUAL "unix")
         add_library(${name} STATIC ${SHELL_CORE_SOURCES} ${SHELL_UNIX_SOURCES})
         target_compile_definitions(${name} PUBLIC SHELL_DOS=0)
@@ -77,6 +79,7 @@ function(shell_core_library name flavour)
     else()
         message(FATAL_ERROR "shell: PICO_SHELL_FLAVOUR is unix or dos, not ${flavour}")
     endif()
+    target_compile_definitions(${name} PUBLIC SHELL_NTP=${ntp})
     target_include_directories(${name} PUBLIC src/core)
     target_compile_options(${name} PRIVATE ${SHELL_WARNINGS})
     # Pico Logo's key layer cuts its Ctrl-G report to the status row on
@@ -101,8 +104,9 @@ if (PICO_SHELL_HOST)
     endif()
 
     shell_fatfs_library()
-    shell_core_library(shell_core unix)
-    shell_core_library(shell_core_dos dos)
+    # The host has the W build's `ntp`, so its tests run (design.md §3.8).
+    shell_core_library(shell_core unix 1)
+    shell_core_library(shell_core_dos dos 1)
     # Only the host formats disks: the tests' FAT16 and FAT32 images.
     target_compile_definitions(shell_fatfs PUBLIC SHELL_FATFS_MKFS=1)
 
@@ -126,11 +130,20 @@ if (PICO_SHELL_HOST)
     enable_testing()
     add_subdirectory(test/host)
 else()
-    # RP2350 only (design.md §1): one pico2 image for every RP2350 board.
+    # RP2350 only (design.md §1). pico2 is the Pico 2 build, for every
+    # RP2350 board; pico2_w is the W build, which adds `ntp` and builds
+    # ntp.uf2 (design.md §3.8). Each is built in its own directory.
     if (NOT DEFINED PICO_BOARD)
         set(PICO_BOARD pico2)
     endif()
-    if (NOT DEFINED PICO_PLATFORM AND PICO_BOARD STREQUAL "pico2")
+    if (PICO_BOARD STREQUAL "pico2")
+        set(SHELL_W 0)
+    elseif (PICO_BOARD STREQUAL "pico2_w")
+        set(SHELL_W 1)
+    else()
+        message(FATAL_ERROR "shell: PICO_BOARD is pico2 or pico2_w, not ${PICO_BOARD}")
+    endif()
+    if (NOT DEFINED PICO_PLATFORM)
         set(PICO_PLATFORM rp2350)
     endif()
 
@@ -150,7 +163,7 @@ else()
     # its own directory.
     set(PICO_SHELL_FLAVOUR unix CACHE STRING "The command line's flavour: unix or dos")
     shell_fatfs_library()
-    shell_core_library(shell_core ${PICO_SHELL_FLAVOUR})
+    shell_core_library(shell_core ${PICO_SHELL_FLAVOUR} ${SHELL_W})
 
     # The version for the banner, git describe --always --dirty, taken at
     # build time; the header only changes when the text does.
@@ -270,6 +283,53 @@ else()
     pico_enable_stdio_uart(exit-test 1)
     pico_enable_stdio_usb(exit-test 0)
     pico_add_extra_outputs(exit-test)
+
+    # ntp.uf2, for /pico2-apps/ in the W build: Wi-Fi and NTP in a RAM
+    # program of its own, which the shell's `ntp` runs (design.md §3.8).
+    # It uses the shell's card, panel, keyboard and clock code, and
+    # loader.c to go back.
+    if (SHELL_W)
+        add_executable(ntp
+            src/ntp/main.c
+            src/port/clock.c
+            src/port/diskio.c
+            src/port/ds3231.c
+            src/port/kbd.c
+            src/port/lcd.c
+            src/port/loader.c
+            src/port/screen.c
+            src/port/sd.c
+            src/port/southbridge.c
+        )
+        pico_set_binary_type(ntp no_flash)
+        pico_set_program_name(ntp "ntp")
+        pico_set_program_description(ntp "Sets the PicoCalc shell's clock from NTP")
+        target_include_directories(ntp PRIVATE src/ntp src/port include)
+        target_compile_options(ntp PRIVATE ${SHELL_WARNINGS})
+        target_compile_definitions(ntp PRIVATE
+            PICO_SHELL_UART=${PICO_SHELL_UART_ON}
+            PICO_SHELL_LCD_SPI_HZ=${PICO_SHELL_LCD_SPI_HZ}
+            PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1
+            PICO_DEFAULT_UART=0
+            PICO_DEFAULT_UART_TX_PIN=2
+            PICO_DEFAULT_UART_RX_PIN=3
+        )
+        target_link_libraries(ntp
+            shell_core
+            pico_stdlib
+            pico_rand
+            pico_cyw43_arch_lwip_poll
+            hardware_dma
+            hardware_flash
+            hardware_i2c
+            hardware_powman
+            hardware_spi
+        )
+        pico_enable_stdio_uart(ntp ${PICO_SHELL_UART_ON})
+        pico_enable_stdio_usb(ntp 0)
+        pico_add_extra_outputs(ntp)
+        target_link_options(ntp PRIVATE -Wl,--print-memory-usage)
+    endif()
 
     # Memory use on every build (design.md §7, EL §2.1).
     target_link_options(shell PRIVATE -Wl,--print-memory-usage)

@@ -128,6 +128,21 @@ static const char *clock_set(void *ctx, int64_t utc_ms) {
     return NULL;
 }
 
+#if SHELL_NTP
+static int clock_ntp(void *ctx) {
+    (void)ctx;
+    return aon_ntp();
+}
+
+static void clock_ntp_keep(void *ctx, int result) {
+    (void)ctx;
+    aon_ntp_keep(result);
+}
+#else
+#define clock_ntp      NULL
+#define clock_ntp_keep NULL
+#endif
+
 /* ---- the PicoCalc, for system.h ---------------------------------------- */
 
 static const char *sb_why(sb_status_t st) {
@@ -165,6 +180,8 @@ static void info(void *ctx, const out_t *o) {
     (void)ctx;
     out_printf(o, "chip      %s rev %u, %lu MHz\n", g_board.chip, g_board.chip_version,
                (unsigned long)(g_board.clk_sys_hz / 1000000u));
+    /* The build, which the user chose by its file (design.md §3.8). */
+    out_printf(o, "build     %s\n", SHELL_NTP ? "Pico 2 W, with NTP" : "Pico 2, without NTP");
     out_printf(o, "id        %s\n", g_board.unique_id);
     out_printf(o, "memory    %lu KB of %lu KB SRAM\n",
                (unsigned long)(((uintptr_t)&__end__ - SRAM_BASE) >> 10),
@@ -359,7 +376,7 @@ int main(void) {
     shell_set_loader(&g_shell, &g_loader);
     const shell_system_t sys = { battery, backlight, phosphor, info, power, NULL };
     shell_set_system(&g_shell, &sys);
-    const shell_clock_t clock = { clock_get, clock_set, NULL, clock_note };
+    const shell_clock_t clock = { clock_get, clock_set, NULL, clock_note, clock_ntp, clock_ntp_keep };
     shell_set_clock(&g_shell, &clock);
     shell_set_memory(&g_shell, (unsigned long)((uintptr_t)&__end__ - SRAM_BASE),
                      (unsigned long)(SRAM_END - SRAM_BASE), (unsigned long)g_board.psram_bytes);

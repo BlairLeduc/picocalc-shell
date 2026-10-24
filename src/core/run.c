@@ -2,6 +2,7 @@
 
 #include "run.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "files.h"
@@ -194,6 +195,16 @@ int run_program(shell_t *sh, int argc, char **argv, bool redirected) {
     return run_path(sh, argv[0], s_path, false);
 }
 
+int run_ram(shell_t *sh, const char *name, const char *path) {
+    snprintf(s_path, sizeof s_path, "%s", path);
+    return run_path(sh, name, s_path, true);
+}
+
+int run_ram_program(shell_t *sh, const char *name) {
+    if (!find(sh, name)) return 127;
+    return run_path(sh, name, s_path, true);
+}
+
 int cmd_menu(shell_t *sh, int argc, char **argv) {
     /* A redirection is refused by run_cmd, before it is opened. */
     if (argc > 1) {
@@ -201,6 +212,5 @@ int cmd_menu(shell_t *sh, int argc, char **argv) {
         return 1;
     }
     (void)argv;
-    strcpy(s_path, SHELL_MENU_UF2);
-    return run_path(sh, "menu", s_path, true);
+    return run_ram(sh, "menu", SHELL_MENU_UF2);
 }

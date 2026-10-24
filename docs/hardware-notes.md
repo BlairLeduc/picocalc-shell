@@ -1493,6 +1493,67 @@ bus. Not yet checked: `poweroff` and a power-on with Up held; the time
 lost per power cycle, below a second; the module's own pull-ups; its
 drift; and a board with no chip, which only the host tests cover.
 
+### 8.6 Wi-Fi and NTP on the Plus 2 W
+
+Measured by Claude on the Pimoroni Pico Plus 2 W (RP2350B, its CYW43439
+on GP23, 24, 25 and 29, as the Pico 2 W's), 2026-10-22, with the DOS
+flavour's W development build (`-DPICO_BOARD=pico2_w`) on the test card
+as `/BOOT2350.UF2` and `ntp.uf2` (design.md §3.8) in `/pico2-apps/`,
+under UF2 Loader 2.5, logged over UART0 (`out/m12-step4-a.log`, `-b.log`):
+
+- The `pico2_w` build runs on the RP2350B as the `pico2` build does, and
+  `cyw43_arch_init_with_country()` brings the radio up.
+- stage3 loads `ntp.uf2` (1,363 blocks) with `BOOT_RAM`; the shell's
+  check of it took 597-598 ms.
+- **The first join attempt can report `CYW43_LINK_NONET` with the
+  network in range**, about 1.4 s after `cyw43_arch_wifi_connect_async()`:
+  the scan missed it. The SDK's own `cyw43_arch_wifi_connect_timeout_ms()`
+  asks again on `NONET` until its timeout; a loop that takes `NONET` as
+  final fails every time. With a name that is not in range, the same
+  answer came after 1.4 s.
+- Joining a WPA2 home network, DHCP, a DNS lookup of `pool.ntp.org` and
+  one SNTP exchange: 7.6 s from `ntp.uf2`'s start to the clock set, with
+  a half round trip of 23 ms. From Enter on `NTP /F` to the shell's
+  prompt: 13.8 s, which includes the check, stage3's two loads, and the
+  1.5 s the result stays on the panel. The design's estimate was 5-10 s.
+- The time set agreed with the Mac's (NTP-synchronised) to the second
+  shown by `TIME /T`, 11 s later.
+- The development build mirrors the screen to UART0, so anything typed
+  in EDIT or vi, such as `ntp.cfg`'s password, is in the UART log.
+
+Checked by the owner on a Pico 2 W with no DS3231, 2026-10-22, with
+the DOS flavour's W release build: `NTP` set the clock, with `ntp.uf2`
+in `C:\BIN`, found through `PATH C:\BIN;C:\pico2-apps`. A first
+attempt said `no /ntp/ntp.cfg` with the file there: macOS had saved it
+as ` ntp.cfg`, with a leading space, which FAT keeps in a long name and
+`DIR` does not show in the 8.3 one.
+
+Checked by the owner on the Plus 2 W, reported 2026-10-23: after NTP
+set the clock, the shell wrote the DS3231 when it came back (*the RTC
+needs writing*, design.md §3.8), and the chip held NTP's time.
+
+Checked by the owner on a Pimoroni Pico Plus 2 (RP2350B, no radio)
+with a DS3231, reported 2026-10-23:
+
+- with the DOS flavour's W release build and `NTP` in `AUTOEXEC.BAT`,
+  power-on ran `ntp.uf2`, which reported no radio
+  (`cyw43_arch_init_with_country()` failed), after about 392 ms as the
+  owner recalls the panel, and returned to the shell;
+  `AUTOEXEC.BAT` ran on to the prompt without starting it again, and
+  `INFO` said the clock was not set;
+- with the Pico 2 release build, the date and time set by hand were
+  kept through a power cycle, read back from the DS3231.
+
+Checked by the owner on the Plus 2 W with a W release build, reported
+2026-10-23: with a wrong password in `ntp.cfg`, the join reported
+`CYW43_LINK_BADAUTH`, and `ntp.uf2` gave "the network refused the
+password" after 3,862 ms (as its panel said) and returned to the shell.
+
+Not yet checked: a Pico 2 (RP2350A) with the W build, and what driving
+its GP23-25 and GP29 does there (the owner has no Pico 2; the Plus 2 is
+the nearest board checked); WPA3-only networks, which the WPA2-AES join
+does not support.
+
 ---
 
 ## 9. Making it fast

@@ -40,6 +40,12 @@ const char *clock_set(int64_t utc_s);
 /* The port's note about the clock (shell_clock_t), once: NULL after. */
 const char *clock_note(void);
 
+/* NTP (ntp.h): whether the port has it; what it did since power-on, -1
+ * if it was not tried; and keep a result, -1 to forget it. */
+bool clock_has_ntp(void);
+int clock_ntp(void);
+void clock_ntp_keep(int result);
+
 /* `utc_s` broken down in local time, by TZ; or in UTC, its zone "UTC". */
 void clock_local(int64_t utc_s, clock_tm_t *tm);
 void clock_gmt(int64_t utc_s, clock_tm_t *tm);

@@ -32,6 +32,18 @@ const char *clock_note(void) {
     return note;
 }
 
+bool clock_has_ntp(void) {
+    return s_port.ntp && s_port.ntp_keep;
+}
+
+int clock_ntp(void) {
+    return clock_has_ntp() ? s_port.ntp(s_port.ctx) : -1;
+}
+
+void clock_ntp_keep(int result) {
+    if (clock_has_ntp()) s_port.ntp_keep(s_port.ctx, result);
+}
+
 /* ---- the calendar ----------------------------------------------------- */
 
 static bool leap(int y) {

@@ -34,6 +34,14 @@ typedef struct shell_loader {
  * "not found", status 127, if there is none. */
 int run_program(shell_t *sh, int argc, char **argv, bool redirected);
 
+/* The RAM program at `path`, which must be one, as `name`: `menu`.
+ * Returns only if it cannot be run, or on the host. */
+int run_ram(shell_t *sh, const char *name, const char *path);
+
+/* The RAM program `name`, looked up as any program is, for the W
+ * build's `ntp`: 127, with "not found" said, if there is none. */
+int run_ram_program(shell_t *sh, const char *name);
+
 int cmd_menu(shell_t *sh, int argc, char **argv);
 
 #endif /* SHELL_RUN_H */

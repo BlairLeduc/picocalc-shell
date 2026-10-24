@@ -18,6 +18,7 @@ The same licence as this project, and the same owner.
 | `src/port/sd.c`, `sd.h` | the same | `sd_sectors()`, the card's size from its CSD, for `usbdisk`; multi-block reads and writes (CMD18, CMD25) |
 | `src/port/diskio.c` | the same | `card_poll()`, for one mount held while the card stays in; runs of sectors in one transfer |
 | `src/fatfs/ffconf.h` | `src/port/fatfs/ffconf.h` | the values its header lists |
+| `src/core/ntp.c` (`/ntp/ntp.cfg`'s parser) | `src/core/settings.c` | cut down to five keys; quoted values |
 | `test/host/test_util.h` | the same | the include guard |
 | `tools/build.sh`, `uart-log.sh`, `uart-type.sh`, `uart-screen.sh` | `tools/` | names, keys and pacing |
 
@@ -132,3 +133,29 @@ records in its header which values were changed.
 `cmake/pico_sdk_import.cmake` is the Raspberry Pi Pico SDK's own
 `external/pico_sdk_import.cmake`, copied as the SDK's instructions direct,
 under the SDK's BSD-3-Clause licence.
+
+## ntp.uf2: the CYW43 driver, its firmware, and lwIP
+
+`ntp.uf2` (design.md §3.8), built only in the Pico 2 W build, links three
+things from the Pico SDK that the shell itself does not. None is in the
+tree.
+
+- **lwIP**, Copyright (c) 2001, 2002 Swedish Institute of Computer
+  Science, under a BSD-3-Clause licence (`lib/lwip/COPYING`), compatible
+  with the GPL-3.0. `src/ntp/lwipopts.h` is this project's, after the
+  SDK examples' `lwipopts_examples_common.h` (BSD-3-Clause).
+- **The CYW43 driver and the CYW43439's firmware** (`lib/cyw43-driver`),
+  Copyright (C) 2019-2022 George Robotics Pty Ltd, offered under either
+  of two licences: `LICENSE.RP`, which permits use and redistribution
+  only with Raspberry Pi's chips, or `LICENSE`, which permits them only
+  for personal, non-commercial use.
+
+*Open, for the owner (2026-10-22):* each of those two licences adds a
+restriction the GPL-3.0 does not allow on a work it covers (its §10), so
+`ntp.uf2` as a binary combines GPL-3.0 code (this project's, and
+`src/port/loader.c`, after UF2 Loader's, pelrun's) with code under terms
+that are not compatible with it. The shell's own UF2s do not link the
+driver. Ways out include an additional permission (GPL-3.0 §7) for the
+driver on the owner's own code, with `ntp.uf2` built without code the
+owner does not hold the copyright to; or not distributing `ntp.uf2` as a
+binary. Nothing is released until this is settled.

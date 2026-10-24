@@ -2,11 +2,14 @@
 
 #include "system.h"
 
+#include <ctype.h>
 #include <string.h>
 
 #include "clock.h"
 #include "files.h"
 #include "flavour.h"
+#include "ntp.h"
+#include "run.h"
 #include "term.h"
 
 static int usage(shell_t *sh, const char *text) {
@@ -215,8 +218,40 @@ int cmd_bootsel(shell_t *sh, int argc, char **argv) {
 }
 
 bool system_leaves(shell_cmd_fn fn) {
-    return fn == cmd_poweroff || fn == cmd_reboot || fn == cmd_bootsel;
+    return fn == cmd_poweroff || fn == cmd_reboot || fn == cmd_bootsel ||
+           (SHELL_NTP && fn == cmd_ntp);
 }
+
+#if SHELL_NTP
+/* ---- ntp -------------------------------------------------------------- */
+
+/* ntp.uf2, once per power-on (design.md §3.8). A startup file runs each
+ * time the shell comes back, from ntp.uf2 as from any program, so once
+ * NTP was tried `ntp` only says why it did not set the clock, with status
+ * 1; when it did, it says nothing (the owner, 2026-10-23). -f (/F) tries
+ * again. NTP_UNFINISHED is kept before ntp.uf2 starts, so one
+ * that never reports cannot make a loop either. */
+int cmd_ntp(shell_t *sh, int argc, char **argv) {
+    const char *name = SHELL_DOS ? "NTP" : "ntp";
+    bool force = argc == 2 && (SHELL_DOS ? argv[1][0] == '/' && toupper((unsigned char)argv[1][1]) == 'F' &&
+                                               !argv[1][2]
+                                         : strcmp(argv[1], "-f") == 0);
+    if (argc != 1 && !(argc == 2 && force)) return usage(sh, SHELL_DOS ? "NTP [/F]" : "ntp [-f]");
+    if (!clock_has_ntp()) return not_here(sh, name);
+    int was = clock_ntp();
+    if (was >= 0 && !force) {
+        if (was == NTP_SET) return 0;
+        shell_error(sh, "%s: %s\n", name, ntp_result_str((ntp_result_t)was));
+        return 1;
+    }
+    clock_ntp_keep(NTP_UNFINISHED);
+    /* ntp.uf2, found as a program is: in $PATH, /pico2-apps by default. */
+    int status = run_ram_program(sh, name);
+    /* Back without rebooting: ntp.uf2 did not run, so NTP was not tried. */
+    if (status != 0) clock_ntp_keep(was);
+    return status;
+}
+#endif
 
 /* ---- date ------------------------------------------------------------- */
 
