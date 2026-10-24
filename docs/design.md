@@ -2015,7 +2015,8 @@ and 450,340 B in the W build; the DOS flavour 431,080 B, 21,836 B more,
 and 433,600 B in the W build. The clock, `TZ`, the commands' dates and
 the DS3231 in both, with `COUNTRY=` and `CONFIG.SYS` in the DOS flavour;
 the W build adds `ntp` (2.5 KB). About 56 KB is left in the UNIX
-flavour, 54 KB in its W build. NTP itself is in `ntp.uf2`, 390,396 B.
+flavour, 54 KB in its W build. NTP itself is in `ntp.uf2`, 386,376 B
+(2026-10-24, after it stopped linking `loader.c`).
 
 **The stack** (*corrected at M3*). Core 0's stack starts at the top of
 scratch Y and may run down to `__StackLimit` at the bottom of scratch X:

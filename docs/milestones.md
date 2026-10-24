@@ -103,7 +103,8 @@ is not set" twice; the guide's example now sends `DATE /T` to `NUL`.
   the estimate of 5-10 s; the clock within 1 ms of the Mac's after it
   (Plus 2 W, HW §8.6).
 - `ntp.uf2`: 390,396 B text plus bss in the release build, against the
-  estimate of about 340 KB, within stage3's 512 KB.
+  estimate of about 340 KB, within stage3's 512 KB; 386,376 B
+  (`__end__`, 2026-10-24) once it stopped linking `loader.c`.
 - The shell, release builds, `__end__`, 2026-10-24: the UNIX flavour
   447,812 B (Pico 2) and 450,340 B (W); the DOS flavour 431,080 B and
   433,600 B (design.md §7).
