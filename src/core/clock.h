@@ -69,7 +69,8 @@ int64_t clock_days(int year, int mon, int mday);
 bool clock_valid(int year, int mon, int mday);
 int clock_month_days(int year, int mon);
 
-/* "Sun".."Sat" and "Jan".."Dec". */
+/* "Sun".."Sat" and "Jan".."Dec"; "???" for a month out of range, as a
+ * foreign card's FAT date can give. */
 const char *clock_wday_name(int wday);
 const char *clock_mon_name(int mon);
 

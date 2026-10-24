@@ -130,6 +130,11 @@ static int calendar_tests(void) {
           "fat: %d-%d-%d %d:%d:%d", b.year, b.mon, b.mday, b.hour, b.min, b.sec);
     clock_from_fat(0, 0, &b);
     CHECK(b.year == 0, "fat date 0");
+    /* A FAT month of 0 or 13-15, from a foreign or damaged card. */
+    clock_from_fat(46 << 9 | 13 << 5 | 1, 0, &b);
+    CHECK(b.mon == 13 && strcmp(clock_mon_name(b.mon), "???") == 0 &&
+              strcmp(clock_mon_name(0), "???") == 0 && strcmp(clock_mon_name(12), "Dec") == 0,
+          "fat month out of range");
     return 0;
 }
 

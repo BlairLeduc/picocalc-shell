@@ -118,7 +118,7 @@ const char *clock_wday_name(int wday) {
 const char *clock_mon_name(int mon) {
     static const char names[12][4] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-    return names[mon - 1];
+    return (mon >= 1 && mon <= 12) ? names[mon - 1] : "???";
 }
 
 /* ---- TZ --------------------------------------------------------------- */
