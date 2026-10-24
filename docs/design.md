@@ -31,6 +31,7 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-12 | `ls` hides names FAT marks hidden or system, as it hides names starting with `.`. | 4.2 |
 | 2026-10-12 | Variables come with M4. | 4.4, 10 |
 | 2026-10-12 | `include/picocalc_shell.h` is offered under the MIT licence as well as the GPL-3.0. | 9 |
+| 2026-10-24 | The owner's code carries a GPL-3.0 §7 permission to link the CYW43 driver, so `ntp.uf2` can be released; `ntp.uf2` links no other author's GPL-3.0 code. | 9 |
 | 2026-10-13 | A patched stage3 that starts the shell at power-on, and the last program with Up/F1/F5 held, is an optional milestone (M7). Until it is installed, the stock loader's behaviour above stands. | 3.4, 10 |
 | 2026-10-14 | A second flavour, built from the same tree, feels like DOS and has an EDIT modelled on MS-DOS 5's, in place of vi. It is a separate `BOOT2350.UF2`; the user copies the one they want to the card, and neither flavour installs the other. The card is `C:`. EDIT covers the core look and keys, not all of MS-DOS 5's. It is never called MS-DOS. | 4.7, 10 |
 | 2026-10-14 | The DOS flavour's 40-column font is IBM's PC BIOS 8x8, from VileR's Ultimate Oldschool PC Font Pack (CC BY-SA 4.0), drawn in the 8x10 cell so the grid stays 40 x 32. The UNIX flavour keeps the owner's VT100-like font, and both keep the owner's 5x10 for 64 columns. This narrows the 2026-10-12 decision on fonts for the DOS flavour only. | 4.1, 4.7 |
@@ -2054,6 +2055,14 @@ the owner's own.
 *Settled 2026-10-12:* `include/picocalc_shell.h` is offered under the MIT
 licence as well (`GPL-3.0-or-later OR MIT`), so that a program under any
 licence can include it.
+
+*Settled 2026-10-24:* the owner's code also carries an additional
+permission under GPL-3.0 §7 to link the CYW43 driver and its firmware,
+whose licences (`LICENSE.RP`, `LICENSE`) restrict use to Raspberry Pi's
+chips or to personal use. It is in `THIRD-PARTY.md`. It cannot cover
+code from UF2 Loader, so `ntp.uf2` links none: it sends `BOOT_SD` with
+`include/picocalc_shell.h`'s values instead of calling `src/port/loader.c`.
+A release of `ntp.uf2` carries the driver's `LICENSE.RP` notice.
 
 ## 10. Milestones
 

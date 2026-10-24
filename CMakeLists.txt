@@ -337,8 +337,10 @@ else()
 
     # ntp.uf2, for /pico2-apps/ in the W build: Wi-Fi and NTP in a RAM
     # program of its own, which the shell's `ntp` runs (design.md §3.8).
-    # It uses the shell's card, panel, keyboard and clock code, and
-    # loader.c to go back.
+    # It uses the shell's card, panel, keyboard and clock code. It links
+    # the CYW43 driver under the owner's GPL-3.0 section 7 permission
+    # (THIRD-PARTY.md), so it must link nothing from UF2 Loader (loader.c,
+    # core/uf2.c, usbdisk.c) or another GPL-3.0 author.
     if (SHELL_W)
         add_executable(ntp
             src/ntp/main.c
@@ -347,7 +349,6 @@ else()
             src/port/ds3231.c
             src/port/kbd.c
             src/port/lcd.c
-            src/port/loader.c
             src/port/screen.c
             src/port/sd.c
             src/port/southbridge.c
@@ -371,7 +372,6 @@ else()
             pico_rand
             pico_cyw43_arch_lwip_poll
             hardware_dma
-            hardware_flash
             hardware_i2c
             hardware_powman
             hardware_spi

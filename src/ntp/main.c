@@ -6,13 +6,20 @@
  * /ntp/ntp.cfg, joins the one network it names, asks the server once
  * (SNTP, RFC 4330, over UDP), sets the AON timer and the clock's record
  * (src/port/clock.c), and keeps what happened in the record, where the
- * shell's `ntp` reads it. Then it sends BOOT_SD (src/port/loader.c).
+ * shell's `ntp` reads it. Then it sends UF2 Loader's BOOT_SD with the
+ * values in include/picocalc_shell.h; it links no code of the loader's,
+ * for its licence (THIRD-PARTY.md).
  * The DS3231, if any, is written by the shell when it starts: this has
  * no I2C driver of its own for it.
  *
  * Everything is bounded by the file's timeout, and Esc, Break or Ctrl-C
  * (or, in the development build, Esc or Ctrl-C on UART0) stops it. It
- * shows what it does on the panel with the shell's own terminal. */
+ * shows what it does on the panel with the shell's own terminal.
+ *
+ * It links the CYW43 driver under the additional permission in
+ * THIRD-PARTY.md (GPL-3.0 section 7), which covers only the owner's
+ * code: it must link no code from UF2 Loader or another GPL-3.0 project
+ * whose authors have not given the same permission. */
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -34,8 +41,8 @@
 #include "keycodes.h"
 #include "keys.h"
 #include "lcd.h"
-#include "loader.h"
 #include "ntp.h"
+#include "picocalc_shell.h"
 #include "screen.h"
 #include "sd.h"
 #include "southbridge.h"
@@ -339,5 +346,14 @@ int main(void) {
         sleep_ms(500);
     }
     say("Back to the shell.\n");
-    loader_reboot_shell();
+#if PICO_SHELL_UART
+    uart_tx_wait_blocking(uart_default);
+#endif
+    /* As picocalc_shell_exit(), less its check for a program in flash:
+     * this one is in SRAM, started by stage3's BOOT_RAM. */
+    watchdog_hw->scratch[1] = PICOCALC_SHELL_BOOT_SD;
+    watchdog_hw->scratch[2] = 0;
+    watchdog_hw->scratch[0] = PICOCALC_SHELL_LOADER_MAGIC;
+    watchdog_reboot(0, 0, 0);
+    for (;;) tight_loop_contents();
 }

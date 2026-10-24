@@ -119,7 +119,13 @@ is not set" twice; the guide's example now sends `DATE /T` to `NUL`.
   started it without the shell: on the host only.
 
 **Open:** the CYW43 driver's licence against GPL-3.0 (THIRD-PARTY.md)
-blocks releasing `ntp.uf2` until the owner decides.
+blocks releasing `ntp.uf2` until the owner decides. *Settled
+2026-10-24:* a GPL-3.0 §7 permission on the owner's code (design.md §9),
+with `ntp.uf2` no longer linking `src/port/loader.c`; both W builds
+built clean, and its ELF has no symbol from `loader.c` or `core/uf2.c`.
+Claude's run of the development `ntp.elf` from SRAM over SWD on the
+Plus 2 W (2026-10-24): NTP set the clock in 5.7 s, and its `BOOT_SD`
+brought up the card's shell.
 
 ## M11 — Menus (2026-10-18, branch `m11-menus`)
 

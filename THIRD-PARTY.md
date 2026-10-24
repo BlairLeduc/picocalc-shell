@@ -150,12 +150,57 @@ tree.
   only with Raspberry Pi's chips, or `LICENSE`, which permits them only
   for personal, non-commercial use.
 
-*Open, for the owner (2026-10-22):* each of those two licences adds a
+### Additional permission under GNU GPL version 3 section 7
+
+*Settled 2026-10-24.* Each of the driver's two licences adds a
 restriction the GPL-3.0 does not allow on a work it covers (its §10), so
-`ntp.uf2` as a binary combines GPL-3.0 code (this project's, and
-`src/port/loader.c`, after UF2 Loader's, pelrun's) with code under terms
-that are not compatible with it. The shell's own UF2s do not link the
-driver. Ways out include an additional permission (GPL-3.0 §7) for the
-driver on the owner's own code, with `ntp.uf2` built without code the
-owner does not hold the copyright to; or not distributing `ntp.uf2` as a
-binary. Nothing is released until this is settled.
+the copyright holder of this project's own code, Blair Leduc, adds this
+permission to the GPL-3.0 for that code:
+
+> If you modify this Program, or any covered work, by linking or
+> combining it with the CYW43 driver (`cyw43-driver`, Copyright (C)
+> 2019-2022 George Robotics Pty Ltd), including the CYW43439 firmware it
+> carries, as distributed with the Raspberry Pi Pico SDK, or a modified
+> version of that driver, containing parts covered by the terms of the
+> driver's `LICENSE.RP` or `LICENSE`, the licensors of this Program grant
+> you additional permission to convey the resulting work.
+
+It covers only code the owner holds the copyright to: not the files
+taken from UF2 Loader or TinyUSB (above), whose authors have not given
+it. `ntp.uf2` links none of them. It returns to the shell by writing
+UF2 Loader's `BOOT_SD` command with `include/picocalc_shell.h`'s values,
+not through `src/port/loader.c`, and the shell core's `uf2.c` is not
+linked into it. A change to `ntp.uf2` must keep it that way.
+
+A release of `ntp.uf2` uses the driver under `LICENSE.RP` (the RP2350 is
+Raspberry Pi's chip), whose third condition asks for this notice with
+the binary:
+
+> Copyright (C) 2019-2022 George Robotics Pty Ltd
+>
+> Raspberry Pi Ltd (Licensor) hereby grants to you a non-exclusive license to
+> use this software solely with the Licensor's microcontroller chip (RP2040) or
+> any other semiconductor device produced by the Licensor. No other use is
+> permitted under the terms of this licence.
+>
+> Redistribution and use in source and binary forms, with or without
+> modification, are permitted provided that the following conditions are met:
+>
+> 1. The software can only be used and redistributed in conjunction with RP2040
+>    or any other semiconductor device produced by the Licensor.
+> 2. Redistributions of source code must retain the above copyright notice,
+>    this list of conditions and the following disclaimer.
+> 3. Redistributions in binary form must reproduce the above copyright notice,
+>    this list of conditions and the following disclaimer in the documentation
+>    and/or other materials provided with the distribution.
+>
+> THIS SOFTWARE IS PROVIDED BY THE LICENSOR AND COPYRIGHT OWNER "AS IS" AND ANY
+> EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+> WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+> DISCLAIMED. IN NO EVENT SHALL THE LICENSOR OR COPYRIGHT OWNER BE LIABLE FOR
+> ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+> DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+> SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+> CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+> OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+> OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
