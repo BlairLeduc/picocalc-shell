@@ -62,6 +62,8 @@ pelrun in 2025.
 | `src/port/usbdisk.c` | `ui/lib/usb_msc/usb_msc.c` | its MSC callbacks; an eject ends the run, and a card taken out |
 | `src/port/usb_descriptors.c` | `ui/lib/usb_msc/usb_descriptors.c` | the same numbers and strings; the full-speed descriptor only, the serial number through the SDK |
 | `src/port/tusb_config.h` | `ui/lib/usb_msc/tusb_config.h` | comments and unused options dropped |
+| `third_party/uf2loader` | the whole loader, a git submodule at v2.5 (`5c44a4b`) | none; `tools/build-loader.sh` builds stage3 from a copy |
+| `patches/uf2loader-boot-shell.patch` | `stage3/stage3.c`, `common/petit_fatfs/diskio.c`, `CMakeLists.txt` | M7 (design.md §10): the shell at power-on, a restart's watch for a key, the program in flash with no card, the card polled without sleeping, the version `2.5-shell` |
 
 The last three files started as TinyUSB's `msc` example (MIT, Copyright (c)
 2019 Ha Thach, tinyusb.org), which the loader adapted. TinyUSB itself is

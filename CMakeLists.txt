@@ -284,6 +284,55 @@ else()
     pico_enable_stdio_usb(exit-test 0)
     pico_add_extra_outputs(exit-test)
 
+    # A flash program that restarts itself at every start: the board
+    # check of M7's way out of a restart loop (design.md §10).
+    add_executable(restart-test
+        test/pico/restart_test.c
+        src/port/kbd.c
+        src/port/lcd.c
+        src/port/screen.c
+        src/port/southbridge.c
+    )
+    target_include_directories(restart-test PRIVATE include src/port)
+    target_compile_options(restart-test PRIVATE ${SHELL_WARNINGS})
+    target_compile_definitions(restart-test PRIVATE
+        PICO_SHELL_LCD_SPI_HZ=${PICO_SHELL_LCD_SPI_HZ}
+        PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1
+        PICO_DEFAULT_UART=0
+        PICO_DEFAULT_UART_TX_PIN=2
+        PICO_DEFAULT_UART_RX_PIN=3
+    )
+    target_link_libraries(restart-test shell_core pico_stdlib hardware_dma hardware_i2c hardware_spi)
+    pico_enable_stdio_uart(restart-test 1)
+    pico_enable_stdio_usb(restart-test 0)
+    pico_add_extra_outputs(restart-test)
+
+    # restart-test as a RAM program, which restarts itself with BOOT_RAM
+    # and its own 8.3 path, read from the card (design.md §10, M7).
+    add_executable(restart-ram
+        test/pico/restart_ram.c
+        src/port/diskio.c
+        src/port/kbd.c
+        src/port/lcd.c
+        src/port/screen.c
+        src/port/sd.c
+        src/port/southbridge.c
+    )
+    pico_set_binary_type(restart-ram no_flash)
+    target_include_directories(restart-ram PRIVATE include src/port)
+    target_compile_options(restart-ram PRIVATE ${SHELL_WARNINGS})
+    target_compile_definitions(restart-ram PRIVATE
+        PICO_SHELL_LCD_SPI_HZ=${PICO_SHELL_LCD_SPI_HZ}
+        PICO_CLOCK_ADJUST_PERI_CLOCK_WITH_SYS_CLOCK=1
+        PICO_DEFAULT_UART=0
+        PICO_DEFAULT_UART_TX_PIN=2
+        PICO_DEFAULT_UART_RX_PIN=3
+    )
+    target_link_libraries(restart-ram shell_core pico_stdlib hardware_dma hardware_i2c hardware_spi)
+    pico_enable_stdio_uart(restart-ram 1)
+    pico_enable_stdio_usb(restart-ram 0)
+    pico_add_extra_outputs(restart-ram)
+
     # A flash program that shows the time the shell gave it, sets it a
     # minute forward and returns: the board check of the header's clock
     # (design.md §3.8). exit-test, which does not link hardware_powman,

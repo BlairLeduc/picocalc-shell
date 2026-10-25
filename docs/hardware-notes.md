@@ -1278,6 +1278,27 @@ pieces gave 219 and 432 KB/s. After `CMD12`, skip one byte before
 looking for R1: the card may still be shifting out the data it was
 stopped in, and a data byte can look like an R1.
 
+**Poll for a block's data token without sleeping.** UF2 Loader's
+stage3 (Petit FatFs, `common/petit_fatfs/diskio.c`, `rcvr_datablock`)
+waits for a read's data token by reading one byte, then sleeping 100 µs,
+up to 1,000 times; `wait_ready()` does the same. Measured on the Plus 2 W
+with its 32 GB SDHC test card, 2026-10-25, from a watchdog reboot to the
+program's first UART line on the Mac: stage3 loading the shell's 365 KB
+UF2 (`BOOT_SD`, then the shell's own 0.43 s to its first line) took
+1.044–1.046 s, and 0.852–0.853 s with both loops reading back to back
+until the token, ready, or the timeout; a 118 KB RAM program
+(`BOOT_RAM`) took 0.319–0.320 s, and 0.227–0.229 s. That is about
+0.27 ms a sector, the polls' granularity; the SDK (2.2.0 or 2.3.1) made
+no difference. The shell's `sd.c` polls without sleeping.
+
+**Do not time a load by halting the core.** Sampling the program counter
+over SWD every ~40 ms (halt, read `pc` and `lr`, resume) showed where
+stage3 spent its time, mostly in that wait, but made the same loads
+2.4–4.8 s instead of 0.3–1.0 s, the sleeping loop far more than the
+other. The likely cause, not checked, is that the timer pauses while a
+core is halted for debug, so each sleep outlasts its halt. Time with
+the UART on the Mac; sample only for where, not how long.
+
 Three more things from the same driver on the same board:
 
 - **Bound every wait below the southbridge's 2.5 s watchdog** (§6.1) when one
@@ -1474,6 +1495,18 @@ the crystal's drift does not show at this resolution. The cause of the
 boot code restarts the crystal is a guess. Just after NTP set it, the
 clock was 1 ms from the Mac's (`out/m12-roundtrip-ms-samples.txt`,
 `out/m12-aon-sample.sh`).
+
+**Which reset was it.** POWMAN's `CHIP_RESET` (`0x4010002c`) says
+"last reset was" in the datasheet, but a watchdog reboot does not clear
+it: on a Plus 2 W, 2026-10-25, it read `0x00010000` (`HAD_POR`) after
+OpenOCD's `reset run`, and still `0x00010000` after a later watchdog
+reboot with `PSM_WDSEL` at `0x01fffff3`, which leaves POWMAN alone. The
+watchdog's `REASON` (`0x400d8008`) does tell them apart: `0x0` after
+OpenOCD's reset and `0x2` (`FORCE`) after the watchdog reboot, read
+once the next image was running. The datasheet gives zero for any
+hardware reset. So a boot stage that must know whether it follows a
+power-on reads `REASON`, as M7's stage3 does (design.md §10). A real
+power-on and the RUN pin were not read.
 
 Not yet checked: the cause of the 2 ms; power-off; the RUN pin;
 BOOTSEL; OpenOCD's `reset halt`; and what the timer does if XOSC stops.

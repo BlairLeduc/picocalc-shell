@@ -36,8 +36,9 @@ static_assert(PICOCALC_SHELL_BOOT_SD == BOOT_SD, "picocalc_shell.h: BOOT_SD");
 static_assert(XIP_BASE == 0x10000000u && SRAM_BASE == UF2_SRAM_BASE && SRAM_END == UF2_SRAM_END,
               "uf2.h: the RP2350's address map");
 
-/* stage3's versions with this protocol. */
-static const char *const k_known[] = { "2.3", "2.4", "2.4.1", "2.5" };
+/* stage3's versions with this protocol. 2.5-shell is 2.5 with M7's patch
+ * (patches/uf2loader-boot-shell.patch), whose commands are 2.5's. */
+static const char *const k_known[] = { "2.3", "2.4", "2.4.1", "2.5", "2.5-shell" };
 
 static uint8_t __attribute__((aligned(4))) s_workarea[4096];   /* the bootrom's, for the table */
 static char s_version[16];
@@ -138,7 +139,9 @@ static void boot(void *ctx, const char *ram, const uf2_info_t *info) {
         snprintf(s_ram_path, sizeof s_ram_path, "%s", ram);
         command(BOOT_RAM, (uint32_t)s_ram_path);
     } else {
-        watchdog_hw->scratch[0] = 0;   /* no command: stage3 starts the app */
+        /* Every stage3 starts the app on this; M7's also skips its
+         * watch for a key (design.md M7). */
+        command(BOOT_DEFAULT, 0);
     }
     watchdog_reboot(0, 0, 0);
     for (;;) tight_loop_contents();

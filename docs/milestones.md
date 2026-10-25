@@ -16,6 +16,98 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M7 — Shell at power-on (2026-10-25, branch `m7-boot-shell`)
+
+**Done 2026-10-25.** UF2 Loader 2.5's stage3 with a patch: power-on
+gives the shell and Up/F1/F5 the program in flash; a command is read
+first and not kept waiting for a key; a reboot with no command restarts
+the program, with a 150 ms watch for a held key; no card starts the
+program (design.md §10, M7). pelrun's loader is a submodule at v2.5 in
+`third_party/uf2loader`; `patches/uf2loader-boot-shell.patch` changes
+`stage3/stage3.c`, the card's polling in `common/petit_fatfs/diskio.c`
+and the version (`2.5-shell`); `tools/build-loader.sh`
+builds it. The shell sends `BOOT_DEFAULT` to start a program and knows
+`2.5-shell`.
+
+**The owner chose**, during the milestone:
+
+- the shell does not load RAM UF2s itself or stay resident across one;
+  the patch takes the 0.5 s wait out instead;
+- a program can restart itself, and a restart loop is broken with Up
+  held or a power cycle;
+- the commands in the watchdog's scratch registers stay stock 2.5's, so
+  the shell and programs run under either loader.
+
+**Checked on the host:** all 28 tests pass; nothing in the host build
+changed. stage3 is 7,092 B of its 8 KB of flash (stock 6,740 B) and
+7,792 B of its 8 KB of RAM, as stock (SDK 2.3.1, toolchain 15.2). Every
+firmware build compiles clean, with the new `restart-test` and
+`restart-ram`.
+
+**Checked on the board:**
+
+- Claude, on the Plus 2 W on the probe (RP2350B), 2026-10-25. Its flash
+  held a copy of `exit-test` at offset 0, not the loader; the first
+  512 KB was saved (`out/m7-plus2w-flash-before-loader.bin`) and the
+  patched stage3 written at offset 0 over SWD, with `exit-test` in the
+  app partition. POWMAN's `CHIP_RESET` was found useless for telling a
+  power-on from a reboot, and the patch changed to the watchdog's
+  `REASON` (HW §8.4). OpenOCD's reset gave the shell; a watchdog
+  reboot with no command, `exit-test`; `exit-test`'s exit, the shell.
+  The trips were timed under both loaders (below). The card's shell was
+  replaced over `USBDISK` with this branch's DOS W development build
+  (the old one in `out/m7-card-BOOT2350-before.uf2`), which runs
+  programs under `2.5-shell`; `AUTOEXEC.BAT` ran `NTP` through
+  `BOOT_RAM` and came back; `restart-test` restarted itself five times
+  and OpenOCD's reset broke the loop (`out/m7-*.log`, `out/m7-trips-*.txt`).
+- The owner, on the same Plus 2 W, 2026-10-25: power-on with no key
+  gave the shell; Up held at power-on gave the program (`restart-test`);
+  Up held while `restart-test` looped gave the shell; the power key
+  switched it off during the loop, and power-on gave the shell.
+- Claude, on the same Plus 2 W, 2026-10-25: `restart-ram`, a RAM
+  program, restarted itself through `BOOT_RAM` with the 8.3 path it read
+  from the card (`/PICO2~13/RESTA~89.UF2`) about every 1.9 s, and
+  OpenOCD's reset broke the loop to the shell
+  (`out/m7-restart-ram-*.log`).
+- The owner, on the same Plus 2 W, 2026-10-25: the power key during
+  `restart-ram`'s loop, and power-on, gave the shell.
+- The owner, on the Plus 2 W, 2026-10-25, with the final patch (the
+  card polled without sleeping): power-on gave the shell, and Up held
+  at power-on the program, as before the polling change.
+- The owner, on a Pico Plus 2, 2026-10-25: the patched loader built
+  with `PICO_BOARD=pimoroni_pico_plus2_rp2350` (a 16,372 KB app
+  partition), installed in BOOTSEL, worked as expected.
+
+**Measurements** (Plus 2 W, DOS W development build, timed on the Mac
+from the reboot or Enter to the next first UART line; three runs each;
+the final patch, with the card polled without sleeping):
+
+| Trip | Stock 2.5 | Patched |
+|---|---|---|
+| `BOOT_DEFAULT` to the program | 0.522 s | 0.021–0.023 s |
+| No command (a program's own restart) to the program | 0.522 s | 0.173–0.175 s |
+| `BOOT_SD` to the shell's first line (0.43 s of it the shell's start) | 1.545–1.546 s | 0.852–0.853 s |
+| `BOOT_RAM` to `restart-ram` (118 KB) | 0.816–0.821 s | 0.227–0.229 s |
+| `EXIT-TEST` typed, Enter to the program, repeat run | M2: ~0.9 s | 0.139 s |
+
+The polling change alone is about 0.19 s of the `BOOT_SD` row (1.045 s
+with the patch's sleeping polls). Sampling the program counter over SWD
+found the wait, but inflated every load it timed (2.4–4.8 s), and the
+first exit timings included `exit-test`'s 1.5 s pause: together they
+made stage3 look about 2.1 s slow before the cause was found (HW §7.1).
+
+**Not checked:**
+
+- the patched loader's polling on other cards than the test card;
+- the RUN pin, and `REASON` after a real power-on (read only after
+  OpenOCD's reset);
+- a Pico 2 W with the patched loader, and the Plus 2 W's 16 MB build
+  (`PICO_BOARD=pimoroni_pico_plus2_w_rp2350`, built but not installed);
+  the Plus 2 W on the probe runs the `pico2` build, with a 4,088 KB
+  partition, as its stock loader did;
+- a program started from `/etc/profile` or `AUTOEXEC.BAT` that loops
+  through the shell (not M7's).
+
 ## M12 — Date and time (2026-10-22 to 2026-10-24, branch `m12-time`)
 
 **Done 2026-10-24.** Both flavours keep the date and time in the

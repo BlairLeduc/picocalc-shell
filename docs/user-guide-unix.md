@@ -25,6 +25,10 @@ separate `BOOT2350.UF2`. To install one, see the [README](../README.md).
 Hold **Up** (or F1 or F5) while switching the PicoCalc on, and the shell
 starts. Powering on with no key held starts the last program you ran.
 
+With the shell's own build of UF2 Loader installed (see the README), it
+is the other way round: switching on gives the shell, and holding Up (or
+F1 or F5) starts the last program.
+
 The prompt is the current directory followed by `>`:
 
 ```
@@ -581,8 +585,13 @@ from the card without writing flash.
 ### Coming back
 
 - **Hold Up, F1 or F5 while switching on.** This works for every program.
+  With the shell's build of the loader, just switch on.
 - **The program's own exit command**, if it has one, such as an *Exit to
   shell* item in its menu.
+- **A program that keeps restarting itself**, with the shell's build of
+  the loader: hold Up, F1 or F5 until the shell appears, or switch off
+  and on. For a program that runs from RAM, only switching off and on
+  works.
 
 ### Limits
 
