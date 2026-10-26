@@ -768,7 +768,7 @@ static int dos_tests(bool fat32) {
     CHECK(run("MEM") == 0 && has("    132480 bytes free\n   8388608 bytes PSRAM\n"), "'%s'", con);
     CHECK(run("HELP") == 0 && has("ATTRIB") && has("XCOPY") && has("HELP name for one"), "'%s'",
           con);
-    CHECK(run("help copy") == 0 && strcmp(con, "usage: COPY source [destination]\nCopy one or more files\n") == 0,
+    CHECK(run("help copy") == 0 && strcmp(con, "usage: COPY [/V] [/B] source [destination]\nCopy one or more files\n") == 0,
           "'%s'", con);
     /* Each about line fits the 40-column screen. */
     for (unsigned i = 0; shell_builtin_at(i); i++)

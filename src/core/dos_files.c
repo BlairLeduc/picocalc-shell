@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "clock.h"
 #include "dos.h"
 #include "files.h"
 #include "path.h"
@@ -507,15 +508,64 @@ static int copy_each(shell_t *sh, const char *path, const FILINFO *fno, void *ct
     return 0;
 }
 
+/* COPY NAME+,, gives each file the time now, as touch does: left as it
+ * is with the clock not set (design.md §3.8). */
+static int touch_each(shell_t *sh, const char *path, const FILINFO *fno, void *ctx) {
+    static FILINFO when;
+    copy_t *c = ctx;
+    if (fno->fattrib & AM_DIR) return 0;
+    if (c->list) out_printf(&sh->con, "%s\n", fno->fname);
+    clock_tm_t now;
+    if (clock_now(&now)) {
+        when = *fno;
+        clock_to_fat(&now, &when.fdate, &when.ftime);
+        FRESULT r = f_utime(path, &when);
+        if (r != FR_OK) {
+            dos_error(sh, dos_why(r), show(path));
+            return -1;
+        }
+    }
+    c->copied++;
+    return 0;
+}
+
+/* The name in COPY's operands if they are NAME+,, (in one word or
+ * several), DOS's way to give a file the time now; NULL if not. */
+static const char *touch_name(int argc, char **argv) {
+    static char name[SHELL_PATH_MAX + 4];
+    size_t n = 0;
+    for (int i = 1; i < argc; i++) {
+        size_t k = strlen(argv[i]);
+        if (n + k >= sizeof name) return NULL;
+        memcpy(name + n, argv[i], k);
+        n += k;
+    }
+    name[n] = '\0';
+    if (n <= 3 || strcmp(name + n - 3, "+,,") != 0) return NULL;
+    name[n - 3] = '\0';
+    return strchr(name, '+') ? NULL : name;
+}
+
 int dos_copy(shell_t *sh, int argc, char **argv) {
     unsigned flags;
-    if (!dos_switches(sh, &argc, argv, "V", true, &flags)) return 1;   /* /V: every copy is checked */
+    /* /V: every copy is checked; /B: a copy is always the bytes. */
+    if (!dos_switches(sh, &argc, argv, "VB", true, &flags)) return 1;
     if (argc < 2) {
         dos_error(sh, "Required parameter missing", NULL);
         return 1;
     }
-    if (dos_too_many(sh, argc, argv, 3)) return 1;
     spec_t sp;
+    const char *touch = touch_name(argc, argv);
+    if (touch) {
+        if (!spec(sh, touch, false, &sp)) return 1;
+        copy_t c = { .list = sp.wild };
+        int status = 0;
+        int found = each(sh, &sp, 0, touch_each, &c, &status);
+        if (found == 0) dos_error(sh, "File not found", touch);
+        out_printf(&sh->out, "%9u file(s) copied\n", c.copied);
+        return found > 0 && c.copied == (unsigned)found ? status : 1;
+    }
+    if (dos_too_many(sh, argc, argv, 3)) return 1;
     if (!spec(sh, argv[1], true, &sp) || !where(sh, argc == 3 ? argv[2] : ".", s_b)) return 1;
     copy_t c = { .to = s_b, .list = sp.wild };
     if (dos_wild(path_base(s_b))) c.mask = path_base(s_b);

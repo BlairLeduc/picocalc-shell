@@ -1610,7 +1610,13 @@ rules for size, CR LF and safe save (§4.6).
     `File cannot be copied onto itself`. DOS's joining of several files
     into one, and `+`, are not there: `Cannot copy several files into
     one file`. Every copy goes through `files_copy`, `cp`'s, so through
-    `name.new`. `/V` is accepted and changes nothing.
+    `name.new`. `/V` is accepted and changes nothing. *(Added
+    2026-10-26, at the owner's asking:* `COPY /B NAME+,,`, DOS's way to
+    touch a file, gives it the time now with `f_utime`, its contents not
+    rewritten, as `touch` does, and leaves it with the clock not set
+    (§3.8); each file for a wildcard; the operands may be one word or
+    several (`NAME +,,`). Only that form of `+` is there. `/B` is
+    accepted and changes nothing.)
   - **XCOPY** says `Reading source file(s)...`, names each file, and
     ends `n File(s) copied`. A directory, a wildcard or `/S` copies into
     a directory, made if need be; one file without them is copied to

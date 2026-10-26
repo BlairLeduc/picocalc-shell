@@ -57,7 +57,7 @@ The shell starts in `C:\HOME` if the card has one, and otherwise in
 
 ```
 C:\>HELP COPY
-usage: COPY source [destination]
+usage: COPY [/V] [/B] source [destination]
 Copy one or more files
 ```
 
@@ -195,12 +195,17 @@ and time on the next row, so every row fits the 40 columns.
 
 | Command | Does |
 |---|---|
-| `COPY source [destination]` | copies files: `COPY A.TXT B.TXT`, `COPY *.TXT \BACKUP`, `COPY *.TXT *.BAK` |
+| `COPY [/V] [/B] source [destination]` | copies files: `COPY A.TXT B.TXT`, `COPY *.TXT \BACKUP`, `COPY *.TXT *.BAK`. `/V` and `/B` are accepted and change nothing; `COPY NAME+,,` touches a file (below) |
 | `XCOPY source [destination] [/S]` | copies files and, with `/S`, every directory below |
 
 `COPY` and `XCOPY` give each copy the date and time of the file it was
 copied from, as DOS did.
-| `DEL path`, `ERASE` | deletes files. `DEL *.*` asks first; `/P` asks for each. **There is no undo** |
+
+`COPY /B NAME+,,` gives a file the date and time now, leaving what is in
+it, as in DOS: UNIX's `touch`. A wildcard does each file it matches. With
+the clock not set, the file is left as it is. `/B` changes nothing (a
+copy is always byte for byte), so `COPY NAME+,,` is the same.
+| `DEL [/P] path`, `ERASE` | deletes files. `DEL *.*` asks first; `/P` asks for each. **There is no undo** |
 | `REN path name`, `RENAME` | renames files: `REN *.TXT *.OLD` |
 | `MOVE source... destination` | moves files into a directory, or renames a file or directory |
 | `ATTRIB [+R\|-R] [+A\|-A] [+S\|-S] [+H\|-H] [path]` | shows or changes a file's attributes: read-only, archive, system, hidden |

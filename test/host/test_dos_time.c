@@ -335,6 +335,24 @@ static int file_tests(bool fat32) {
     CHECK(run("XCOPY \\D \\E /S") == 0 && strcmp(stamp("/E/SUB/A.TXT"), "2020-05-06 07:08") == 0 &&
               strcmp(stamp("/E/BIG.DAT"), "1999-12-31 23:59") == 0 && strcmp(stamp("/E"), "2026-10-22 14:30") == 0,
           "%s: XCOPY: %s '%s'", kind, stamp("/E/SUB/A.TXT"), con);
+
+    /* COPY NAME+,, gives the time now, and leaves the contents. */
+    FILINFO fno;
+    CHECK(run("copy/b \\D\\A.TXT+,,") == 0 && strcmp(stamp("/D/A.TXT"), "2026-10-22 14:30") == 0 &&
+              f_stat("/D/A.TXT", &fno) == FR_OK && fno.fsize == 5 && has("        1 file(s) copied\n"),
+          "%s: COPY/B A.TXT+,,: %s '%s'", kind, stamp("/D/A.TXT"), con);
+    CHECK(run("COPY /B \\D\\B.TXT +,,") == 0 && strcmp(stamp("/D/B.TXT"), "2026-10-22 14:30") == 0,
+          "%s: B.TXT +,,: %s", kind, stamp("/D/B.TXT"));
+    CHECK(run("COPY \\D\\SUB\\*.TXT+,,") == 0 && strcmp(stamp("/D/SUB/A.TXT"), "2026-10-22 14:30") == 0 &&
+              strcmp(stamp("/D/SUB/C.TXT"), "2026-10-22 14:30") == 0 && has("        3 file(s) copied\n"),
+          "%s: *.TXT+,,: '%s'", kind, con);
+    CHECK(run("COPY NOPE.TXT+,,") == 1 && has("File not found - NOPE.TXT\n"), "%s: '%s'", kind, con);
+    /* With the clock not set, left as it is. */
+    CHECK(stamp_file("/D/A.TXT", 2020, 5, 6, 7, 8), "old again");
+    fake_is_set = false;
+    CHECK(run("COPY \\D\\A.TXT+,,") == 0 && strcmp(stamp("/D/A.TXT"), "2020-05-06 07:08") == 0,
+          "%s: no clock: %s", kind, stamp("/D/A.TXT"));
+    fake_is_set = true;
     return 0;
 }
 
