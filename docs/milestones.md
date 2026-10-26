@@ -80,7 +80,12 @@ firmware build compiles clean, with the new `restart-test` and
   partition), installed in BOOTSEL, worked as expected.
 - The owner, on the Pico Plus 2 and the Plus 2 W, 2026-10-25:
   `bootloader_rp2350_16mb.uf2` installed in BOOTSEL, with this branch's
-  release shell, worked on both. A shell
+  release shell, worked on both.
+- The owner, on the Plus 2 and Plus 2 W, 2026-10-25: the board's RESET
+  button (the RUN pin), pressed while a program ran, gave the shell with
+  no key held and the program with Up held, as a power-on does.
+- The owner, on the Plus 2, 2026-10-25: the patched loader (16 MB
+  build) with a second card, not the test card, worked. A shell
   built before M7 reported "UF2 Loader 2.5-shell is unknown" in `info`
   and would not run programs: only this branch's `loader.c` knows the
   name, so the patched loader needs a shell from M7 on.
@@ -105,14 +110,15 @@ made stage3 look about 2.1 s slow before the cause was found (HW §7.1).
 
 **Not checked:**
 
-- the patched loader's polling on other cards than the test card;
+- the patched loader's polling on cards other than the test card and
+  the owner's second card (its make and timings not recorded);
 - the 4 and 8 MB builds on a board (`bootloader_rp2350_4mb.uf2` and
   `_8mb`, each the Pico 2's board with only the flash size changed;
   checked only by their partition tables, the flash size the C code
   gets, and the 4 MB build differing from the tested `pico2` build by
   its board name); no 8 MB board has run one;
-- the RUN pin, and `REASON` after a real power-on (read only after
-  OpenOCD's reset);
+- `REASON` read directly after a real power-on or a reset by RUN (read
+  only after OpenOCD's reset; both behave as zero, below);
 - a Pico 2 W with the patched loader; the Plus 2 W's timings above are
   from the `pico2` build, with a 4,088 KB partition, as its stock loader
   had;

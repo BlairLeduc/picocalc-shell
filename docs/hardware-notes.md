@@ -1506,7 +1506,11 @@ OpenOCD's reset and `0x2` (`FORCE`) after the watchdog reboot, read
 once the next image was running. The datasheet gives zero for any
 hardware reset. So a boot stage that must know whether it follows a
 power-on reads `REASON`, as M7's stage3 does (design.md §10). A real
-power-on and the RUN pin were not read.
+power-on and the RUN pin were not read directly, but both behave as
+zero under M7's stage3: on a Pico Plus 2 and Plus 2 W, 2026-10-25 (the
+owner), switching on and pressing the board's RESET button (which
+grounds RUN) each gave the shell with no key held, and the program with
+Up held.
 
 Not yet checked: the cause of the 2 ms; power-off; the RUN pin;
 BOOTSEL; OpenOCD's `reset halt`; and what the timer does if XOSC stops.
