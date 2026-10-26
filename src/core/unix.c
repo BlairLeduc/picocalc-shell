@@ -200,6 +200,9 @@ static int run_cmd(shell_t *sh, const parse_cmd_t *c, pipe_t *from, pipe_t *to) 
         return 1;
     }
     if (e->argc == 0) return 0;   /* only empty variables */
+    /* > /dev/null throws the output away; there is no /dev on the card. */
+    if (out && strcmp(out, "/dev/null") == 0)
+        return shell_command_null(sh, e->argc, e->argv, in, from, to);
     return shell_command(sh, e->argc, e->argv, in, out, c->append, from, to);
 }
 

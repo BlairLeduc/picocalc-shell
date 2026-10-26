@@ -1169,6 +1169,14 @@ parsed before any of it runs, so a mistake at its end stops all of it, as
 in sh. Errors go to the terminal, never to a redirection. Break, Esc or
 Ctrl-C stops a long command and drops the rest of the line.
 
+*Added 2026-10-26:* `> /dev/null` and `>> /dev/null` throw the output
+away, as the DOS flavour's `> NUL` does (`shell_command_null`). There is
+no `/dev` on the card: only that exact path is special, as an output,
+and `< /dev/null` is an ordinary missing file. For a program or a
+command that leaves the shell, which refuse a redirection, it is
+dropped. It lets `/etc/profile` test a command without showing its
+output: `date > /dev/null || ntp`.
+
 *As built at M4:*
 
 - **Expansion as each command runs** (`src/core/expand.c`). The parser
@@ -1528,7 +1536,8 @@ rules for size, CR LF and safe save (§4.6).
   `unix.c` holds the UNIX flavour's (the parser, expansion, `sh` and
   `/etc/profile`, moved out of `shell.c` unchanged); `dos.c` the DOS
   flavour's. `shell.c` keeps what both share: running one command with
-  its redirections (`shell_command`), a pipeline (`shell_pipeline`),
+  its redirections (`shell_command`), or with its output thrown away
+  (`shell_command_null`, for `> NUL` and `> /dev/null`), a pipeline (`shell_pipeline`),
   the prompt and `usbdisk`. `files.c` resolves every operand
   through the flavour, so a shared command reads `C:\X` in the DOS
   build, and says its failures in the flavour's words. CMake builds the

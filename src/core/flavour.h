@@ -80,6 +80,11 @@ shell_cmd_fn shell_builtin(const char *name);
 int shell_command(shell_t *sh, int argc, char **argv, const char *in, const char *out,
                   bool append, struct pipe *from, struct pipe *to);
 
+/* Run it with its output thrown away: DOS's `> NUL`, UNIX's
+ * `> /dev/null`. */
+int shell_command_null(shell_t *sh, int argc, char **argv, const char *in,
+                       struct pipe *from, struct pipe *to);
+
 /* Run commands 0..n-1 of a pipeline, each reading the one before's
  * output; `stage` runs the k-th. The last one's status. */
 typedef int (*shell_stage_fn)(shell_t *sh, int k, struct pipe *from, struct pipe *to, void *ctx);

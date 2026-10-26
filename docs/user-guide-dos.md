@@ -549,6 +549,26 @@ TIME
 :SET
 ```
 
+With a DS3231 fitted too, the shell has read the chip before
+`AUTOEXEC.BAT` runs, so the clock is already set unless the chip lost
+its time. To use the network only then:
+
+```
+@ECHO OFF
+SET TZ=EST5EDT
+DATE /T > NUL
+IF NOT ERRORLEVEL 1 GOTO SET
+NTP
+DATE /T > NUL
+IF NOT ERRORLEVEL 1 GOTO SET
+DATE
+TIME
+:SET
+```
+
+The time NTP gives is written to the chip, ready for the next power-on.
+The chip drifts a little; `NTP /F` now and then puts it right.
+
 ### CONFIG.SYS
 
 `C:\CONFIG.SYS`, if the card has one, is read before `AUTOEXEC.BAT`. Its

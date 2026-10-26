@@ -321,12 +321,6 @@ const unsigned flavour_nbuiltins = sizeof flavour_builtins / sizeof flavour_buil
 /* Each level's line, parsed. */
 static dos_parse_t s_parse[SHELL_DEPTH];
 
-static void discard(void *ctx, const char *buf, size_t n) {
-    (void)ctx;
-    (void)buf;
-    (void)n;
-}
-
 static int stage(shell_t *sh, int k, pipe_t *from, pipe_t *to, void *ctx) {
     const dos_cmd_t *c = &((const dos_parse_t *)ctx)->cmds[k];
     const char *name = c->argv[0];
@@ -348,24 +342,10 @@ static int stage(shell_t *sh, int k, pipe_t *from, pipe_t *to, void *ctx) {
         }
         return dos_batch_run(sh, bat, name, c->tail, false);
     }
-    /* > NUL throws the output away, as DOS's NUL device did. For a
-     * program or a command that leaves the shell it is dropped instead:
-     * NUL leaves no file behind, which is why those refuse a redirection
-     * (shell_command), and what they say before leaving is little. */
-    const char *out = c->out;
-    shell_cmd_fn fn = shell_builtin(name);
-    bool leaves = !fn || fn == cmd_menu || fn == cmd_usbdisk || system_leaves(fn);
-    if (out && path_same(out, "NUL") && leaves) out = NULL;
-    if (!out || !path_same(out, "NUL"))
-        return shell_command(sh, c->argc, c->argv, c->in, out, c->append, from, to);
-    out_t saved = sh->out;
-    bool saved_is_con = sh->out_is_con;
-    sh->out = (out_t){ discard, NULL, true };
-    sh->out_is_con = false;
-    int status = shell_command(sh, c->argc, c->argv, c->in, NULL, false, from, to);
-    sh->out = saved;
-    sh->out_is_con = saved_is_con;
-    return status;
+    /* > NUL throws the output away, as DOS's NUL device did. */
+    if (c->out && path_same(c->out, "NUL"))
+        return shell_command_null(sh, c->argc, c->argv, c->in, from, to);
+    return shell_command(sh, c->argc, c->argv, c->in, c->out, c->append, from, to);
 }
 
 int dos_commands(shell_t *sh, const char *text) {

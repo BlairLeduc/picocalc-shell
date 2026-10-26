@@ -116,6 +116,22 @@ static int pipe_tests(bool fat32) {
           "&&: '%s'", con);
     CHECK(run("false_cmd | cat || echo no") == 0 && strstr(con, "not found"), "||: '%s'", con);
 
+    /* > /dev/null throws the output away, and leaves no file. */
+    FILINFO fno;
+    CHECK(run("cat a.txt > /dev/null") == 0 && con_len == 0, "> /dev/null: '%s'", con);
+    CHECK(run("cat a.txt >> /dev/null") == 0 && con_len == 0, ">> /dev/null: '%s'", con);
+    CHECK(run("cat a.txt | grep one > /dev/null") == 0 && con_len == 0, "| > /dev/null: '%s'",
+          con);
+    CHECK(f_stat("/dev", &fno) == FR_NO_FILE, "no /dev");
+    CHECK(run("cat nope > /dev/null || echo no") == 0 &&
+              strcmp(con, "cat: nope: no such file or directory\nno\n") == 0,
+          "errors still shown, and the status kept: '%s'", con);
+    CHECK(run("cat a.txt > /dev/null && echo yes") == 0 && strcmp(con, "yes\n") == 0,
+          "> /dev/null &&: '%s'", con);
+    /* For a command that leaves the shell it is dropped, not refused. */
+    CHECK(run("reboot > /dev/null") != 0 && !strstr(con, "redirection"),
+          "reboot > /dev/null is reboot: '%s'", con);
+
     /* Large: past SHELL_PIPE_BUF it goes through /.shell, which goes. */
     const char *big = numbered(4000);   /* about 40 KB */
     CHECK(strlen(big) > SHELL_PIPE_BUF, "big enough");

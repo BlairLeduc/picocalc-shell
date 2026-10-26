@@ -125,6 +125,11 @@ A redirected file is written safely: if the command fails or is stopped,
 the old file is left as it was. Error messages always go to the screen,
 never into the file.
 
+`cmd > /dev/null` throws the output away, to test a command without
+seeing what it says: `date > /dev/null || ntp`. There is no `/dev`
+directory on the card; only that one name, after `>` or `>>`, is
+special.
+
 ### Pipes
 
 `a | b` runs `a` to the end, then gives its output to `b`. A pipe can
@@ -466,6 +471,13 @@ timeout  = 20                   # seconds to join and get the time, 5 to 60
   to 63 characters, or 64 hex digits. Each key once.
 - In `/etc/profile`, to set the clock at power-on, or else ask for it:
   `ntp || date || echo set the clock: date mmddHHMM`.
+- With a DS3231 fitted too, the shell has read the chip before
+  `/etc/profile` runs, so the clock is already set unless the chip lost
+  its time. To use the network only then:
+  `date > /dev/null || ntp || echo set the clock: date mmddHHMM`. The
+  time NTP gives
+  is written to the chip, ready for the next power-on. The chip drifts a
+  little; `ntp -f` now and then puts it right.
 
 | `ntp.uf2` and `ntp` say | Means |
 |---|---|
