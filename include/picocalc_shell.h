@@ -21,7 +21,10 @@
  *
  * The program must close its files first: the reboot does not wait for
  * them. Holding Up, F1 or F5 at power-on also returns to the shell, for
- * any program.
+ * any program. With the shell's patched loader (design.md M7), power-on
+ * gives the shell with no key held, and Up, F1 or F5 the program; a
+ * program's own watchdog_reboot(0, 0, 0) starts it again under either
+ * loader, and holding Up, F1 or F5 through that reboot gives the shell.
  *
  * A program can also be installed without the loader, straight from
  * BOOTSEL; the call returns false there too, and the program can do

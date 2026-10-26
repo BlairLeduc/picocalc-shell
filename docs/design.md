@@ -45,6 +45,9 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-22 | Each flavour has a Pico 2 build and a separate Pico 2 W build; only the W build supports NTP (§3.8). A release offers `shell-unix.uf2`, `shell-dos.uf2`, `shell-unix-w.uf2` and `shell-dos-w.uf2`, and `ntp.uf2` for `/pico2-apps/`; this extends the 2026-10-16 decision. | 3.8, 4.7 |
 | 2026-10-22 | M12's design (§3.8) is settled: NTP runs in a separate RAM program, `ntp.uf2`, at most once per power-on, joining the one network `/ntp/ntp.cfg` names; `i2c0` runs at 100 kHz; the AON timer and the DS3231 hold UTC, POSIX `TZ` gives local time, and FAT timestamps are local; the record of the clock is in POWMAN scratch 0–2; `picocalc_shell.h` gains `picocalc_shell_time()` and `picocalc_shell_set_time()`; a clock that is not set is handled as in §3.8 (`date`'s status 1; `DATE`, `TIME`, and `/T` with `ERRORLEVEL`); file times as in §3.8 (`touch` sets an existing file's time, `cp` the current time, `COPY` keeps the source's; `ls -l`'s six-month rule); `CONFIG.SYS` as in §3.8. | 3.8 |
 | 2026-10-18 | Scripts and batch files can show menus (M11). The UNIX flavour has bash's `select NAME in WORDS; do LIST; done`, with `break`, `PS3` and `REPLY`, as its one compound command: no `if` or `case`, so a menu branches by running the word chosen. The DOS flavour has DOS 6's `CHOICE` with all its switches (`/C`, `/N`, `/S`, `/T`), for `IF ERRORLEVEL` and `GOTO`. | 4.4, 4.7, 10 |
+| 2026-10-25 | The shell does not load RAM UF2s itself or keep itself resident across one; stage3 loads them, after a reboot. M7's patched stage3 skips its 0.5 s wait for a key when a command is waiting, which takes most of the time out of each trip to a program and back. | 10 |
+| 2026-10-25 | Under M7, only a power-on gives the shell with no command; a program's `watchdog_reboot()` with no command restarts it, as under the stock loader. A restart loop is broken by holding Up/F1/F5 through the restart, which stage3 watches for after draining the FIFO, or by a power cycle. The commands in the watchdog's scratch registers stay stock 2.5's, so the shell and programs run the same under either loader (the owner). A RAM program restarts itself with `BOOT_RAM` and its own 8.3 path; its loop is broken only by a power cycle, since a command skips the watch for a key. | 10 |
+| 2026-10-25 | M7's patched stage3 is built once for each size of flash, 4, 8 and 16 MB, each the Pico 2's board with only the flash size changed, since its partition table is fixed when it is built (the owner). | 10 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -2099,21 +2102,100 @@ in [milestones.md](milestones.md).
   program; Down/F3 still give BOOTSEL. pelrun's loader is a submodule
   pinned at v2.5 (`5c44a4b`) in `third_party/uf2loader`, with
   `references/` left alone; `patches/uf2loader-boot-shell.patch` changes
-  only `stage3/stage3.c`, and `tools/build-loader.sh` applies it to a copy
-  and builds `bootloader_pico2.uf2`. The patch:
-  - swaps the no-key and Up/F1/F5 modes in `read_bootmode()`;
+  only `stage3/stage3.c`, the card's two polling loops in
+  `common/petit_fatfs/diskio.c`, and the version in `CMakeLists.txt`, and
+  `tools/build-loader.sh` applies it to a copy and builds it once for
+  each size of flash, 4, 8 and 16 MB (`bootloader_rp2350_4mb.uf2` and so
+  on; `--stock` builds stock 2.5 the same way, to compare). stage3's
+  partition table, and the flash end it reports, are fixed by the flash
+  size it is built for, so a build for a larger flash must never go on a
+  smaller one; a smaller one leaves the rest unused, as pelrun's 4 MB
+  `pico2` build does on a 16 MB board. Each build is the Pico 2's board
+  (`boards/pico2.h`) with only the flash size changed
+  (`patches/boards/rp2350_<n>mb.h`), as the Plus 2 W ran the `pico2`
+  build; 8 MB is for an Adafruit Feather RP2350 (*added 2026-10-25*).
+  The patch:
+  - swaps the no-key and Up/F1/F5 modes in `read_bootmode()` at a
+    power-on, which the watchdog's `REASON` shows as zero (HW §8.4);
+    a reset by the RUN pin, or OpenOCD's `reset`, counts as one;
+  - after any other reset with no command, such as a program's own
+    `watchdog_reboot()`, starts the program in flash as stock stage3
+    does, with a shorter watch for the keys (below);
   - starts the program in flash, not BOOTSEL, when there is no card or
-    `/BOOT2350.UF2` cannot be loaded, so a power-on without a card still
-    does something;
+    the UF2 to load (`/BOOT2350.UF2`, or a `BOOT_RAM` path) cannot be
+    loaded, so a power-on without a card still does something; BOOTSEL
+    only when there is no program either;
+  - reads the command before the keys, and skips the 0.5 s wait for a
+    key when a command is waiting;
+  - polls the card for a block's data, and for ready, without sleeping
+    between polls (*added 2026-10-25*, HW §7.1), which loads the shell
+    about 0.19 s sooner;
   - names its version `2.5-shell`.
 
   The shell sends `BOOT_DEFAULT` as an explicit command when it starts a
   program, instead of no command, which stock stage3 also accepts; and
   `loader.c` accepts `2.5-shell`. The owner installs the loader in
   BOOTSEL; the shell never writes stage3's partition, and reinstalling
-  the stock loader undoes M7. Check first whether the emulators reboot
-  themselves with no command: with the patch, that would land in the
-  shell.
+  the stock loader undoes M7.
+
+  *Compatible with stock stage3 (the owner, 2026-10-25).* The commands
+  in the scratch registers are stock 2.5's: the same magic, modes
+  (`BOOT_DEFAULT`, `BOOT_SD`, `BOOT_UPDATE`, `BOOT_RAM`) and argument,
+  and no new ones. The patch changes only what stage3 does with no
+  command and how it watches the keys. So the same shell and the same
+  programs run under either loader: `picocalc_shell_exit()` sends
+  `BOOT_SD`, the shell `BOOT_DEFAULT` or `BOOT_RAM`, and a program's own
+  reboot sends nothing, each meaning the same to both.
+
+  *As built (2026-10-25).* stage3 grows from 6,740 B to 7,092 B of its
+  8 KB (SDK 2.3.1, toolchain 15.2), with RAM the same, 7,792 B of 8 KB.
+  It first read POWMAN's `CHIP_RESET`, which a watchdog reboot leaves
+  showing `HAD_POR` (HW §8.4), so it reads the watchdog's `REASON`. The restart's watch drains the FIFO, up to 32
+  events, then reads it for 150 ms; it takes pressed and held events
+  (states 1 and 2; stock `read_i2c_kbd()` drops held ones), and reads
+  with no 16 ms pause between the register write and the reply,
+  as the shell's `southbridge.c` does.
+
+  *A program restarting itself (added 2026-10-25).* Power-on gives the
+  shell, but a program may still reboot into itself: a
+  `watchdog_reboot(0, 0, 0)` with no command restarts the program in
+  flash under both loaders, so the emulators and every other program
+  that does this today keep working, and `picocalc_shell.h` needs
+  nothing new. An explicit restart command was not chosen: stock stage3
+  lets a command override the keys (`main()` reads the keys, then
+  `bl_get_command`), so under it a program that sent one could not be
+  broken out of with a key. A RAM program cannot restart itself this
+  way: it starts the program in flash. Restarting a RAM program needs
+  `BOOT_RAM` with its own 8.3 path, which stage3 does not give it: the
+  program knows where it is installed and reads the 8.3 form of that
+  path from the card, as `restart-ram` does (below). A command skips the
+  watch for a key, so Up does not break a RAM program's restart loop; a
+  power cycle does (*the owner, 2026-10-25*, rather than a watch on
+  every `BOOT_RAM`, which would cost each RAM program 0.15 s).
+
+  *Breaking out of a restart loop (added 2026-10-25).* A program that
+  restarts itself every time it starts would otherwise hold the machine.
+  Two ways out:
+
+  1. **Hold Up/F1/F5 through the restart.** After a reset with no
+     command that is not a power-on, stage3 first reads the FIFO
+     empty, dropping keys the program left unread, so a key pressed in
+     the program does not count. It then watches for a new event for
+     about 150 ms (*estimate*): Up/F1/F5 give the shell, Down/F3
+     BOOTSEL. A held key sends an event every 100 ms (HW §6.2), and
+     the southbridge is not reset with the RP2350, so a key held across
+     the restart shows inside the window; the user holds it until the
+     shell appears. The window replaces the 0.5 s wait, so a restart
+     costs less than under the stock loader.
+  2. **Power off and on.** A power-on has no command, so it always gives
+     the shell, whatever the program did. `poweroff` cut the power on
+     battery and on USB at M8; whether the power key does so while the
+     RP2350 is busy rebooting is to be checked.
+
+  A program started from `/etc/profile` or `AUTOEXEC.BAT`, which run at
+  every start of the shell, loops through the shell instead, and a
+  power cycle does not end that loop. That is not M7's, and exists
+  under the stock loader too.
 
   *RAM programs (noted 2026-10-23, M12).* A RAM program (`ntp.uf2`,
   `menu`, any `no_flash` UF2) is loaded with `BOOT_RAM` and never
@@ -2129,11 +2211,97 @@ in [milestones.md](milestones.md).
   needs a record that survives power-off (on the card, or in flash
   outside the app partition), which is a further change to the patch.
 
+  *No wait with a command (added 2026-10-25).* The owner asked whether
+  the shell could load a RAM UF2 itself, and take it back without a
+  reboot. It cannot: a `no_flash` UF2 is linked at `0x20000000` and may
+  fill SRAM up to stage3's limit (`SRAM_END - 0x2000`), where the shell
+  takes about 455 KB and `ntp.uf2` 400 KB, and the program's start-up
+  takes over the clocks, interrupts and both cores, so nothing of the
+  shell stays to return to. Nor would it save much: of M2's 0.53 s from
+  the reboot to a program's `main`, 0.5 s is stage3's wait for a key
+  (§3.3), and the reset itself costs about 30 ms. When the shell, a
+  program's exit or `reboot` sets a command, nobody is holding a key on
+  purpose, so the patch reads the command first and waits only when
+  there is none. Every reboot the shell or a program causes then loses
+  the wait, for flash and RAM programs alike and in both directions,
+  and every RAM UF2 runs unchanged; stage3 stays the only code that
+  loads a RAM image. Down/F3 held through a reboot with a command no
+  longer gives BOOTSEL; at power-on there is no command, so they still
+  do, and `bootsel` does not go through stage3. Under the stock loader
+  the wait stays.
+
+  *Measured (2026-10-25, Plus 2 W over SWD, stage3 written at offset 0
+  and `exit-test` in the app partition; the card's shell the DOS W
+  development build of v1.0-8, which does not yet know `2.5-shell`;
+  `out/m7-trips-*.txt`).* From the watchdog reboot, set over SWD, to the
+  program's first UART line, or from the key sent to `exit-test` to the
+  shell's first, timed on the Mac, three runs each:
+
+  | Trip | Stock 2.5 | Patched |
+  |---|---|---|
+  | `BOOT_DEFAULT` to the program, as the shell starts one | 0.522 s | 0.021–0.023 s |
+  | No command, as a program restarts itself, to the program | 0.522 s | 0.173–0.175 s |
+  | The key to `exit-test` to the shell's first line, with its 1.5 s pause before `picocalc_shell_exit()` | 3.07–3.09 s (one 4.17 s) | 2.56–2.59 s |
+
+  Then, with this branch's DOS W development build on the card (it
+  reports `programs: can be run` under `2.5-shell`), typed over UART0:
+  `EXIT-TEST` from Enter to the program's first line took 0.151 s on a
+  repeat run (0.516 s the first time, when the app partition differed
+  from the file), against M2's 0.33–0.40 s to the reboot plus 0.53 s to
+  `main`; the exit back, with `exit-test`'s 1.5 s pause, took
+  2.57–2.60 s. `AUTOEXEC.BAT` ran `NTP`,
+  which went out through `BOOT_RAM` and came back
+  (`out/m7-trips-shell-patched.txt`, `out/m7-newshell-1.log`).
+
+  *Final, with the polling change (2026-10-25,
+  `out/m7-trips-compare.txt`).* Each stage3 written in turn, from the
+  watchdog reboot over SWD to the first UART line, three runs each; the
+  shell's line comes 0.43 s after its own start:
+
+  | stage3 | `BOOT_SD` to the shell's first line | `BOOT_RAM` to `restart-ram` (118 KB) |
+  |---|---|---|
+  | Stock 2.5 | 1.545–1.546 s | 0.816–0.821 s |
+  | Patched, polls sleeping | 1.044–1.046 s | 0.319–0.320 s |
+  | Patched, final | 0.852–0.853 s | 0.227–0.229 s |
+
+  So stage3 loads the shell in about 0.42 s, and `picocalc_shell_exit()`
+  reaches the shell's prompt about 0.7 s sooner than under the stock
+  loader. With the final build, `EXIT-TEST` took 0.139 s from Enter on a
+  repeat run, a restart with no command 0.173 s, and `RESTART-RAM`
+  0.409 s (`out/m7-trips-final-2.txt`). An earlier reading of about
+  2.1 s in stage3 was `exit-test`'s 1.5 s pause, and SWD sampling had
+  inflated the loads it timed (HW §7.1).
+
+  `restart-test` (`test/pico/restart_test.c`, built beside `exit-test`)
+  restarts itself a second after each start, reading and dropping the
+  keyboard's events meanwhile as a program would, and counts its starts
+  in watchdog scratch 3. Run from the shell, it started five times in
+  8 s; OpenOCD's `reset run`, which stage3 takes for a power-on, then
+  gave the shell (`out/m7-restart-loop-1.log`). The owner checked the
+  rest on the same board the same day: power-on gives the shell, Up
+  held at power-on the program, Up held through `restart-test`'s loop
+  the shell, and the power key ends the loop ([milestones.md](milestones.md)).
+
+  `restart-ram` (`test/pico/restart_ram.c`) is `restart-test` as a RAM
+  program: at each start it reads the 8.3 form of
+  `/pico2-apps/restart-ram.uf2` from the card, with the shell's FatFs, and
+  a second later reboots with `BOOT_RAM` and that path, kept in its own
+  `.bss`, below stage3's 8 KB. On the same board it restarted itself
+  about every 1.9 s through `/PICO2~13/RESTA~89.UF2`, and OpenOCD's
+  reset gave the shell (`out/m7-restart-ram-*.log`).
+
   Done when, on the board with the patched loader, power-on
   gives the shell, Up held gives the last program, power-on with no card
   starts the program, and a program still runs, and comes back by its
-  exit command, under both the patched and the stock loader. Offer the
-  change to pelrun as an option.
+  exit command, under both the patched and the stock loader; a program
+  that reboots with no command comes back to itself, and one that does
+  so at every start is left with Up held and with a power cycle; the
+  watchdog's `REASON`, which stage3 reads, is recorded for a power-on,
+  a watchdog reboot, `poweroff` and a power-on, and a SWD reset (HW §8.4
+  has the watchdog reboot and the SWD reset); and the times from Enter to a program's `main`, and from
+  `picocalc_shell_exit()` to the prompt, for a flash program and a RAM
+  program (`ntp.uf2` or `menu`), are measured under each loader on the
+  same board and build. Offer the change to pelrun as an option.
 - **M8 — The rest of v1.** The twelve v1 builtins not built at M4 (§4.5):
   - `head [-n N]`, `tail [-n N]` and `wc [-l -w -c]`, in
     `src/core/text.c` beside `more` and `grep`, reading files, `<` and

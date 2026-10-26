@@ -66,6 +66,41 @@ To change flavour, copy the other one over `/BOOT2350.UF2`, renamed in
 the same way. To return to using the loader's men ,
 rename `/BOOT2350.ORG` to `/BOOT2350.UF2`.
 
+### The shell at power-on (optional)
+
+The shell has its own build of UF2 Loader's first stage, 2.5 with a
+small patch (`patches/uf2loader-boot-shell.patch`):
+
+- switching on gives the shell, and holding Up, F1 or F5 starts the last
+  program; Down or F3 still give BOOTSEL;
+- going to a program and back skips the loader's half-second wait for a
+  key, and the shell loads from the card a little faster: back from a
+  program to the shell in about 0.85 s, where the stock loader takes
+  about 1.55 s;
+- a program that restarts itself still comes back to itself; hold Up, F1
+  or F5 through the restart, or switch off and on, for the shell (only
+  switching off and on, for a program that runs from RAM);
+- with no card, switching on starts the last program.
+
+Build it with `tools/build-loader.sh`. The loader's program area is
+fixed when it is built, so there is one build for each size of flash, in
+`build/loader/output/`:
+
+| Build | Flash | Boards |
+|---|---|---|
+| `bootloader_rp2350_4mb.uf2` | 4 MB | Pico 2, Pico 2 W |
+| `bootloader_rp2350_8mb.uf2` | 8 MB | Adafruit Feather RP2350 |
+| `bootloader_rp2350_16mb.uf2` | 16 MB | Pimoroni Pico Plus 2, Plus 2 W |
+
+Use the one for your board's flash. A smaller one works on a larger
+flash, but leaves the rest unused; **never use one for a larger flash
+than the board has**, as programs could then be written past its end.
+Copy it to the PicoCalc in BOOTSEL (hold Down or F3 at power-on). Your
+programs and the card are not touched. The same shell and programs run
+under either loader, but the shell must be one from the same release or
+later: an older one reports the loader as unknown and will not run
+programs. Installing pelrun's stock loader again undoes it.
+
 ### The card
 
 |File/Directory|Description|
