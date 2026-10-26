@@ -223,7 +223,7 @@ static bool set(shell_t *sh, const clock_tm_t *tm) {
  * TIME 2:30 pm works. */
 static int date_time(shell_t *sh, int argc, char **argv, bool is_date) {
     unsigned flags;
-    if (!dos_switches(sh, &argc, argv, "T", &flags)) return 1;
+    if (!dos_switches(sh, &argc, argv, "T", false, &flags)) return 1;
     if (flags && dos_too_many(sh, argc, argv, 1)) return 1;
     const char *what = is_date ? "date" : "time";
     bool (*parse)(const char *, clock_tm_t *) = is_date ? parse_date : parse_time;

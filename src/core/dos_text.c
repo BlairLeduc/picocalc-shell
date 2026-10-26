@@ -112,7 +112,7 @@ static void rule(shell_t *sh, const char *name, const char *tail) {
 
 int dos_find(shell_t *sh, int argc, char **argv) {
     unsigned flags;
-    if (!dos_switches(sh, &argc, argv, "VCNI", &flags)) return 2;
+    if (!dos_switches(sh, &argc, argv, "VCNI", false, &flags)) return 2;
     if (argc < 2 || (argc == 2 && !input_any(&sh->in))) {
         shell_error(sh, "FIND: Required parameter missing\n");
         return 2;

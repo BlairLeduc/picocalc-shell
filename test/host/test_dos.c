@@ -530,12 +530,21 @@ static int dos_tests(bool fat32) {
           "/W: '%s'", con);
     CHECK(run("DIR NOPE") == 1 && has("File not found\n"), "'%s'", con);
     CHECK(run("DIR /X") == 1 && strcmp(con, "Invalid switch - /X\n") == 0, "'%s'", con);
+    /* A '/' inside a word starts its switches, as in DOS. */
+    CHECK(run("dir *.bak/b") == 0 && strcmp(con, "A.BAK\nB.BAK\n") == 0, "NAME/B: '%s'", con);
+    CHECK(run("DIR DOCS/X") == 1 && strcmp(con, "Invalid switch - /X\n") == 0, "'%s'", con);
+    /* But not FIND's string. */
+    CHECK(run("ECHO a/b c | FIND \"a/b\"") == 0 && strcmp(con, "a/b c\n") == 0, "FIND a/b: '%s'",
+          con);
     CHECK(put("/HOME/.hidden", "h") && put("/HOME/._A.TXT", "x"), "hidden");
     CHECK(run("DIR /B") == 0 && !has(".hidden") && run("DIR /B /A") == 0 && has(".hidden"),
           "/A: '%s'", con);
     CHECK(run("DIR \\ /S /B") == 0 && has("C:\\HOME\\DOCS\\A.BAK\n") && has("C:\\A.BAK\n") &&
               !has("C:\\\\"),
           "/S /B: '%s'", con);
+    char whole[sizeof con];
+    strcpy(whole, con);
+    CHECK(run("DIR \\/S/B") == 0 && strcmp(con, whole) == 0, "\\/S/B: '%s'", con);
     CHECK(run("DIR /S") == 0 && has(" Directory of C:\\HOME\\DOCS\n") &&
               has("Total files listed:\n    6 file(s) "),
           "/S: '%s'", con);

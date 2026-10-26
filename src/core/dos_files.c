@@ -374,7 +374,7 @@ static FRESULT volume(shell_t *sh, dir_t *d) {
 
 int dos_dir(shell_t *sh, int argc, char **argv) {
     dir_t d = { 0 };
-    if (!dos_switches(sh, &argc, argv, "WPSAB", &d.flags)) return 1;
+    if (!dos_switches(sh, &argc, argv, "WPSAB", true, &d.flags)) return 1;
     if (dos_too_many(sh, argc, argv, 2)) return 1;
     spec_t sp;
     if (!spec(sh, argc == 2 ? argv[1] : ".", true, &sp)) return 1;
@@ -509,7 +509,7 @@ static int copy_each(shell_t *sh, const char *path, const FILINFO *fno, void *ct
 
 int dos_copy(shell_t *sh, int argc, char **argv) {
     unsigned flags;
-    if (!dos_switches(sh, &argc, argv, "V", &flags)) return 1;   /* /V: every copy is checked */
+    if (!dos_switches(sh, &argc, argv, "V", true, &flags)) return 1;   /* /V: every copy is checked */
     if (argc < 2) {
         dos_error(sh, "Required parameter missing", NULL);
         return 1;
@@ -561,7 +561,7 @@ static int xcopy_each(shell_t *sh, const char *path, const FILINFO *fno, void *c
 
 int dos_xcopy(shell_t *sh, int argc, char **argv) {
     unsigned flags;
-    if (!dos_switches(sh, &argc, argv, "S", &flags)) return 4;
+    if (!dos_switches(sh, &argc, argv, "S", true, &flags)) return 4;
     if (argc < 2) {
         dos_error(sh, "Required parameter missing", NULL);
         return 4;
@@ -669,7 +669,7 @@ static int del_each(shell_t *sh, const char *path, const FILINFO *fno, void *ctx
 
 int dos_del(shell_t *sh, int argc, char **argv) {
     unsigned flags;
-    if (!dos_switches(sh, &argc, argv, "P", &flags)) return 1;
+    if (!dos_switches(sh, &argc, argv, "P", true, &flags)) return 1;
     if (argc < 2) {
         dos_error(sh, "Required parameter missing", NULL);
         return 1;
@@ -753,7 +753,7 @@ static int deltree_each(shell_t *sh, const char *path, const FILINFO *fno, void 
 
 int dos_deltree(shell_t *sh, int argc, char **argv) {
     unsigned flags;
-    if (!dos_switches(sh, &argc, argv, "Y", &flags)) return 1;
+    if (!dos_switches(sh, &argc, argv, "Y", true, &flags)) return 1;
     if (argc < 2) {
         dos_error(sh, "Required parameter missing", NULL);
         return 1;

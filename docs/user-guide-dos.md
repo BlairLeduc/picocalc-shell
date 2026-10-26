@@ -99,9 +99,9 @@ from the command line.
 
 ### Paths
 
-- Paths use `\`: `C:\ORIC\KEYMAPS`. `/` works as well, except at the
-  start of a word for a command that takes switches, where `/W` is a
-  switch, as in DOS.
+- Paths use `\`: `C:\ORIC\KEYMAPS`. `/` works as well, except in DIR,
+  COPY, XCOPY, DEL and DELTREE, where a `/` starts a switch anywhere in
+  a word, as in DOS: `DIR \/W` is `DIR \ /W`.
 - A path may start with `C:` or not: `C:\HOME` and `\HOME` are the same.
 - Commands and switches can be typed in either case: `dir /w` is `DIR /W`.
 - `CD..`, `CD\` and `DIR/W` work with no space, as in DOS.

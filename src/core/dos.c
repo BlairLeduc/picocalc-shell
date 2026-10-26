@@ -45,16 +45,19 @@ bool dos_too_many(shell_t *sh, int argc, char **argv, int max) {
     return true;
 }
 
-bool dos_switches(shell_t *sh, int *argc, char **argv, const char *allowed, unsigned *flags) {
+bool dos_switches(shell_t *sh, int *argc, char **argv, const char *allowed, bool within,
+                  unsigned *flags) {
     *flags = 0;
     int kept = 1;
     for (int i = 1; i < *argc; i++) {
         char *a = argv[i];
-        if (a[0] != '/') {
+        char *slash = within ? strchr(a, '/') : (a[0] == '/' ? a : NULL);
+        if (!slash) {
             argv[kept++] = a;
             continue;
         }
-        for (const char *s = a; *s;) {
+        if (slash != a) argv[kept++] = a;   /* the name before them */
+        for (const char *s = slash; *s;) {
             const char *hit = s[1] ? strchr(allowed, upper(s[1])) : NULL;
             if (!hit || (s[2] && s[2] != '/')) {
                 size_t n = 1;
@@ -65,6 +68,7 @@ bool dos_switches(shell_t *sh, int *argc, char **argv, const char *allowed, unsi
             *flags |= 1u << (hit - allowed);
             s += 2;
         }
+        *slash = '\0';
     }
     argv[kept] = NULL;
     *argc = kept;

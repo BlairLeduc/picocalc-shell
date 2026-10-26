@@ -1566,7 +1566,12 @@ rules for size, CR LF and safe save (§4.6).
   (DIR, COPY, XCOPY, DEL, DELTREE, FIND) read a word that starts with `/`
   as switches, one or several (`/W/P`), in either case; an unknown one
   is `Invalid switch - /X`. Every other `/` separates names, so
-  `CD /HOME` works, and so does `TYPE HOME/A.TXT`.
+  `CD /HOME` works, and so does `TYPE HOME/A.TXT`. *(Changed
+  2026-10-26, at the owner's asking:* in DIR, COPY, XCOPY, DEL and
+  DELTREE a `/` anywhere in a word starts its switches, as in DOS, so
+  `DIR \/W` is `DIR \ /W` and `DIR HOME/SUB` is `Invalid switch -
+  /SUB`. FIND and DATE keep a `/` inside a word, for FIND's string,
+  whose quotes are gone by then, and DATE's `10/22/26`.)
 - **Wildcards** (`dos_match`). A pattern with no `.` matches the whole
   name; one with a `.` matches the parts before and after the name's last
   `.` separately. `*` matches the rest of a part, `?` one character or
