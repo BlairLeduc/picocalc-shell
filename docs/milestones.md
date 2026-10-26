@@ -78,6 +78,12 @@ firmware build compiles clean, with the new `restart-test` and
 - The owner, on a Pico Plus 2, 2026-10-25: the patched loader built
   with `PICO_BOARD=pimoroni_pico_plus2_rp2350` (a 16,372 KB app
   partition), installed in BOOTSEL, worked as expected.
+- The owner, on the Pico Plus 2 and the Plus 2 W, 2026-10-25:
+  `bootloader_rp2350_16mb.uf2` installed in BOOTSEL, with this branch's
+  release shell, worked on both. A shell
+  built before M7 reported "UF2 Loader 2.5-shell is unknown" in `info`
+  and would not run programs: only this branch's `loader.c` knows the
+  name, so the patched loader needs a shell from M7 on.
 
 **Measurements** (Plus 2 W, DOS W development build, timed on the Mac
 from the reboot or Enter to the next first UART line; three runs each;
@@ -100,18 +106,16 @@ made stage3 look about 2.1 s slow before the cause was found (HW §7.1).
 **Not checked:**
 
 - the patched loader's polling on other cards than the test card;
-- the 4, 8 and 16 MB builds on a board (`bootloader_rp2350_<n>mb.uf2`,
-  each the Pico 2's board with only the flash size changed; checked only
-  by their partition tables, the flash size the C code gets, and the
-  4 MB build differing from the tested `pico2` build by its board name);
-  the owner's Pico Plus 2 run above was the
-  `pimoroni_pico_plus2_rp2350` build, and no 8 MB board has run one;
+- the 4 and 8 MB builds on a board (`bootloader_rp2350_4mb.uf2` and
+  `_8mb`, each the Pico 2's board with only the flash size changed;
+  checked only by their partition tables, the flash size the C code
+  gets, and the 4 MB build differing from the tested `pico2` build by
+  its board name); no 8 MB board has run one;
 - the RUN pin, and `REASON` after a real power-on (read only after
   OpenOCD's reset);
-- a Pico 2 W with the patched loader, and the Plus 2 W's 16 MB build
-  (`PICO_BOARD=pimoroni_pico_plus2_w_rp2350`, built but not installed);
-  the Plus 2 W on the probe runs the `pico2` build, with a 4,088 KB
-  partition, as its stock loader did;
+- a Pico 2 W with the patched loader; the Plus 2 W's timings above are
+  from the `pico2` build, with a 4,088 KB partition, as its stock loader
+  had;
 - a program started from `/etc/profile` or `AUTOEXEC.BAT` that loops
   through the shell (not M7's).
 

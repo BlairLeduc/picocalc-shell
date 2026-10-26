@@ -97,7 +97,9 @@ flash, but leaves the rest unused; **never use one for a larger flash
 than the board has**, as programs could then be written past its end.
 Copy it to the PicoCalc in BOOTSEL (hold Down or F3 at power-on). Your
 programs and the card are not touched. The same shell and programs run
-under either loader; installing pelrun's stock loader again undoes it.
+under either loader, but the shell must be one from the same release or
+later: an older one reports the loader as unknown and will not run
+programs. Installing pelrun's stock loader again undoes it.
 
 ### The card
 
