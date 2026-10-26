@@ -138,10 +138,14 @@ void dos_autoexec(shell_t *sh);
 /* ---- for the commands (dos.c) ------------------------------------------ */
 
 /* Take the switches out of argv: each word that starts with '/', with
- * one or more of them (`/W/P`). Letters in `allowed` set their bit in
- * *flags, without regard to case; argv keeps the rest, *argc counting
- * them. False, after "Invalid switch - /X", for any other. */
-bool dos_switches(shell_t *sh, int *argc, char **argv, const char *allowed, unsigned *flags);
+ * one or more of them (`/W/P`), or with `within`, the rest of any word
+ * from its first '/', as DOS read them (`\/W` is `\` and `/W`). Letters
+ * in `allowed` set their bit in *flags, without regard to case; argv
+ * keeps the rest, *argc counting them. False, after "Invalid switch -
+ * /X", for any other. Without `within`, a '/' inside a word is the
+ * word's: DATE's 10/22/26, FIND's string. */
+bool dos_switches(shell_t *sh, int *argc, char **argv, const char *allowed, bool within,
+                  unsigned *flags);
 
 /* An error in DOS's form, "why - name", or "why" with no name. */
 void dos_error(shell_t *sh, const char *why, const char *name);

@@ -256,6 +256,31 @@ int shell_command(shell_t *sh, int argc, char **argv, const char *in, const char
     return status;
 }
 
+static void discard(void *ctx, const char *buf, size_t n) {
+    (void)ctx;
+    (void)buf;
+    (void)n;
+}
+
+int shell_command_null(shell_t *sh, int argc, char **argv, const char *in,
+                       pipe_t *from, pipe_t *to) {
+    /* For a program or a command that leaves the shell the redirection is
+     * dropped instead: the null device leaves no file behind, which is
+     * why those refuse a redirection, and what they say before leaving
+     * is little. */
+    shell_cmd_fn fn = shell_builtin(argv[0]);
+    if (!fn || fn == cmd_menu || fn == cmd_usbdisk || system_leaves(fn))
+        return shell_command(sh, argc, argv, in, NULL, false, from, to);
+    out_t saved = sh->out;
+    bool saved_is_con = sh->out_is_con;
+    sh->out = (out_t){ discard, NULL, true };
+    sh->out_is_con = false;
+    int status = shell_command(sh, argc, argv, in, NULL, false, from, to);
+    sh->out = saved;
+    sh->out_is_con = saved_is_con;
+    return status;
+}
+
 int shell_pipeline(shell_t *sh, int n, shell_stage_fn stage, void *ctx) {
     pipe_t *from = NULL;
     int status = 0;

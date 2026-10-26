@@ -1169,6 +1169,14 @@ parsed before any of it runs, so a mistake at its end stops all of it, as
 in sh. Errors go to the terminal, never to a redirection. Break, Esc or
 Ctrl-C stops a long command and drops the rest of the line.
 
+*Added 2026-10-26:* `> /dev/null` and `>> /dev/null` throw the output
+away, as the DOS flavour's `> NUL` does (`shell_command_null`). There is
+no `/dev` on the card: only that exact path is special, as an output,
+and `< /dev/null` is an ordinary missing file. For a program or a
+command that leaves the shell, which refuse a redirection, it is
+dropped. It lets `/etc/profile` test a command without showing its
+output: `date > /dev/null || ntp`.
+
 *As built at M4:*
 
 - **Expansion as each command runs** (`src/core/expand.c`). The parser
@@ -1528,7 +1536,8 @@ rules for size, CR LF and safe save (§4.6).
   `unix.c` holds the UNIX flavour's (the parser, expansion, `sh` and
   `/etc/profile`, moved out of `shell.c` unchanged); `dos.c` the DOS
   flavour's. `shell.c` keeps what both share: running one command with
-  its redirections (`shell_command`), a pipeline (`shell_pipeline`),
+  its redirections (`shell_command`), or with its output thrown away
+  (`shell_command_null`, for `> NUL` and `> /dev/null`), a pipeline (`shell_pipeline`),
   the prompt and `usbdisk`. `files.c` resolves every operand
   through the flavour, so a shared command reads `C:\X` in the DOS
   build, and says its failures in the flavour's words. CMake builds the
@@ -1557,7 +1566,12 @@ rules for size, CR LF and safe save (§4.6).
   (DIR, COPY, XCOPY, DEL, DELTREE, FIND) read a word that starts with `/`
   as switches, one or several (`/W/P`), in either case; an unknown one
   is `Invalid switch - /X`. Every other `/` separates names, so
-  `CD /HOME` works, and so does `TYPE HOME/A.TXT`.
+  `CD /HOME` works, and so does `TYPE HOME/A.TXT`. *(Changed
+  2026-10-26, at the owner's asking:* in DIR, COPY, XCOPY, DEL and
+  DELTREE a `/` anywhere in a word starts its switches, as in DOS, so
+  `DIR \/W` is `DIR \ /W` and `DIR HOME/SUB` is `Invalid switch -
+  /SUB`. FIND and DATE keep a `/` inside a word, for FIND's string,
+  whose quotes are gone by then, and DATE's `10/22/26`.)
 - **Wildcards** (`dos_match`). A pattern with no `.` matches the whole
   name; one with a `.` matches the parts before and after the name's last
   `.` separately. `*` matches the rest of a part, `?` one character or
@@ -1596,7 +1610,13 @@ rules for size, CR LF and safe save (§4.6).
     `File cannot be copied onto itself`. DOS's joining of several files
     into one, and `+`, are not there: `Cannot copy several files into
     one file`. Every copy goes through `files_copy`, `cp`'s, so through
-    `name.new`. `/V` is accepted and changes nothing.
+    `name.new`. `/V` is accepted and changes nothing. *(Added
+    2026-10-26, at the owner's asking:* `COPY /B NAME+,,`, DOS's way to
+    touch a file, gives it the time now with `f_utime`, its contents not
+    rewritten, as `touch` does, and leaves it with the clock not set
+    (§3.8); each file for a wildcard; the operands may be one word or
+    several (`NAME +,,`). Only that form of `+` is there. `/B` is
+    accepted and changes nothing.)
   - **XCOPY** says `Reading source file(s)...`, names each file, and
     ends `n File(s) copied`. A directory, a wildcard or `/S` copies into
     a directory, made if need be; one file without them is copied to

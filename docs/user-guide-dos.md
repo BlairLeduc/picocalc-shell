@@ -57,7 +57,7 @@ The shell starts in `C:\HOME` if the card has one, and otherwise in
 
 ```
 C:\>HELP COPY
-usage: COPY source [destination]
+usage: COPY [/V] [/B] source [destination]
 Copy one or more files
 ```
 
@@ -99,9 +99,9 @@ from the command line.
 
 ### Paths
 
-- Paths use `\`: `C:\ORIC\KEYMAPS`. `/` works as well, except at the
-  start of a word for a command that takes switches, where `/W` is a
-  switch, as in DOS.
+- Paths use `\`: `C:\ORIC\KEYMAPS`. `/` works as well, except in DIR,
+  COPY, XCOPY, DEL and DELTREE, where a `/` starts a switch anywhere in
+  a word, as in DOS: `DIR \/W` is `DIR \ /W`.
 - A path may start with `C:` or not: `C:\HOME` and `\HOME` are the same.
 - Commands and switches can be typed in either case: `dir /w` is `DIR /W`.
 - `CD..`, `CD\` and `DIR/W` work with no space, as in DOS.
@@ -195,12 +195,17 @@ and time on the next row, so every row fits the 40 columns.
 
 | Command | Does |
 |---|---|
-| `COPY source [destination]` | copies files: `COPY A.TXT B.TXT`, `COPY *.TXT \BACKUP`, `COPY *.TXT *.BAK` |
+| `COPY [/V] [/B] source [destination]` | copies files: `COPY A.TXT B.TXT`, `COPY *.TXT \BACKUP`, `COPY *.TXT *.BAK`. `/V` and `/B` are accepted and change nothing; `COPY NAME+,,` touches a file (below) |
 | `XCOPY source [destination] [/S]` | copies files and, with `/S`, every directory below |
 
 `COPY` and `XCOPY` give each copy the date and time of the file it was
 copied from, as DOS did.
-| `DEL path`, `ERASE` | deletes files. `DEL *.*` asks first; `/P` asks for each. **There is no undo** |
+
+`COPY /B NAME+,,` gives a file the date and time now, leaving what is in
+it, as in DOS: UNIX's `touch`. A wildcard does each file it matches. With
+the clock not set, the file is left as it is. `/B` changes nothing (a
+copy is always byte for byte), so `COPY NAME+,,` is the same.
+| `DEL [/P] path`, `ERASE` | deletes files. `DEL *.*` asks first; `/P` asks for each. **There is no undo** |
 | `REN path name`, `RENAME` | renames files: `REN *.TXT *.OLD` |
 | `MOVE source... destination` | moves files into a directory, or renames a file or directory |
 | `ATTRIB [+R\|-R] [+A\|-A] [+S\|-S] [+H\|-H] [path]` | shows or changes a file's attributes: read-only, archive, system, hidden |
@@ -548,6 +553,26 @@ DATE
 TIME
 :SET
 ```
+
+With a DS3231 fitted too, the shell has read the chip before
+`AUTOEXEC.BAT` runs, so the clock is already set unless the chip lost
+its time. To use the network only then:
+
+```
+@ECHO OFF
+SET TZ=EST5EDT
+DATE /T > NUL
+IF NOT ERRORLEVEL 1 GOTO SET
+NTP
+DATE /T > NUL
+IF NOT ERRORLEVEL 1 GOTO SET
+DATE
+TIME
+:SET
+```
+
+The time NTP gives is written to the chip, ready for the next power-on.
+The chip drifts a little; `NTP /F` now and then puts it right.
 
 ### CONFIG.SYS
 

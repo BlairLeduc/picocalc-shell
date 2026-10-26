@@ -45,16 +45,19 @@ bool dos_too_many(shell_t *sh, int argc, char **argv, int max) {
     return true;
 }
 
-bool dos_switches(shell_t *sh, int *argc, char **argv, const char *allowed, unsigned *flags) {
+bool dos_switches(shell_t *sh, int *argc, char **argv, const char *allowed, bool within,
+                  unsigned *flags) {
     *flags = 0;
     int kept = 1;
     for (int i = 1; i < *argc; i++) {
         char *a = argv[i];
-        if (a[0] != '/') {
+        char *slash = within ? strchr(a, '/') : (a[0] == '/' ? a : NULL);
+        if (!slash) {
             argv[kept++] = a;
             continue;
         }
-        for (const char *s = a; *s;) {
+        if (slash != a) argv[kept++] = a;   /* the name before them */
+        for (const char *s = slash; *s;) {
             const char *hit = s[1] ? strchr(allowed, upper(s[1])) : NULL;
             if (!hit || (s[2] && s[2] != '/')) {
                 size_t n = 1;
@@ -65,6 +68,7 @@ bool dos_switches(shell_t *sh, int *argc, char **argv, const char *allowed, unsi
             *flags |= 1u << (hit - allowed);
             s += 2;
         }
+        *slash = '\0';
     }
     argv[kept] = NULL;
     *argc = kept;
@@ -270,7 +274,7 @@ const shell_builtin_t flavour_builtins[] = {
     { "CHDIR",     dos_cd,        "CHDIR [path]", "Displays or changes the directory" },
     { "CHOICE",    dos_choice,    "CHOICE [/C[:]keys] [/N] [/S] [/T[:]c,nn] [text]", "Waits for one of a set of keys" },
     { "CLS",       dos_cls,       "CLS", "Clears the screen" },
-    { "COPY",      dos_copy,      "COPY source [destination]", "Copy one or more files" },
+    { "COPY",      dos_copy,      "COPY [/V] [/B] source [destination]", "Copy one or more files" },
     { "DATE",      dos_date,      "DATE [/T | date]", "Displays or sets the date" },
     { "DEL",       dos_del,       "DEL [/P] path", "Removes one or more files" },
     { "DELTREE",   dos_deltree,   "DELTREE [/Y] path...", "Deletes a directory and its contents" },
@@ -321,12 +325,6 @@ const unsigned flavour_nbuiltins = sizeof flavour_builtins / sizeof flavour_buil
 /* Each level's line, parsed. */
 static dos_parse_t s_parse[SHELL_DEPTH];
 
-static void discard(void *ctx, const char *buf, size_t n) {
-    (void)ctx;
-    (void)buf;
-    (void)n;
-}
-
 static int stage(shell_t *sh, int k, pipe_t *from, pipe_t *to, void *ctx) {
     const dos_cmd_t *c = &((const dos_parse_t *)ctx)->cmds[k];
     const char *name = c->argv[0];
@@ -348,24 +346,10 @@ static int stage(shell_t *sh, int k, pipe_t *from, pipe_t *to, void *ctx) {
         }
         return dos_batch_run(sh, bat, name, c->tail, false);
     }
-    /* > NUL throws the output away, as DOS's NUL device did. For a
-     * program or a command that leaves the shell it is dropped instead:
-     * NUL leaves no file behind, which is why those refuse a redirection
-     * (shell_command), and what they say before leaving is little. */
-    const char *out = c->out;
-    shell_cmd_fn fn = shell_builtin(name);
-    bool leaves = !fn || fn == cmd_menu || fn == cmd_usbdisk || system_leaves(fn);
-    if (out && path_same(out, "NUL") && leaves) out = NULL;
-    if (!out || !path_same(out, "NUL"))
-        return shell_command(sh, c->argc, c->argv, c->in, out, c->append, from, to);
-    out_t saved = sh->out;
-    bool saved_is_con = sh->out_is_con;
-    sh->out = (out_t){ discard, NULL, true };
-    sh->out_is_con = false;
-    int status = shell_command(sh, c->argc, c->argv, c->in, NULL, false, from, to);
-    sh->out = saved;
-    sh->out_is_con = saved_is_con;
-    return status;
+    /* > NUL throws the output away, as DOS's NUL device did. */
+    if (c->out && path_same(c->out, "NUL"))
+        return shell_command_null(sh, c->argc, c->argv, c->in, from, to);
+    return shell_command(sh, c->argc, c->argv, c->in, c->out, c->append, from, to);
 }
 
 int dos_commands(shell_t *sh, const char *text) {
