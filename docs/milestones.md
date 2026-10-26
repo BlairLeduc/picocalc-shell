@@ -26,7 +26,8 @@ program (design.md §10, M7). pelrun's loader is a submodule at v2.5 in
 `third_party/uf2loader`; `patches/uf2loader-boot-shell.patch` changes
 `stage3/stage3.c`, the card's polling in `common/petit_fatfs/diskio.c`
 and the version (`2.5-shell`); `tools/build-loader.sh`
-builds it. The shell sends `BOOT_DEFAULT` to start a program and knows
+builds it, once for each size of flash: 4, 8 and 16 MB (the owner,
+2026-10-25). The shell sends `BOOT_DEFAULT` to start a program and knows
 `2.5-shell`.
 
 **The owner chose**, during the milestone:
@@ -99,6 +100,12 @@ made stage3 look about 2.1 s slow before the cause was found (HW §7.1).
 **Not checked:**
 
 - the patched loader's polling on other cards than the test card;
+- the 4, 8 and 16 MB builds on a board (`bootloader_rp2350_<n>mb.uf2`,
+  each the Pico 2's board with only the flash size changed; checked only
+  by their partition tables, the flash size the C code gets, and the
+  4 MB build differing from the tested `pico2` build by its board name);
+  the owner's Pico Plus 2 run above was the
+  `pimoroni_pico_plus2_rp2350` build, and no 8 MB board has run one;
 - the RUN pin, and `REASON` after a real power-on (read only after
   OpenOCD's reset);
 - a Pico 2 W with the patched loader, and the Plus 2 W's 16 MB build

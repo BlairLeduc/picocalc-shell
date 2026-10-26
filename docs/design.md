@@ -47,6 +47,7 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-18 | Scripts and batch files can show menus (M11). The UNIX flavour has bash's `select NAME in WORDS; do LIST; done`, with `break`, `PS3` and `REPLY`, as its one compound command: no `if` or `case`, so a menu branches by running the word chosen. The DOS flavour has DOS 6's `CHOICE` with all its switches (`/C`, `/N`, `/S`, `/T`), for `IF ERRORLEVEL` and `GOTO`. | 4.4, 4.7, 10 |
 | 2026-10-25 | The shell does not load RAM UF2s itself or keep itself resident across one; stage3 loads them, after a reboot. M7's patched stage3 skips its 0.5 s wait for a key when a command is waiting, which takes most of the time out of each trip to a program and back. | 10 |
 | 2026-10-25 | Under M7, only a power-on gives the shell with no command; a program's `watchdog_reboot()` with no command restarts it, as under the stock loader. A restart loop is broken by holding Up/F1/F5 through the restart, which stage3 watches for after draining the FIFO, or by a power cycle. The commands in the watchdog's scratch registers stay stock 2.5's, so the shell and programs run the same under either loader (the owner). A RAM program restarts itself with `BOOT_RAM` and its own 8.3 path; its loop is broken only by a power cycle, since a command skips the watch for a key. | 10 |
+| 2026-10-25 | M7's patched stage3 is built once for each size of flash, 4, 8 and 16 MB, each the Pico 2's board with only the flash size changed, since its partition table is fixed when it is built (the owner). | 10 |
 
 References: **HW §N** is [hardware-notes.md](hardware-notes.md). **EL §N** is
 the emulators' `emulator-lessons.md`
@@ -2103,9 +2104,17 @@ in [milestones.md](milestones.md).
   `references/` left alone; `patches/uf2loader-boot-shell.patch` changes
   only `stage3/stage3.c`, the card's two polling loops in
   `common/petit_fatfs/diskio.c`, and the version in `CMakeLists.txt`, and
-  `tools/build-loader.sh` applies it to a copy and builds
-  `bootloader_pico2.uf2` (`--stock` builds stock 2.5 beside it, to
-  compare). The patch:
+  `tools/build-loader.sh` applies it to a copy and builds it once for
+  each size of flash, 4, 8 and 16 MB (`bootloader_rp2350_4mb.uf2` and so
+  on; `--stock` builds stock 2.5 the same way, to compare). stage3's
+  partition table, and the flash end it reports, are fixed by the flash
+  size it is built for, so a build for a larger flash must never go on a
+  smaller one; a smaller one leaves the rest unused, as pelrun's 4 MB
+  `pico2` build does on a 16 MB board. Each build is the Pico 2's board
+  (`boards/pico2.h`) with only the flash size changed
+  (`patches/boards/rp2350_<n>mb.h`), as the Plus 2 W ran the `pico2`
+  build; 8 MB is for an Adafruit Feather RP2350 (*added 2026-10-25*).
+  The patch:
   - swaps the no-key and Up/F1/F5 modes in `read_bootmode()` at a
     power-on, which the watchdog's `REASON` shows as zero (HW §8.4);
     a reset by the RUN pin, or OpenOCD's `reset`, counts as one;

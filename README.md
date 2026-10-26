@@ -82,14 +82,22 @@ small patch (`patches/uf2loader-boot-shell.patch`):
   switching off and on, for a program that runs from RAM);
 - with no card, switching on starts the last program.
 
-Build it with `tools/build-loader.sh`, which gives
-`build/loader/output/bootloader_pico2.uf2` (for a Pimoroni Pico Plus 2
-or Plus 2 W, with all 16 MB of its flash for programs, put
-`PICO_BOARD=pimoroni_pico_plus2_rp2350` or
-`PICO_BOARD=pimoroni_pico_plus2_w_rp2350` before it), and copy that to the
-PicoCalc in BOOTSEL (hold Down or F3 at power-on). Your programs and the
-card are not touched. The same shell and programs run under either
-loader; installing pelrun's stock loader again undoes it.
+Build it with `tools/build-loader.sh`. The loader's program area is
+fixed when it is built, so there is one build for each size of flash, in
+`build/loader/output/`:
+
+| Build | Flash | Boards |
+|---|---|---|
+| `bootloader_rp2350_4mb.uf2` | 4 MB | Pico 2, Pico 2 W |
+| `bootloader_rp2350_8mb.uf2` | 8 MB | Adafruit Feather RP2350 |
+| `bootloader_rp2350_16mb.uf2` | 16 MB | Pimoroni Pico Plus 2, Plus 2 W |
+
+Use the one for your board's flash. A smaller one works on a larger
+flash, but leaves the rest unused; **never use one for a larger flash
+than the board has**, as programs could then be written past its end.
+Copy it to the PicoCalc in BOOTSEL (hold Down or F3 at power-on). Your
+programs and the card are not touched. The same shell and programs run
+under either loader; installing pelrun's stock loader again undoes it.
 
 ### The card
 
