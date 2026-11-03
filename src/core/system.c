@@ -193,6 +193,7 @@ int cmd_info(shell_t *sh, int argc, char **argv) {
 static int leave(shell_t *sh, int argc, const char *name, shell_power_t what, const char *msg) {
     if (argc != 1) return usage(sh, name);
     if (!sh->sys.power) return not_here(sh, name);
+    if (what != SHELL_POWER_OFF) shell_keep_cwd(sh);
     shell_leaving(sh);
     out_puts(&sh->con, msg);
     const char *why = sh->sys.power(sh->sys.ctx, what);

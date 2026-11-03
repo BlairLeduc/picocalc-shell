@@ -150,6 +150,10 @@ int shell_run(shell_t *sh, const char *line);
  * port the clock's local offset, and save the history. */
 void shell_leaving(shell_t *sh);
 
+/* The shell is restarting, not being switched off: its next start comes
+ * back to the current directory. */
+void shell_keep_cwd(shell_t *sh);
+
 /* For builtins: an error to the terminal, never to a redirection. */
 void shell_error(shell_t *sh, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 

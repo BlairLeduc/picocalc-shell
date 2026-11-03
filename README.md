@@ -60,6 +60,8 @@ flash.
 at any time.
 3. Copy the shell to the root of the card, renamed `/BOOT2350.UF2`.
 4. Put your programs in `/pico2-apps/`, exactly where the loader expects them.
+   In the DOS flavour they can also live with their files, in any directory:
+   the shell looks in the current directory and along `PATH`.
 5. Hold Up or F1 at power-on to start the shell.
 
 To change flavour, copy the other one over `/BOOT2350.UF2`, renamed in

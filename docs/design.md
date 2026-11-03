@@ -26,7 +26,7 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-12 | The shell is called **shell**. Its prompt is the current directory followed by `>`. | 4.4 |
 | 2026-10-12 | The licence is GPL-3.0. | 9 |
 | 2026-10-12 | RP2350 boards only; RP2040 boards are left out. | 1 |
-| 2026-10-12 | Programs live in `/pico2-apps/`, the loader menu's own directory, not `/bin`. | 4.3 |
+| 2026-10-12 | Programs live in `/pico2-apps/`, the loader menu's own directory, not `/bin`. *Narrowed 2026-11-03: in the DOS flavour it is only `PATH`'s default, and a program may live with its files in any directory.* | 4.3, 4.7 |
 | 2026-10-12 | The LCD's SPI runs at 75 MHz by default, after M0's measurements; 25 MHz stays as a build option. | 4.1 |
 | 2026-10-12 | `ls` hides names FAT marks hidden or system, as it hides names starting with `.`. | 4.2 |
 | 2026-10-12 | Variables come with M4. | 4.4, 10 |
@@ -41,6 +41,7 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-16 | A release offers the two flavours' release builds as `shell-unix.uf2` and `shell-dos.uf2`; the user renames the one they want to `BOOT2350.UF2` on the card. | 4.7 |
 | 2026-10-18 | The UNIX flavour has only 40 columns too, in the Master 512's font (`font-master-512-8x10.c`), arranged as the terminal's 128 glyphs with the DEC graphics at `0x00`–`0x1F`, as IBM's is. There is no `font` command and no 64-column mode in either flavour, and the owner's 8x10 and 5x10 are no longer built in. This replaces the 2026-10-12 and 2026-10-14 decisions on the UNIX flavour's fonts. | 4.1 |
 | 2026-10-17 | `picocalc_shell_exit()` returns false when UF2 Loader did not start the program, as well as with no card, and the program decides what to do then (such as power off by its own means). The header stays independent and does not touch the southbridge; `picocalc_shell_loader_present()` tells a program beforehand. | 3.4 |
+| 2026-11-03 | Closer to DOS (§4.7): the DOS flavour starts in `C:\`, not `C:\HOME`; a `NAME` looks in one directory at a time, a program before a batch file, in place of a batch file anywhere beating a program; `NAME.UF2` and a path with no extension run a program; COPY takes `CON` and `NUL`. In both flavours a restart comes back to the directory left (§4.3). | 4.3, 4.7 |
 | 2026-10-22 | For M12 (§3.8): the DS3231 is on `i2c0`, on the bus alone, with no GPIO (no `SQW`). Time zones are POSIX `TZ` strings. The UNIX flavour sets the time in POSIX's form, `date mmddHHMM[[cc]yy]`. The Wi-Fi password may be kept in plain text on the card. `i2c0` is on GP4 (SDA) and GP5 (SCL). The DOS flavour has `C:\CONFIG.SYS`, with `COUNTRY=`. `DIR` takes the 39-column layout with the size moved left. `/ntp/ntp.cfg` names one network (*changed the same day:* it was to hold several). The development build's UART moves off GP4 and GP5, to the pins left for it: 2, 3, 21 and 28. | 3.8 |
 | 2026-10-22 | Each flavour has a Pico 2 build and a separate Pico 2 W build; only the W build supports NTP (§3.8). A release offers `shell-unix.uf2`, `shell-dos.uf2`, `shell-unix-w.uf2` and `shell-dos-w.uf2`, and `ntp.uf2` for `/pico2-apps/`; this extends the 2026-10-16 decision. | 3.8, 4.7 |
 | 2026-10-22 | M12's design (§3.8) is settled: NTP runs in a separate RAM program, `ntp.uf2`, at most once per power-on, joining the one network `/ntp/ntp.cfg` names; `i2c0` runs at 100 kHz; the AON timer and the DS3231 hold UTC, POSIX `TZ` gives local time, and FAT timestamps are local; the record of the clock is in POWMAN scratch 0–2; `picocalc_shell.h` gains `picocalc_shell_time()` and `picocalc_shell_set_time()`; a clock that is not set is handled as in §3.8 (`date`'s status 1; `DATE`, `TIME`, and `/T` with `ERRORLEVEL`); file times as in §3.8 (`touch` sets an existing file's time, `cp` the current time, `COPY` keeps the source's; `ls -l`'s six-month rule); `CONFIG.SYS` as in §3.8. | 3.8 |
@@ -1131,7 +1132,7 @@ runs at 115,200 baud; measure display speed in the release build.
 /pico2-apps/*.uf2     programs, run by name; the loader's menu lists the same files
 /etc/profile          run at startup
 /home/                $HOME, the starting directory
-/.shell/              history, and pipes too large for RAM while they run
+/.shell/              history, the directory to come back to, and pipes too large for RAM while they run
 /atom/ /ace/ /oric/   the emulators' own directories, untouched
 ```
 
@@ -1141,6 +1142,20 @@ copied there shows up in both, and `menu` and the shell never disagree
 about what is installed. `$PATH` can add further directories, but the
 default is this one. Any file with the wrong family is caught by the check
 in §3.3 before flash is touched.
+
+**The directory across a restart** (*settled 2026-11-03*). A restart loses
+the shell's RAM, so going to a program, the menu, `reboot` or `bootsel`
+writes the current directory to `/.shell/cwd`, through name.new, and the next
+start reads and removes it (`history_keep_cwd`, `history_take_cwd`). Being
+removed, it says "this start is a return": `poweroff` does not write it, and
+the power switch at the prompt has no chance to, so those start in the
+default directory. Switching off inside a program still returns, as nothing
+tells the shell. `usbdisk` does not write it, since the shell does not
+restart. The startup file runs first, from the default directory, so it
+behaves the same on every start; the directory comes back after it, if still
+on the card. A startup file that itself runs a program (`NTP`) overwrites
+the file with its own directory. One small card write per restart; its cost
+in the time to come back is not measured.
 
 ### 4.4 Command language
 
@@ -1493,8 +1508,9 @@ card, `files.c` (with safe saves, EL §8.6), running programs (`run.c`,
   columns.)* There is no `DATE` or `TIME`: the PicoCalc has no clock.
 - **History.** Up and Down as now; F3 repeats the last line, as DOSKEY
   and DOS's own F3 did.
-- **Batch files.** `NAME.BAT` runs by name, ahead of a program of the
-  same name. `%0`–`%9`, `SHIFT`, `GOTO :label`, `IF [NOT] EXIST`,
+- **Batch files.** `NAME.BAT` runs by name, after a program of the same
+  name in the same directory *(changed 2026-11-03: it was ahead of a
+  program anywhere)*. `%0`–`%9`, `SHIFT`, `GOTO :label`, `IF [NOT] EXIST`,
   `IF [NOT] ERRORLEVEL n`, `IF [NOT] a==b`, `CALL`, `REM`, `ECHO OFF` and
   `@`, `PAUSE`, `CHOICE` (*M11*), and `FOR %%x IN (set) DO command`. `C:\AUTOEXEC.BAT` runs
   at start, in place of `/etc/profile`.
@@ -1545,9 +1561,9 @@ rules for size, CR LF and safe save (§4.6).
   differ by a character (Tab's separator, F3 and Esc, `help`'s last
   lines, the builtins' case). The UNIX flavour's tests pass unchanged.
 - **Start.** The banner is `PicoCalc shell <version> (DOS)`. The shell
-  starts in `\HOME` if the card has it, spelled as the card has it, so
-  the prompt is `C:\HOME>`; otherwise in `C:\`. `AUTOEXEC.BAT` runs
-  after the banner (*from step 2*).
+  starts in `C:\` *(changed 2026-11-03: it was `\HOME`)*, as DOS did, or
+  where `AUTOEXEC.BAT`, which runs after the banner (*from step 2*), goes
+  with `CD`.
 - **The line.** `%NAME%` is replaced over the whole line before it is
   parsed, at the prompt as well as in batch files (DOS 5 did it only in
   batch files; the design asks for variables, so the prompt has them
@@ -1664,8 +1680,18 @@ rules for size, CR LF and safe save (§4.6).
     take their words in either case.
 - **Programs.** A name that is not a builtin runs `NAME.UF2` from the
   current directory first, as DOS looked, then from each directory of
-  `PATH`; a name with a `\`, `/` or `:` is a path. Otherwise `Bad command
-  or file name`.
+  `PATH`, whose default is `C:\PICO2-APPS` so that a card set up for the
+  loader's menu works unchanged; a name with a `\`, `/` or `:` is a path.
+  *(From 2026-11-03)* `NAME.UF2` works typed in full, a path with no
+  extension gets `.UF2`, as `C:\WP51\WP` was `WP.EXE`, and Tab offers
+  programs in the current directory. Otherwise `Bad command or file name`.
+- **COPY's devices** *(2026-11-03)*. `CON` and `NUL`, with `:` or not, as
+  either operand; a file of that name on the card cannot be reached by
+  COPY. `COPY CON` writes through name.new, lines ended CR LF, using
+  `line_read_text`, so the prompt's editing keys work. Ctrl+Z or F6 ends it
+  at once, where DOS showed `^Z` and waited for Enter, and an Enter after it
+  only gives another prompt. `COPY NUL NAME` makes an empty file. Names
+  elsewhere are still files, but for `> NUL`, and `XCOPY` has no devices.
 - **At the prompt.** F3 puts in the rest of the last line from the
   cursor's column, as DOS's F3 did; Esc drops the line. Tab completes
   with `\` after a directory and puts nothing before a space, since DOS
@@ -1687,11 +1713,11 @@ rules for size, CR LF and safe save (§4.6).
   `dos_line`, which expands it, takes REM, IF and FOR from its start, and
   hands the rest to the parser (`dos_commands`).
 - **Finding one.** A name that is not a builtin is looked for as
-  `NAME.BAT` in the current directory, then along `PATH`, before
-  `NAME.UF2` is looked for at all: a batch file anywhere on the search
-  beats a program of the same name, which is the design's rule rather
-  than DOS's per-directory order. `NAME.BAT` typed in full, and a path,
-  work too; another extension is never a batch file. A batch file in a
+  `NAME.BAT` in the current directory, then along `PATH`. *(Changed
+  2026-11-03, to DOS's order)* The search ends at the first directory
+  holding `NAME.UF2` or `NAME.BAT`, the program first if it has both, as
+  DOS took `.COM`, `.EXE`, then `.BAT`. `NAME.BAT` typed in full, and a
+  path, work too; another extension is never a batch file. A batch file in a
   pipe or with a redirection is refused (`Cannot redirect a batch file;
   CALL it`), since its lines have their own; `CALL NAME > FILE` runs it
   under CALL's redirection.

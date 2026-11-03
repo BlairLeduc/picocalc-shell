@@ -119,12 +119,18 @@ void shell_prompt(shell_t *sh) {
 
 void shell_start(shell_t *sh) {
     files_mount();
-    const char *home = vars_get("HOME", 4);
+    /* DOS starts at the root, as DOS did; UNIX in $HOME. */
+    const char *home = SHELL_DOS ? "/" : vars_get("HOME", 4);
     if (!home) home = SHELL_HOME;
     strcpy(sh->cwd, files_is_dir(home) ? home : "/");
     out_puts(&sh->con, "\033c");   /* RIS: a clean screen whatever ran before */
     history_load();
+    /* Back from a restart: the directory left, once the startup file has
+     * run from the usual place. */
+    static char kept[SHELL_PATH_MAX + 1];
+    bool back = history_take_cwd(kept);
     flavour_start(sh);
+    if (back && files_is_dir(kept)) files_chdir(sh, kept);
     sh->stop = false;
     shell_prompt(sh);
 }
@@ -133,6 +139,11 @@ void shell_leaving(shell_t *sh) {
     clock_leaving();
     const char *err = history_save();
     if (err) shell_error(sh, "shell: %s: %s\n", HISTORY_FILE, err);
+}
+
+void shell_keep_cwd(shell_t *sh) {
+    const char *err = history_keep_cwd(sh->cwd);
+    if (err) shell_error(sh, "shell: %s: %s\n", CWD_FILE, err);
 }
 
 void shell_error(shell_t *sh, const char *fmt, ...) {

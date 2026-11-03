@@ -84,6 +84,28 @@ const char *history_save(void) {
     return err;
 }
 
+const char *history_keep_cwd(const char *cwd) {
+    FRESULT r = f_mkdir("/.shell");
+    if (r != FR_OK && r != FR_EXIST) return files_why(r);
+    const char *err = files_safe_open(&s_save, CWD_FILE);
+    if (err) return err;
+    files_safe_write(&s_save, cwd, strlen(cwd));
+    files_safe_write(&s_save, "\n", 1);
+    return files_safe_commit(&s_save);
+}
+
+bool history_take_cwd(char out[SHELL_PATH_MAX + 1]) {
+    if (files_open_startup(&s_file, CWD_FILE) != FR_OK) return false;
+    reader_init(&s_rd, &(input_t){ &s_file, NULL });
+    bool whole;
+    long n = reader_line(&s_rd, s_line, sizeof s_line, &whole);
+    f_close(&s_file);
+    f_unlink(CWD_FILE);
+    if (n <= 0 || !whole || s_line[0] != '/' || (size_t)n > SHELL_PATH_MAX) return false;
+    memcpy(out, s_line, (size_t)n + 1);
+    return true;
+}
+
 int cmd_history(shell_t *sh, int argc, char **argv) {
     (void)argv;
     if (argc != 1) {

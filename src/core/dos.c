@@ -337,7 +337,7 @@ static int stage(shell_t *sh, int k, pipe_t *from, pipe_t *to, void *ctx) {
         return 0;
     }
     dos_tail = c->tail;
-    /* A batch file, ahead of a program of the same name. */
+    /* A batch file, unless a program of the same name is found first. */
     const char *bat = shell_is_builtin(name) ? NULL : dos_batch_find(sh, name);
     if (bat) {
         if (c->in || c->out || from || to) {

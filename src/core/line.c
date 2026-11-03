@@ -195,6 +195,8 @@ static void offer_commands(shell_t *sh, const char *prefix, size_t n) {
     const char *name;
     for (unsigned i = 0; (name = shell_builtin_at(i)) != NULL; i++)
         if (has_prefix(name, prefix, n)) offer(name, strlen(name), false);
+    /* DOS looks in the current directory first, as run.c does. */
+    if (SHELL_DOS && flavour_resolve(s_dir, sh->cwd, ".")) offer_dir(s_dir, prefix, n, true);
     /* An empty entry is the current directory, as in run.c's search. */
     for (const char *path = vars_get("PATH", 4); path;) {
         const char *colon = strchr(path, FLAVOUR_PATH_SEP);
@@ -414,6 +416,29 @@ int line_read(shell_t *sh, const char *prompt) {
             return 0;
         }
         if (key == 0x03 || key == 0x1B || key == KEY_BREAK) {
+            line_key(sh, KEY_END);
+            sh->stop = true;
+            return -1;
+        }
+        if (line_key(sh, key)) return 1;
+    }
+}
+
+int line_read_text(shell_t *sh) {
+    if (!sh->at_bol) out_puts(&sh->con, "\n");
+    line_start(sh, 0);
+    for (;;) {
+        int key = sh->hooks.getkey(sh->hooks.ctx);
+        if (key < 0) {
+            out_puts(&sh->con, "\n");
+            return 0;
+        }
+        if (key == 0x1A || key == KEY_F6) {
+            line_key(sh, KEY_END);
+            out_puts(&sh->con, "^Z\n");
+            return 0;
+        }
+        if (key == 0x03 || key == KEY_BREAK) {
             line_key(sh, KEY_END);
             sh->stop = true;
             return -1;

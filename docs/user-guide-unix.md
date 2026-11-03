@@ -40,7 +40,10 @@ buy batteries
 /oric>
 ```
 
-The shell starts in `/home` if the card if it exists, and otherwise in `/`.
+The shell starts in `/home` if the card has it, and otherwise in `/`.
+Coming back from a program, a `reboot` or `menu`, it returns to the
+directory you left, if that is still on the card. After `poweroff` or the
+power switch at the prompt, it starts as at first.
 
 `man` lists the commands, and `man name` provides detail:
 

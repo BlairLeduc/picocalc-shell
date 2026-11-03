@@ -322,7 +322,21 @@ static bool batch_in(shell_t *sh, const char *dir, const char *file) {
            f_stat(s_found, &s_fno) == FR_OK && !(s_fno.fattrib & AM_DIR);
 }
 
+/* Whether the search ends in `dir`: DOS looked in one directory at a
+ * time, a program before a batch file, so *found is the batch file, or
+ * NULL for a program, which run.c then finds in the same place. `prog`
+ * is NULL when the name was typed with .BAT. */
+static bool ends_in(shell_t *sh, const char *dir, const char *prog, const char *file,
+                    const char **found) {
+    *found = NULL;
+    if (prog && batch_in(sh, dir, prog)) return true;
+    if (!batch_in(sh, dir, file)) return false;
+    *found = s_found;
+    return true;
+}
+
 const char *dos_batch_find(shell_t *sh, const char *name) {
+    static char prog[SHELL_PATH_MAX + 1];
     char *file = s_name;
     const char *base = name;
     for (const char *s = name; *s; s++)
@@ -332,15 +346,24 @@ const char *dos_batch_find(shell_t *sh, const char *name) {
     size_t n = strlen(name);
     if (n + (dot ? 1 : 5) > sizeof s_name) return NULL;
     memcpy(file, name, n + 1);
-    if (!dot) memcpy(file + n, ".BAT", 5);
+    if (!dot) {
+        memcpy(file + n, ".BAT", 5);
+        memcpy(prog, name, n);
+        memcpy(prog + n, ".UF2", 5);
+    }
 
     if (flavour_is_path(name)) {
+        if (!dot && dos_resolve(s_found, sh->cwd, prog) && f_stat(s_found, &s_fno) == FR_OK &&
+            !(s_fno.fattrib & AM_DIR))
+            return NULL;
         if (!dos_resolve(s_found, sh->cwd, file) || f_stat(s_found, &s_fno) != FR_OK ||
             (s_fno.fattrib & AM_DIR))
             return NULL;
         return s_found;
     }
-    if (batch_in(sh, ".", file)) return s_found;
+    const char *found;
+    const char *uf2 = dot ? NULL : prog;
+    if (ends_in(sh, ".", uf2, file, &found)) return found;
     char *dir = s_word[0];
     for (const char *p = vars_get("PATH", 4); p;) {
         const char *semi = strchr(p, ';');
@@ -348,7 +371,7 @@ const char *dos_batch_find(shell_t *sh, const char *name) {
         if (len > 0 && len <= SHELL_PATH_MAX) {
             memcpy(dir, p, len);
             dir[len] = '\0';
-            if (batch_in(sh, dir, file)) return s_found;
+            if (ends_in(sh, dir, uf2, file, &found)) return found;
         }
         p = semi ? semi + 1 : NULL;
     }

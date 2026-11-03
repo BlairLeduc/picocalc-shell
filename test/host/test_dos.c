@@ -16,6 +16,7 @@
 #include "history.h"
 #include "host_disk.h"
 #include "keycodes.h"
+#include "line.h"
 #include "run.h"
 #include "shell.h"
 #include "test_util.h"
@@ -412,12 +413,12 @@ static int batch_tests(void) {
     CHECK(run("SELF") == 1 && strcmp(con, "Batch files nested more than 3 deep\n") == 0, "'%s'", con);
     CHECK(run("CALL NOPE") == 127 && has("Bad command or file name"), "'%s'", con);
 
-    /* A batch file ahead of a program of the same name, here or on PATH,
-     * or by its path; not under another extension. */
-    CHECK(put("/HOME/HERE.BAT", "@ECHO the batch\r\n") &&
+    /* A batch file here or on PATH, or by its path; not under another
+     * extension. */
+    CHECK(put("/HOME/ALONE.BAT", "@ECHO the batch\r\n") &&
               put("/pico2-apps/ONPATH.BAT", "@ECHO on the path\r\n"),
-          "HERE, ONPATH");
-    CHECK(run("here") == 0 && strcmp(con, "the batch\n") == 0, "'%s'", con);
+          "ALONE, ONPATH");
+    CHECK(run("alone") == 0 && strcmp(con, "the batch\n") == 0, "'%s'", con);
     CHECK(run("ONPATH") == 0 && strcmp(con, "on the path\n") == 0, "'%s'", con);
     CHECK(run("\\pico2-apps\\onpath") == 0 && strcmp(con, "on the path\n") == 0, "'%s'", con);
     CHECK(run("C:\\PICO2-APPS\\ONPATH.BAT") == 0 && has("on the path"), "'%s'", con);
@@ -456,11 +457,12 @@ static int dos_tests(bool fat32) {
     CHECK(f_mkdir("/HOME") == FR_OK && f_mkdir("/pico2-apps") == FR_OK, "dirs");
     CHECK(f_setlabel("PICOCALC") == FR_OK, "label");
 
-    /* The banner and the prompt, $P$G, as the card spells HOME. */
+    /* The banner and the prompt, $P$G, at the root even with a \HOME. */
     clear();
     shell_start(&sh);
-    CHECK(has("PicoCalc shell\033[0m test (DOS)\n\nC:\\HOME>"), "%s: start '%s'", fs, con);
-    CHECK(strcmp(sh.cwd, "/HOME") == 0, "cwd %s", sh.cwd);
+    CHECK(has("PicoCalc shell\033[0m test (DOS)\n\nC:\\>"), "%s: start '%s'", fs, con);
+    CHECK(strcmp(sh.cwd, "/") == 0, "cwd %s", sh.cwd);
+    CHECK(run("cd \\home") == 0 && strcmp(sh.cwd, "/HOME") == 0, "as the card spells HOME");
 
     /* Names and switches in either case; CD alone shows where. */
     CHECK(run("cd") == 0 && strcmp(con, "C:\\HOME\n") == 0, "cd: '%s'", con);
@@ -752,6 +754,74 @@ static int dos_tests(bool fat32) {
     CHECK(run("THERE") == 1 && has("cannot run programs"), "found on PATH: '%s'", con);
     CHECK(run("\\pico2-apps\\there.uf2") == 1 && has("cannot run programs"), "by path: '%s'",
           con);
+    CHECK(run("HERE.UF2") == 1 && has("cannot run programs"), "with .UF2: '%s'", con);
+    CHECK(run("THERE.uf2") == 1 && has("cannot run programs"), "on PATH, .uf2: '%s'", con);
+    CHECK(run("\\HOME\\HERE") == 1 && has("cannot run programs"), "path, no .UF2: '%s'", con);
+    CHECK(run("..\\HOME\\here") == 1 && has("cannot run programs"), "relative: '%s'", con);
+    CHECK(run("\\HOME\\NOPE") != 0 && !has("cannot run programs"), "no such path: '%s'", con);
+
+    /* DOS's order: one directory at a time, a program before a batch file. */
+    CHECK(put("/HOME/BOTH.UF2", "x") && put("/HOME/BOTH.BAT", "@ECHO the batch\r\n"), "BOTH");
+    CHECK(run("BOTH") == 1 && has("cannot run programs"), "program first: '%s'", con);
+    CHECK(run("\\HOME\\BOTH") == 1 && has("cannot run programs"), "by path too: '%s'", con);
+    CHECK(run("CALL BOTH") == 1 && has("cannot run programs"), "CALL too: '%s'", con);
+    CHECK(run("BOTH.BAT") == 0 && strcmp(con, "the batch\n") == 0, "typed: '%s'", con);
+    CHECK(run("\\HOME\\BOTH.BAT") == 0 && strcmp(con, "the batch\n") == 0, "typed: '%s'", con);
+    CHECK(put("/HOME/NEAR.BAT", "@ECHO near\r\n") && put("/pico2-apps/NEAR.UF2", "x"), "NEAR");
+    CHECK(run("NEAR") == 0 && strcmp(con, "near\n") == 0, "batch here, program on PATH: '%s'", con);
+    CHECK(put("/HOME/FAR.UF2", "x") && put("/pico2-apps/FAR.BAT", "@ECHO far\r\n"), "FAR");
+    CHECK(run("FAR") == 1 && has("cannot run programs"), "program here, batch on PATH: '%s'", con);
+
+    /* COPY's devices: NUL and CON, either way, in any case, with ':'. */
+    CHECK(put("/HOME/DEV.TXT", "dev text\r\n"), "DEV");
+    CHECK(run("COPY DEV.TXT NUL") == 0 && strcmp(con, "        1 file(s) copied\n") == 0, "'%s'", con);
+    CHECK(!exists("/HOME/NUL"), "no file NUL");
+    CHECK(run("COPY DEV.TXT nul:") == 0 && has("1 file(s) copied"), "'%s'", con);
+    CHECK(run("COPY MISSING.TXT NUL") == 1 && has("File not found"), "'%s'", con);
+    CHECK(run("COPY DEV.TXT CON") == 0 && strcmp(con, "dev text\n        1 file(s) copied\n") == 0,
+          "'%s'", con);
+    CHECK(!exists("/HOME/CON"), "no file CON");
+    CHECK(put("/HOME/NOEOL.TXT", "no end"), "NOEOL");
+    CHECK(run("COPY NOEOL.TXT CON:") == 0 && strcmp(con, "no end\n        1 file(s) copied\n") == 0,
+          "'%s'", con);
+    CHECK(run("COPY D*.TXT CON") == 0 && has("DEV.TXT\ndev text\n") , "wildcard: '%s'", con);
+    CHECK(run("COPY NUL EMPTY.TXT") == 0 && has("1 file(s) copied") &&
+              strcmp(slurp("/HOME/EMPTY.TXT"), "") == 0,
+          "NUL makes it empty: '%s'", con);
+    CHECK(run("COPY CON") == 1 && has("onto itself"), "no destination: '%s'", con);
+
+    keys = "one\rtwo\r\x1a";
+    CHECK(run("COPY CON TYPED.TXT") == 0 && has("^Z\n        1 file(s) copied\n"), "'%s'", con);
+    CHECK(strcmp(slurp("/HOME/TYPED.TXT"), "one\r\ntwo\r\n") == 0, "'%s'", slurp("/HOME/TYPED.TXT"));
+    keys = "last\x1a";
+    CHECK(run("copy con: TYPED.TXT") == 0 && strcmp(slurp("/HOME/TYPED.TXT"), "last") == 0,
+          "Ctrl+Z after text: '%s'", slurp("/HOME/TYPED.TXT"));
+    static const char f6[] = { 'x', '\r', (char)KEY_F6, 0 };
+    keys = f6;
+    CHECK(run("COPY CON TYPED.TXT") == 0 && strcmp(slurp("/HOME/TYPED.TXT"), "x\r\n") == 0, "F6");
+    keys = "gone\rgone too\x03";
+    CHECK(run("COPY CON TYPED.TXT") != 0 && has("gone too") && has("^C") && !has("file(s) copied"),
+          "'%s'", con);
+    CHECK(strcmp(slurp("/HOME/TYPED.TXT"), "x\r\n") == 0 && !exists("/HOME/TYPED.TXT.new"),
+          "stopped: the old file kept");
+    keys = "wrong\x1bright\r\x1a";
+    CHECK(run("COPY CON TYPED.TXT") == 0 && strcmp(slurp("/HOME/TYPED.TXT"), "right\r\n") == 0,
+          "Esc drops the line: '%s'", slurp("/HOME/TYPED.TXT"));
+    keys = "seen\r\x1a";
+    CHECK(run("COPY CON CON") == 0 && has("seen\nseen\n"), "CON to CON: '%s'", con);
+    keys = "unseen\r\x1a";
+    CHECK(run("COPY CON NUL") == 0 && has("1 file(s) copied") && !exists("/HOME/NUL"), "'%s'", con);
+    keys = "x\x1a";
+    CHECK(run("COPY CON \\HOME") == 1, "a directory: '%s'", con);
+    keys = "";
+
+    /* Tab finds a program in the current directory. */
+    clear();
+    line_start(&sh, 0);
+    for (const char *s = "FA"; *s; s++) line_key(&sh, *s);
+    line_key(&sh, KEY_TAB);
+    CHECK(strcmp(sh.line.text, "FAR ") == 0, "Tab, here: '%s'", sh.line.text);
+    line_start(&sh, 0);
 
     /* VER, VOL, MEM, HELP. */
     CHECK(run("VER") == 0 && strcmp(con, "\nPicoCalc shell, DOS flavour\nVersion test\n\n") == 0, "'%s'",
@@ -810,6 +880,32 @@ static int dos_tests(bool fat32) {
     files_mount();   /* as after the card was taken out and put back */
     CHECK(slurp("/HOME/OLD.TXT") && strcmp(slurp("/HOME/OLD.TXT"), "the old text") == 0,
           "old file kept");
+
+    /* Where the shell starts: the root, or AUTOEXEC.BAT's CD; after a
+     * restart, the directory left, once, whatever AUTOEXEC.BAT did. */
+    CHECK(f_mkdir("/HOME/LEFT") == FR_OK, "LEFT");
+    shell_start(&sh);
+    CHECK(strcmp(sh.cwd, "/") == 0, "no restart, the root: %s", sh.cwd);
+    CHECK(run("CD \\home\\left") == 0, "cd");
+    shell_keep_cwd(&sh);
+    CHECK(exists("/.shell/cwd"), "kept");
+    shell_start(&sh);
+    CHECK(strcmp(sh.cwd, "/HOME/LEFT") == 0, "back: %s", sh.cwd);
+    CHECK(!exists("/.shell/cwd"), "taken");
+    shell_start(&sh);
+    CHECK(strcmp(sh.cwd, "/") == 0, "only once: %s", sh.cwd);
+    CHECK(put("/AUTOEXEC.BAT", "@CD \\HOME\r\n"), "AUTOEXEC");
+    shell_start(&sh);
+    CHECK(strcmp(sh.cwd, "/HOME") == 0, "AUTOEXEC's CD: %s", sh.cwd);
+    CHECK(run("CD LEFT") == 0, "cd");
+    shell_keep_cwd(&sh);
+    shell_start(&sh);
+    CHECK(strcmp(sh.cwd, "/HOME/LEFT") == 0, "back, past AUTOEXEC's CD: %s", sh.cwd);
+    CHECK(f_unlink("/AUTOEXEC.BAT") == FR_OK, "no AUTOEXEC");
+    shell_keep_cwd(&sh);
+    CHECK(run("CD \\") == 0 && run("RD \\HOME\\LEFT") == 0, "the directory goes");
+    shell_start(&sh);
+    CHECK(strcmp(sh.cwd, "/") == 0, "gone, the root: %s", sh.cwd);
 
     files_unmount();
     host_disk_close();
