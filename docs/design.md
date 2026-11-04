@@ -41,6 +41,7 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-16 | A release offers the two flavours' release builds as `shell-unix.uf2` and `shell-dos.uf2`; the user renames the one they want to `BOOT2350.UF2` on the card. | 4.7 |
 | 2026-10-18 | The UNIX flavour has only 40 columns too, in the Master 512's font (`font-master-512-8x10.c`), arranged as the terminal's 128 glyphs with the DEC graphics at `0x00`–`0x1F`, as IBM's is. There is no `font` command and no 64-column mode in either flavour, and the owner's 8x10 and 5x10 are no longer built in. This replaces the 2026-10-12 and 2026-10-14 decisions on the UNIX flavour's fonts. | 4.1 |
 | 2026-10-17 | `picocalc_shell_exit()` returns false when UF2 Loader did not start the program, as well as with no card, and the program decides what to do then (such as power off by its own means). The header stays independent and does not touch the southbridge; `picocalc_shell_loader_present()` tells a program beforehand. | 3.4 |
+| 2026-11-03 | Closer to UNIX (§4.4): the error stream can be redirected; a path or `NAME.sh` on `$PATH` runs a script; `rm -f`, `~`, `cd -`, `$PWD`; and `exit`, `test`, `which`, `tee`, `find`, `uniq`, `sort`, `true`, `false`, `less`. `exit` at the prompt stays in the shell and shows its header. There is still no `if`, `for` or `$(...)`, and the current directory is still not searched. | 4.4 |
 | 2026-11-03 | Closer to DOS (§4.7): the DOS flavour starts in `C:\`, not `C:\HOME`; a `NAME` looks in one directory at a time, a program before a batch file, in place of a batch file anywhere beating a program; `NAME.UF2` and a path with no extension run a program; COPY takes `CON` and `NUL`. In both flavours a restart comes back to the directory left (§4.3). | 4.3, 4.7 |
 | 2026-10-22 | For M12 (§3.8): the DS3231 is on `i2c0`, on the bus alone, with no GPIO (no `SQW`). Time zones are POSIX `TZ` strings. The UNIX flavour sets the time in POSIX's form, `date mmddHHMM[[cc]yy]`. The Wi-Fi password may be kept in plain text on the card. `i2c0` is on GP4 (SDA) and GP5 (SCL). The DOS flavour has `C:\CONFIG.SYS`, with `COUNTRY=`. `DIR` takes the 39-column layout with the size moved left. `/ntp/ntp.cfg` names one network (*changed the same day:* it was to hold several). The development build's UART moves off GP4 and GP5, to the pins left for it: 2, 3, 21 and 28. | 3.8 |
 | 2026-10-22 | Each flavour has a Pico 2 build and a separate Pico 2 W build; only the W build supports NTP (§3.8). A release offers `shell-unix.uf2`, `shell-dos.uf2`, `shell-unix-w.uf2` and `shell-dos-w.uf2`, and `ntp.uf2` for `/pico2-apps/`; this extends the 2026-10-16 decision. | 3.8, 4.7 |
@@ -1176,21 +1177,81 @@ This is deliberately small: UNIX spelling with a 1980s micro's ambitions.
 - `;`, `&&` and `||`. There is no `if`, `for` or functions in v1;
   `select` (M11) is the one compound command.
 - **Line editing** with history and Tab completion of commands and paths.
-- **Scripts:** `/etc/profile` runs at startup, and `sh file` runs a script.
+- **Scripts:** `/etc/profile` runs at startup, and `sh file` runs a script,
+  or `./file` (*2026-11-03*, below).
 
 *As built at M1* (`src/core/parse.c`): words, quoting and escapes, `#`
 comments, `;`, `&&`, `||` and the three redirections. The whole line is
 parsed before any of it runs, so a mistake at its end stops all of it, as
-in sh. Errors go to the terminal, never to a redirection. Break, Esc or
+in sh. Errors go to the terminal, and *from 2026-11-03* where `2>` says. Break, Esc or
 Ctrl-C stops a long command and drops the rest of the line.
 
 *Added 2026-10-26:* `> /dev/null` and `>> /dev/null` throw the output
 away, as the DOS flavour's `> NUL` does (`shell_command_null`). There is
-no `/dev` on the card: only that exact path is special, as an output,
-and `< /dev/null` is an ordinary missing file. For a program or a
+no `/dev` on the card: only that exact path is special, as an output
+(*from 2026-11-03* also as `2>`, `<` and `cat`'s operand, and no other
+command's). For a program or a
 command that leaves the shell, which refuse a redirection, it is
 dropped. It lets `/etc/profile` test a command without showing its
 output: `date > /dev/null || ntp`.
+
+*Added 2026-11-03, for UNIX users' habits:*
+
+- **The error stream.** `shell_error` writes to `sh->err`, the terminal
+  unless a command says otherwise, so the DOS flavour is unchanged. The
+  parser takes a `1` or `2` alone against a `>` as a number, as sh does:
+  `a2> f` and `2 > f` are words. `2> file` and `2>> file` write through
+  name.new as `>` does, in a pool of their own by level; both on one file
+  is refused, since FatFs would have it open twice. `2>&1` follows the
+  order written: after `> file` it goes into the file (`sh->err_to_out`,
+  taken up in `shell_command` once the file is open), and before one, or
+  into a pipe, to where the output was. `>&2` sends the output to `sh->err`.
+  What leaves the shell refuses a file, as for `>`, since it would leave
+  name.new behind; `2> /dev/null` is simply dropped for it. Only `1` and `2`
+  and no `&>`: the commands have no third stream, and bash's `&>` is not
+  POSIX.
+- **`< /dev/null`** is an empty pipe, so a command that wants an input
+  has one. `cat /dev/null` is `cat`'s alone, for `cat /dev/null > file`.
+- **A script by name.** `run_script_path` decides, before a program is
+  looked for, and `run_cmd` rewrites the words to `sh path`, so redirections
+  work as they do for `sh`. A path to a file named `.sh` or starting `#!`,
+  or a name ending `.sh` on `$PATH`. `sh` takes no arguments, so neither
+  does this (§3.5 is the programs' version of the same gap). A path with
+  no extension tries `.uf2` first, in both flavours now, and `chess.uf2`
+  typed in full is searched for as it is.
+- **`~` and `$PWD`.** `~` or `~/` starting a word, unquoted, is `$HOME`, in
+  a value and a redirection too and for Tab; `~user` stays as typed, as
+  there are no users. `$PWD` is read from `sh->cwd`, not kept as a variable,
+  so it cannot go stale or be set, and `set` does not list it. `cd` keeps
+  `$OLDPWD`, for `cd -`; a restart loses it.
+- **`exit [N]`** (*the owner, 2026-11-03*). In a script it drops the rest,
+  out of any `select`, and the script that ran it goes on with `$?` as N or
+  the last command's status. At the prompt there is nothing above the shell
+  to return to: the header shows again, as if something had started a new
+  shell, but nothing is reset and `/etc/profile` does not run, so a stray
+  `exit` costs nothing. The rest of that line is dropped. The DOS flavour's
+  `EXIT` still runs the loader's menu.
+- **Options that were refused.** `rm -f` ignores a missing file and no
+  operands, and `-R` is `-r`, but it still refuses a read-only file, since
+  FAT's flag is on the file and not its directory. `cp -f` and `mv -f` are
+  accepted and change nothing, as neither asks.
+- **`test` and `[`.** One expression, with a leading `!`: no `-a`, `-o` or
+  parentheses. With `&&` and `||` it does most of what `if` would, which
+  stays out (the table above). `-r` and `-w` are `-e`, as FAT has no
+  permissions; there is no `-x`, as nothing is marked executable.
+- **`sort`** borrows vi's text buffer (`VI_BUF_SIZE`, 64 KB), idle while a
+  command runs, so it costs no RAM of its own: the lines from one end,
+  16-bit offsets from the other. More is refused with nothing shown, not
+  spilled to the card. Its speed at that size on the board is not measured.
+- **The DOS flavour pays for none of this.** `2>`'s files, `tee`, `find`,
+  `uniq` and `sort` are compiled out of it (`#if !SHELL_DOS`). **`tee`** takes one file, as it
+  has one `files_safe_t`. **`find`** leaves out hidden entries, as globs and
+  `ls` without `-a` do, and takes only `-name` and `-type`. **`less`** is
+  `more`. Ctrl-W and Ctrl-L are the UNIX flavour's alone, and Ctrl-L is
+  ignored at a question such as `select`'s, whose prompt it could not redraw.
+- **Not added, on purpose.** `chmod` and `ln` (FAT has neither), `whoami`
+  and `uname` (nothing true to say), and `alias` (it needs storage and a
+  parser change for little gain).
 
 *As built at M4:*
 
@@ -2023,6 +2084,13 @@ flavour is unchanged at 435,480 B. *Estimated from `-fstack-usage`:*
 the deepest stack, a typed line CALLing three levels down through IF
 and FOR to a COPY, is about 5.8 KB of the 8 KB: about 720 B a level
 and step 1's 3 KB for COPY.
+
+**Measured 2026-11-03** (host-built firmware, not run on a board; `__end__`
+from the link, against 512 KB of SRAM below the stack): UNIX release
+469,248 B, UNIX Pico 2 W 475,160 B, DOS release
+438,944 B, DOS Pico 2 W 445,128 B, with UNIX's
+`2>`, `test`, `find`, `tee`, `uniq` and `sort` (§4.4). `sort` costs no buffer,
+borrowing vi's.
 
 **Measured at M9, step 3** (the same tools, 2026-10-14, release builds,
 `__end__` from the link map): the DOS flavour 422,100 B, 100,872 B more

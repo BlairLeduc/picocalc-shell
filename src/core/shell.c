@@ -59,6 +59,8 @@ void shell_init(shell_t *sh, const out_t *out, const shell_hooks_t *hooks, const
     sh->con = (out_t){ con_write, sh, out->raw };
     sh->out = sh->con;
     sh->out_is_con = true;
+    sh->err = sh->con;
+    sh->err_is_con = true;
     sh->at_bol = true;
     sh->hooks = *hooks;
     sh->version = version;
@@ -154,7 +156,7 @@ void shell_error(shell_t *sh, const char *fmt, ...) {
     va_end(ap);
     if (n < 0) return;
     if ((size_t)n >= sizeof buf) n = (int)sizeof buf - 1;
-    out_write(&sh->con, buf, (size_t)n);
+    out_write(&sh->err, buf, (size_t)n);
 }
 
 bool shell_interrupted(shell_t *sh) {
@@ -242,7 +244,9 @@ int shell_command(shell_t *sh, int argc, char **argv, const char *in, const char
     }
     /* Anything that leaves the shell must not leave a redirection's
      * name.new or a pipe's file behind, here or at a level above. */
-    bool redirected = in || out || !sh->out_is_con || input_any(&sh->in);
+    bool redirected = in || out || !sh->out_is_con || !sh->err_is_con || input_any(&sh->in);
+    bool err_to_out = sh->err_to_out;
+    sh->err_to_out = false;
 
     int status;
     shell_cmd_fn fn = shell_builtin(argv[0]);
@@ -257,6 +261,10 @@ int shell_command(shell_t *sh, int argc, char **argv, const char *in, const char
         if (in) files_input_end(sh);
         status = 1;
     } else {
+        if (err_to_out) {
+            sh->err = sh->out;
+            sh->err_is_con = sh->out_is_con;
+        }
         status = fn(sh, argc, argv);
         if (out && !files_redirect_end(sh) && status == 0) status = 1;
         if (in) files_input_end(sh);
@@ -273,18 +281,24 @@ static void discard(void *ctx, const char *buf, size_t n) {
     (void)n;
 }
 
+const out_t shell_null_out = { discard, NULL, true };
+
+bool shell_leaves(const char *name) {
+    shell_cmd_fn fn = shell_builtin(name);
+    return !fn || fn == cmd_menu || fn == cmd_usbdisk || system_leaves(fn);
+}
+
 int shell_command_null(shell_t *sh, int argc, char **argv, const char *in,
                        pipe_t *from, pipe_t *to) {
     /* For a program or a command that leaves the shell the redirection is
      * dropped instead: the null device leaves no file behind, which is
      * why those refuse a redirection, and what they say before leaving
      * is little. */
-    shell_cmd_fn fn = shell_builtin(argv[0]);
-    if (!fn || fn == cmd_menu || fn == cmd_usbdisk || system_leaves(fn))
+    if (shell_leaves(argv[0]))
         return shell_command(sh, argc, argv, in, NULL, false, from, to);
     out_t saved = sh->out;
     bool saved_is_con = sh->out_is_con;
-    sh->out = (out_t){ discard, NULL, true };
+    sh->out = shell_null_out;
     sh->out_is_con = false;
     int status = shell_command(sh, argc, argv, in, NULL, false, from, to);
     sh->out = saved;

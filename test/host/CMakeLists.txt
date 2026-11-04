@@ -21,6 +21,7 @@ set(SHELL_HOST_TESTS
     test_term
     test_text
     test_uf2
+    test_unix
     test_vi
 )
 

@@ -63,6 +63,8 @@ Copies files, -r directories
 | Home, End | the start and end of the line (also Ctrl-A, Ctrl-E). Home is Shift+Tab, End is Shift+Del |
 | Backspace, Del | delete before or under the cursor |
 | Ctrl-U, Ctrl-K | delete to the start, or to the end, of the line |
+| Ctrl-W | delete the word before the cursor |
+| Ctrl-L | clear the screen, keeping the line being typed |
 | Up, Down | earlier and later lines from the history (also Ctrl-P, Ctrl-N) |
 | Tab | complete a command or a path (below) |
 | Ctrl-C | drop the line |
@@ -123,15 +125,21 @@ character, in a word:
 | `cmd > file` | the output into `file`, replacing it |
 | `cmd >> file` | the output added to the end of `file` |
 | `cmd < file` | `file` as the command's input |
+| `cmd 2> file` | error messages into `file`, replacing it; `2>>` adds to the end |
+| `cmd 2>&1` | error messages with the output: `ls x 2>&1 \| more`, `cmd > file 2>&1` |
+| `cmd >&2` | the output with the error messages: `echo oops >&2` |
 
 A redirected file is written safely: if the command fails or is stopped,
-the old file is left as it was. Error messages always go to the screen,
-never into the file.
+the old file is left as it was. Error messages go to the screen unless
+`2>` or `2>&1` says otherwise. `1>` is the same as `>`. A program, and a
+command that leaves the shell, cannot have its errors sent to a file.
+`&>` and other numbers, such as `3>`, are not understood.
 
 `cmd > /dev/null` throws the output away, to test a command without
-seeing what it says: `date > /dev/null || ntp`. There is no `/dev`
-directory on the card; only that one name, after `>` or `>>`, is
-special.
+seeing what it says: `date > /dev/null || ntp`. `2> /dev/null` does the
+same for errors. `< /dev/null` and `cat /dev/null` read nothing, so `cat
+/dev/null > file` empties a file. There is no `/dev` directory on the
+card; only in these places is that one name special.
 
 ### Pipes
 
@@ -227,6 +235,19 @@ switched off.
 
 `sh file` runs a file of commands, one line at a time. A mistake is
 reported with the file's name and line number, and the script goes on.
+`exit` ends it early, and the script that ran it carries on.
+
+A path also runs a script, if the file's name ends `.sh` or its first
+line starts `#!`: `./backup.sh`. So does a name ending `.sh` found on
+`$PATH`. The current directory is searched only if `$PATH` says so, so
+it takes the `./`. A script takes no arguments.
+
+There is no `if`, but `test` does much of the work:
+
+```
+[ -f /home/notes.txt ] && more /home/notes.txt
+[ -d /games ] || mkdir /games
+```
 
 `/etc/profile`, if exists, runs every time the shell starts.
 You can use this file to store your own settings:
@@ -325,7 +346,7 @@ program (section 5).
 | Command | Does |
 |---|---|
 | `pwd` | prints the current directory |
-| `cd [dir]` | changes directory; to `$HOME` with none. `..` is the directory above |
+| `cd [dir]` | changes directory; to `$HOME` with none. `..` is the directory above, and `cd -` goes back to the last one and shows it |
 | `ls [-l] [-a] [path...]` | lists a directory, sorted, with `/` after each directory's name. `-l` adds the size and date, and `d` for a directory. `-a` includes hidden names |
 
 ```
@@ -344,13 +365,14 @@ characters wraps to the next row.
 | Command | Does |
 |---|---|
 | `cat file...` | shows files one after another, or joins them: `cat a b > c` |
-| `cp [-r] from... to` | copies a file, or several files into a directory. `-r` copies directories and everything in them |
-| `mv from... to` | moves or renames files and directories |
-| `rm [-r] path...` | removes files. `-r` removes directories and everything in them. **There is no undo** |
+| `cp [-rRf] from... to` | copies a file, or several files into a directory. `-r` or `-R` copies directories and everything in them. `-f` changes nothing, since `cp` never asks |
+| `mv [-f] from... to` | moves or renames files and directories. `-f` changes nothing, since `mv` never asks |
+| `rm [-rRf] path...` | removes files. `-r` or `-R` removes directories and everything in them. `-f` says nothing about a file that is not there. **There is no undo** |
 | `mkdir [-p] dir...` | makes directories. `-p` makes the ones above too, and does not mind if it is already there |
 | `rmdir dir...` | removes empty directories |
 | `touch file...` | makes empty files. A file that exists gets the time now, if the clock is set; otherwise it is left alone |
 | `df` | the card's format, size, space used and space free |
+| `find [path] [-name pattern] [-type f\|d]` | lists what is in a directory and below it, leaving out hidden files. Quote the pattern: `find /home -name '*.txt'` |
 
 Names on the card are case-insensitive but keep their case: `cat
 TODO.TXT` reads `todo.txt`, and `ls` shows it as `todo.txt`.
@@ -364,11 +386,14 @@ date, 1 January 2026.
 
 | Command | Does |
 |---|---|
-| `more file...` | shows text a screen at a time |
+| `more file...`, `less file...` | shows text a screen at a time |
 | `head [-n N] [file...]` | the first N lines, 10 if not given |
 | `tail [-n N] [file...]` | the last N lines, 10 if not given |
 | `grep [-v] [-n] [-c] [-i] pattern [file...]` | the lines that match a pattern |
 | `wc [-l] [-w] [-c] [file...]` | counts lines, words and bytes |
+| `sort [-r] [-n] [-u] [file...]` | sorts lines: `-r` reversed, `-n` by number, `-u` without repeats. Up to 64 KB in all, with 2 bytes more for each line; more is refused |
+| `uniq [-c] [-d] [file]` | drops a line the same as the one before: `-c` counts them, `-d` shows only the repeated ones |
+| `tee [-a] [file]` | copies its input to its output and to one file; `-a` adds to the end of it |
 
 Each of these reads the files named, or its input from `<` or a pipe.
 
@@ -590,6 +615,10 @@ it moves to `/`.
 | `export [NAME=value...]` | sets variables, or lists them. The same as `NAME=value` |
 | `unset NAME...` | removes variables |
 | `sh file` | runs a script |
+| `exit [N]` | ends the script, with status N, or the last command's. At the prompt there is nothing to end, so it shows the shell's header again; the line's other commands are dropped, and variables and the directory stay |
+| `test expression`, `[ expression ]` | checks something, for `&&` and `\|\|`: `-f` a file, `-d` a directory, `-e` either, `-s` a file with something in it, `-n` and `-z` text or none, `=` and `!=` text, `-eq`, `-ne`, `-lt`, `-le`, `-gt` and `-ge` numbers, `!` the opposite. Status 0 yes, 1 no, 2 a mistake |
+| `true`, `false` | do nothing, with status 0 and 1 |
+| `which name...` | where a command is found: a builtin, or a program or script's path |
 | `select NAME in WORD...; do LIST; done` | shows the words as a numbered menu, and runs LIST with `NAME` set to the one chosen |
 | `break [N]` | leaves a `select`, or N of them |
 | `history` | lists the lines typed before |
@@ -608,7 +637,9 @@ The count increases as each sector is written. Only the sectors that
 differ from what flash holds are written, so a program run before
 writes few or none.
 
-A name that includes a `/` is read as a path: `/games/chess.uf2`.
+A name that includes a `/` is read as a path: `/games/chess.uf2`,
+`/games/chess` or `./chess`. `chess.uf2` typed in full is found on
+`$PATH` too.
 
 ### What happens
 
