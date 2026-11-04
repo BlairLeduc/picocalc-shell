@@ -1291,7 +1291,8 @@ restart. The startup file runs first, from the default directory, so it
 behaves the same on every start; the directory comes back after it, if still
 on the card. A startup file that itself runs a program (`NTP`) overwrites
 the file with its own directory. One small card write per restart; its cost
-in the time to come back is not measured.
+in the time to come back is not measured (*the owner, 2026-11-04, a Plus 2 or Plus 2 W:*
+no delay noticed).
 
 ### 4.4 Command language
 
@@ -1377,7 +1378,9 @@ output: `date > /dev/null || ntp`.
 - **`sort`** borrows vi's text buffer (`VI_BUF_SIZE`, 64 KB), idle while a
   command runs, so it costs no RAM of its own: the lines from one end,
   16-bit offsets from the other. More is refused with nothing shown, not
-  spilled to the card. Its speed at that size on the board is not measured.
+  spilled to the card. *Measured 2026-11-04, Plus 2 W, release build:* 59 KB of
+  2,496 lines sorted into a file in at most 0.8 s, against 0.6 s for `cat` to
+  a file, timed from the Mac over SWD, so to a few tenths of a second.
 - **The DOS flavour pays for none of this.** `2>`'s files, `tee`, `find`,
   `uniq` and `sort` are compiled out of it (`#if !SHELL_DOS`). **`tee`** takes one file, as it
   has one `files_safe_t`. **`find`** leaves out hidden entries, as globs and

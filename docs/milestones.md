@@ -16,6 +16,44 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## Closer to DOS and to UNIX (not a milestone; branches `dos-closer`, `unix-comfort`, 2026-11-04)
+
+**Checked on the board:** Claude, on the Plus 2 W on the probe (RP2350B), its
+card (`PLUS 2 W`, FAT32), 2026-11-04, release builds of `fa50cf7` run from SRAM
+over SWD, typed with `tools/swd-drive.py` and read from the terminal's grid. In
+a new directory, removed afterwards:
+
+- DOS: `COPY CON` ended by 0x1A and by F6, Esc dropping a line, Ctrl-C keeping
+  the old file; `COPY` to `CON` and `NUL`, from `NUL`, and with a wildcard; the
+  search order in one directory and across `PATH`; a program by `NAME.UF2` and
+  by a path with no extension; Tab; `HELP COPY`.
+- UNIX: `2>`, `2>&1` into a file and a pipe, `>&2`; `./s.sh`; `mv -f`, `rm -f`,
+  `rm -rf`, `cp -R`; `~`, `cd -`, `$PWD`, `$OLDPWD`; `exit` in a script and at the
+  prompt; Ctrl-W and Ctrl-L as key codes; `test`, `[`, `which`, `less`, `tee`,
+  `find`, `uniq`, `sort`; vi opening a file straight after `sort` used its buffer.
+- Both: after a real `reboot`, then the new image loaded again, the shell came
+  back to the directory left and removed `/.shell/cwd`; loaded once more, it
+  started in the default directory.
+- `sort`: 59,228 B of 2,496 lines into a file in at most 0.8 s, `cat` the same in
+  0.6 s; 88,842 B refused. Timed from the Mac, to a few tenths of a second.
+
+**Checked by the owner,** on a Plus 2 or a Plus 2 W (which for each check is not
+recorded), from the card, 2026-11-04:
+
+- the UNIX flavour: Ctrl-W and Ctrl-L from the keyboard; a program run and come
+  back, with the current directory restored and no delay noticed (not timed);
+- the DOS flavour: `copy con: newtest.txt` ended with Ctrl+Z and `copy con
+  nt2.txt` ended with F6, from the keyboard, both writing the content; a program
+  run and come back, to the directory left; a `CD` in `AUTOEXEC.BAT` setting the
+  directory at power-on, and not on coming back from a program; switching off
+  inside a program, then on and back to the shell, to the directory left;
+  `poweroff` at the prompt, then power-on, to the directory of that `CD`.
+
+**Not checked:** the card write's cost in the time to come back, as a
+measurement. The power switch at the prompt, which writes nothing, as `poweroff`
+does not (host test only). Switching off and `AUTOEXEC.BAT`'s counterpart,
+`/etc/profile`, in the UNIX flavour. A Pico 2 or a Pico 2 W.
+
 ## M7 — Shell at power-on (2026-10-25, branch `m7-boot-shell`)
 
 **Done 2026-10-25.** UF2 Loader 2.5's stage3 with a patch: power-on
