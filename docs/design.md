@@ -21,7 +21,7 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-12 | The shell replaces the UF2 Loader's `BOOT2350.UF2`. | 3.2 |
 | 2026-10-12 | Programs may add an exit command that returns to the shell. | 3.4 |
 | 2026-10-12 | Power-on with no key held starts the last program, as the loader does now. | 3.4 |
-| 2026-10-12 | Program arguments are deferred. | 3.5 |
+| 2026-10-12 | Program arguments are deferred. *The design is written in §3.5 and its questions answered (2026-11-04); until M13 is built, this stands.* | 3.5 |
 | 2026-10-12 | The terminal uses the owner's own 10-pixel fonts. | 4.1 |
 | 2026-10-12 | The shell is called **shell**. Its prompt is the current directory followed by `>`. | 4.4 |
 | 2026-10-12 | The licence is GPL-3.0. | 9 |
@@ -41,6 +41,7 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-16 | A release offers the two flavours' release builds as `shell-unix.uf2` and `shell-dos.uf2`; the user renames the one they want to `BOOT2350.UF2` on the card. | 4.7 |
 | 2026-10-18 | The UNIX flavour has only 40 columns too, in the Master 512's font (`font-master-512-8x10.c`), arranged as the terminal's 128 glyphs with the DEC graphics at `0x00`–`0x1F`, as IBM's is. There is no `font` command and no 64-column mode in either flavour, and the owner's 8x10 and 5x10 are no longer built in. This replaces the 2026-10-12 and 2026-10-14 decisions on the UNIX flavour's fonts. | 4.1 |
 | 2026-10-17 | `picocalc_shell_exit()` returns false when UF2 Loader did not start the program, as well as with no card, and the program decides what to do then (such as power off by its own means). The header stays independent and does not touch the southbridge; `picocalc_shell_loader_present()` tells a program beforehand. | 3.4 |
+| 2026-11-03 | Closer to UNIX (§4.4): the error stream can be redirected; a path or `NAME.sh` on `$PATH` runs a script; `rm -f`, `~`, `cd -`, `$PWD`; and `exit`, `test`, `which`, `tee`, `find`, `uniq`, `sort`, `true`, `false`, `less`. `exit` at the prompt stays in the shell and shows its header. There is still no `if`, `for` or `$(...)`, and the current directory is still not searched. | 4.4 |
 | 2026-11-03 | Closer to DOS (§4.7): the DOS flavour starts in `C:\`, not `C:\HOME`; a `NAME` looks in one directory at a time, a program before a batch file, in place of a batch file anywhere beating a program; `NAME.UF2` and a path with no extension run a program; COPY takes `CON` and `NUL`. In both flavours a restart comes back to the directory left (§4.3). | 4.3, 4.7 |
 | 2026-10-22 | For M12 (§3.8): the DS3231 is on `i2c0`, on the bus alone, with no GPIO (no `SQW`). Time zones are POSIX `TZ` strings. The UNIX flavour sets the time in POSIX's form, `date mmddHHMM[[cc]yy]`. The Wi-Fi password may be kept in plain text on the card. `i2c0` is on GP4 (SDA) and GP5 (SCL). The DOS flavour has `C:\CONFIG.SYS`, with `COUNTRY=`. `DIR` takes the 39-column layout with the size moved left. `/ntp/ntp.cfg` names one network (*changed the same day:* it was to hold several). The development build's UART moves off GP4 and GP5, to the pins left for it: 2, 3, 21 and 28. | 3.8 |
 | 2026-10-22 | Each flavour has a Pico 2 build and a separate Pico 2 W build; only the W build supports NTP (§3.8). A release offers `shell-unix.uf2`, `shell-dos.uf2`, `shell-unix-w.uf2` and `shell-dos-w.uf2`, and `ntp.uf2` for `/pico2-apps/`; this extends the 2026-10-16 decision. | 3.8, 4.7 |
@@ -319,6 +320,141 @@ could come back the same way. *Deferred, 2026-10-12.* Until then, a word
 after a program's name is an error, so nothing comes to depend on a
 behaviour we have not designed. A program runs exactly as it does from the
 loader's menu.
+
+**`/.shell/` is private** (*2026-11-03*). `/.shell/cwd` (§4.3) must not become
+this channel, and the README and `picocalc_shell.h` tell programs to leave
+the directory alone. Finding that file does not mean the shell has just
+started the program: it stays until the shell next starts, so a program
+restarted at power-on, or started from the loader's menu after `menu`, would
+read a directory from an earlier session. And a program that changed it
+would change where the shell comes back to.
+
+#### Design: program arguments and the directory (*2026-11-03, M13, not built*)
+
+*The owner answered its questions on 2026-11-04 (below). Nothing here is
+built; the sizes and costs are estimates.*
+
+**What a user would see.** An option says what a file is for, in the flavour's
+spelling: `-t` or `-d` in UNIX's, `/T` or `/D` in DOS's. The name is found from
+the user's directory, and the program is given its full path. So in `/home`,
+this loads `/home/game.tap`, not a file in the program's own folder:
+
+```
+/home>pico-oric -t game.tap
+C:\HOME>PICO-ORIC /T GAME.TAP
+```
+
+A program that has not said it takes arguments is refused as it is now,
+never started with its arguments silently dropped:
+
+```
+/home>pico-atom -t game.tap
+pico-atom: takes no arguments
+```
+
+**What a program declares.** One line naming itself, which also tells the
+shell it understands the file:
+
+```c
+PICOCALC_SHELL_TAKES_ARGS("pico-oric");
+```
+
+The macro places a 64-byte record, 64-byte aligned, holding a magic number
+and the name. Aligned so, it cannot cross the 256 bytes of a UF2 block, so
+the shell can find it while `uf2_check` reads the file, with no second pass
+and no flat image. The Pico SDK's binary info was the first thought, and
+`bininfo.c` can read it, but only from a flat image: its pointers lead all
+over the program, which would mean seeking about in the UF2. The macro must
+survive `--gc-sections`, to be checked with a real build.
+
+**The file.** The shell writes `/.shell/args`, through name.new, only for a
+program that declares this, just before it restarts (beside `shell_keep_cwd`
+in `run_path`). An older program costs no card write and leaves nothing
+behind. If the write fails, the program is not started, as it would run
+without what was asked for. One item a line, LF-ended; no quoting is needed,
+since a FAT name has no line break:
+
+```
+picocalc-args 1              the format's version
+unix                         the flavour: unix or dos
+/HOME/DOCS                   the current directory, always with '/'
+/GAMES/PICO-ORIC.UF2         the program's own path, as on the card
+pico-oric                    the name it declared
+-t                           each argument, as below, one a line
+game.tap
+```
+
+The words a line can make limit it to about 4.7 KB (`SHELL_ARGS_TEXT`, plus a
+path each for the directory and the program). The program's own path also lets
+a program kept with its files (§4.7) find them. Names are the card's bytes
+(`FF_CODE_PAGE` 437, not Unicode).
+
+**Reading it.** The program reads the file with its own FatFs, deletes it, and
+hands the text to the header, which stays free of FatFs:
+
+```c
+picocalc_shell_args_t args;
+if (picocalc_shell_args_parse(text, len, "pico-oric", &args)) {
+    char path[256];
+    if (picocalc_shell_args_option(&args, 't', path, sizeof path)) load_tape(path);
+    if (picocalc_shell_args_option(&args, 'd', path, sizeof path)) load_disc(path);
+}
+```
+
+`picocalc_shell_args_parse` is false unless the version is known and the name
+matches, so a file meant for another program is ignored. The name is the
+declared one and not the file's, so renaming a UF2 changes nothing.
+`picocalc_shell_args_option` finds an option in the flavour's spelling, so a
+program has one piece of code for both: `-t` exactly in UNIX's, `/t` or `/T` in
+DOS's, with the file as the next word. It gives that word as a full path
+against the directory, by the flavour's rules: DOS's `\` and `C:`, with another
+drive refused. The shell cannot do this itself, since only the program knows
+which words are files, so the file keeps the words as typed and the helper
+does it. `-t` and `-d` are the convention, and a program may add others. Whether
+the file exists is for the program to say.
+
+**Why this answers the staleness above.** The file is written for one start of
+one program, and that program removes it. What could be left behind is covered
+twice: the shell deletes any it finds when it starts (next to
+`history_take_cwd`), and the name is checked. `/.shell/cwd` stays apart because
+it has another reader and another lifetime: the shell's return must not depend
+on what a program did.
+
+**What each flavour passes.** Arguments are what the command would be given:
+the UNIX flavour's after variables, quotes and globs, so `pico-oric -t *.tap`
+gives each match, of which the helper takes the first; the DOS flavour's after
+`%NAME%`, and with wildcards as typed, since in DOS each command expands its
+own. So `PICO-ORIC /T %1` works in a batch file, though nothing after that line
+runs (§4.7). A redirection or a pipe is still refused. `PICO-ORIC/T`, with no
+space, as DOS's `DIR/W`, reads today as a path, and must be looked at when this
+is built.
+
+**What it does not do.** No exit status back to the shell, though a later
+version line could add it. `sh` still takes no `$1`, which is separate work.
+Nothing reaches a program started by the loader's menu or at power-on, which
+finds no file and starts as it does today. So a power-on after `pico-oric
+game.tap` starts the emulator with no tape.
+
+**The owner's answers** (*2026-11-04*).
+
+1. A program that has not declared is refused, so nothing seems to work while
+   ignoring what was asked.
+2. A file is named by an option, `-t` (`/T`) for tape or `-d` (`/D`) for disc,
+   and the program gets its full path. This settles what a relative name means:
+   from the user's directory, not the emulator's own folders such as
+   `/atom/tapes/`. The emulators adopt it in their own repositories; which of
+   them take which options, and anything beyond tape and disc such as
+   pico-atom's snapshots, is for each to decide then.
+3. A declared program gets the file even with no arguments, so it always knows
+   the directory, at one more small card write per run.
+
+**Done when.** A host test over FAT16 and FAT32 covers the record
+found across a real UF2 and absent from an older one, each refusal, and the file
+written and removed around a fake loader, with a failed write stopping the
+start; the header's parser, options and path rules run under `test_args`, in
+both flavours. On a board, a test program prints what it was given, from flash and
+from RAM, under stock and patched loaders, and a power cut between the write and
+the program leaves the next start of the shell clean.
 
 ### 3.6 Programs that keep data in flash
 
@@ -1155,7 +1291,8 @@ restart. The startup file runs first, from the default directory, so it
 behaves the same on every start; the directory comes back after it, if still
 on the card. A startup file that itself runs a program (`NTP`) overwrites
 the file with its own directory. One small card write per restart; its cost
-in the time to come back is not measured.
+in the time to come back is not measured (*the owner, 2026-11-04, a Plus 2 or Plus 2 W:*
+no delay noticed).
 
 ### 4.4 Command language
 
@@ -1176,21 +1313,83 @@ This is deliberately small: UNIX spelling with a 1980s micro's ambitions.
 - `;`, `&&` and `||`. There is no `if`, `for` or functions in v1;
   `select` (M11) is the one compound command.
 - **Line editing** with history and Tab completion of commands and paths.
-- **Scripts:** `/etc/profile` runs at startup, and `sh file` runs a script.
+- **Scripts:** `/etc/profile` runs at startup, and `sh file` runs a script,
+  or `./file` (*2026-11-03*, below).
 
 *As built at M1* (`src/core/parse.c`): words, quoting and escapes, `#`
 comments, `;`, `&&`, `||` and the three redirections. The whole line is
 parsed before any of it runs, so a mistake at its end stops all of it, as
-in sh. Errors go to the terminal, never to a redirection. Break, Esc or
+in sh. Errors go to the terminal, and *from 2026-11-03* where `2>` says. Break, Esc or
 Ctrl-C stops a long command and drops the rest of the line.
 
 *Added 2026-10-26:* `> /dev/null` and `>> /dev/null` throw the output
 away, as the DOS flavour's `> NUL` does (`shell_command_null`). There is
-no `/dev` on the card: only that exact path is special, as an output,
-and `< /dev/null` is an ordinary missing file. For a program or a
+no `/dev` on the card: only that exact path is special, as an output
+(*from 2026-11-03* also as `2>`, `<` and `cat`'s operand, and no other
+command's). For a program or a
 command that leaves the shell, which refuse a redirection, it is
 dropped. It lets `/etc/profile` test a command without showing its
 output: `date > /dev/null || ntp`.
+
+*Added 2026-11-03, for UNIX users' habits:*
+
+- **The error stream.** `shell_error` writes to `sh->err`, the terminal
+  unless a command says otherwise, so the DOS flavour is unchanged. The
+  parser takes a `1` or `2` alone against a `>` as a number, as sh does:
+  `a2> f` and `2 > f` are words. `2> file` and `2>> file` write through
+  name.new as `>` does, in a pool of their own by level; both on one file
+  is refused, since FatFs would have it open twice. `2>&1` follows the
+  order written: after `> file` it goes into the file (`sh->err_to_out`,
+  taken up in `shell_command` once the file is open), and before one, or
+  into a pipe, to where the output was. `>&2` sends the output to `sh->err`.
+  What leaves the shell refuses a file, as for `>`, since it would leave
+  name.new behind; `2> /dev/null` is simply dropped for it. Only `1` and `2`
+  and no `&>`: the commands have no third stream, and bash's `&>` is not
+  POSIX.
+- **`< /dev/null`** is an empty pipe, so a command that wants an input
+  has one. `cat /dev/null` is `cat`'s alone, for `cat /dev/null > file`.
+- **A script by name.** `run_script_path` decides, before a program is
+  looked for, and `run_cmd` rewrites the words to `sh path`, so redirections
+  work as they do for `sh`. A path to a file named `.sh` or starting `#!`,
+  or a name ending `.sh` on `$PATH`. `sh` takes no arguments, so neither
+  does this (§3.5 is the programs' version of the same gap). A path with
+  no extension tries `.uf2` first, in both flavours now, and `chess.uf2`
+  typed in full is searched for as it is.
+- **`~` and `$PWD`.** `~` or `~/` starting a word, unquoted, is `$HOME`, in
+  a value and a redirection too and for Tab; `~user` stays as typed, as
+  there are no users. `$PWD` is read from `sh->cwd`, not kept as a variable,
+  so it cannot go stale or be set, and `set` does not list it. `cd` keeps
+  `$OLDPWD`, for `cd -`; a restart loses it.
+- **`exit [N]`** (*the owner, 2026-11-03*). In a script it drops the rest,
+  out of any `select`, and the script that ran it goes on with `$?` as N or
+  the last command's status. At the prompt there is nothing above the shell
+  to return to: the header shows again, as if something had started a new
+  shell, but nothing is reset and `/etc/profile` does not run, so a stray
+  `exit` costs nothing. The rest of that line is dropped. The DOS flavour's
+  `EXIT` still runs the loader's menu.
+- **Options that were refused.** `rm -f` ignores a missing file and no
+  operands, and `-R` is `-r`, but it still refuses a read-only file, since
+  FAT's flag is on the file and not its directory. `cp -f` and `mv -f` are
+  accepted and change nothing, as neither asks.
+- **`test` and `[`.** One expression, with a leading `!`: no `-a`, `-o` or
+  parentheses. With `&&` and `||` it does most of what `if` would, which
+  stays out (the table above). `-r` and `-w` are `-e`, as FAT has no
+  permissions; there is no `-x`, as nothing is marked executable.
+- **`sort`** borrows vi's text buffer (`VI_BUF_SIZE`, 64 KB), idle while a
+  command runs, so it costs no RAM of its own: the lines from one end,
+  16-bit offsets from the other. More is refused with nothing shown, not
+  spilled to the card. *Measured 2026-11-04, Plus 2 W, release build:* 59 KB of
+  2,496 lines sorted into a file in at most 0.8 s, against 0.6 s for `cat` to
+  a file, timed from the Mac over SWD, so to a few tenths of a second.
+- **The DOS flavour pays for none of this.** `2>`'s files, `tee`, `find`,
+  `uniq` and `sort` are compiled out of it (`#if !SHELL_DOS`). **`tee`** takes one file, as it
+  has one `files_safe_t`. **`find`** leaves out hidden entries, as globs and
+  `ls` without `-a` do, and takes only `-name` and `-type`. **`less`** is
+  `more`. Ctrl-W and Ctrl-L are the UNIX flavour's alone, and Ctrl-L is
+  ignored at a question such as `select`'s, whose prompt it could not redraw.
+- **Not added, on purpose.** `chmod` and `ln` (FAT has neither), `whoami`
+  and `uname` (nothing true to say), and `alias` (it needs storage and a
+  parser change for little gain).
 
 *As built at M4:*
 
@@ -2024,6 +2223,13 @@ the deepest stack, a typed line CALLing three levels down through IF
 and FOR to a COPY, is about 5.8 KB of the 8 KB: about 720 B a level
 and step 1's 3 KB for COPY.
 
+**Measured 2026-11-03** (host-built firmware, not run on a board; `__end__`
+from the link, against 512 KB of SRAM below the stack): UNIX release
+469,248 B, UNIX Pico 2 W 475,160 B, DOS release
+438,944 B, DOS Pico 2 W 445,128 B, with UNIX's
+`2>`, `test`, `find`, `tee`, `uniq` and `sort` (§4.4). `sort` costs no buffer,
+borrowing vi's.
+
 **Measured at M9, step 3** (the same tools, 2026-10-14, release builds,
 `__end__` from the link map): the DOS flavour 422,100 B, 100,872 B more
 than step 2's 321,228 B: EDIT's 64 KB buffer, 8 KB clipboard and two
@@ -2509,3 +2715,8 @@ in [milestones.md](milestones.md).
   Measure each flavour's RAM, `ntp.uf2`'s size and its time from Enter to
   the prompt. (*The owner, 2026-10-23:* the AON timer's drift against NTP
   is not measured: the clock is for general use.)
+- **M13 — Program arguments (designed 2026-11-03, questions answered
+  2026-11-04, not started; §3.5).** `pico-oric -t game.tap` and `PICO-ORIC /T
+  GAME.TAP`: the declaration a program makes, `/.shell/args`, and the header's
+  parser and options, which give a program the file's full path. The emulators
+  adopt it in their own repositories. Done when as in §3.5.

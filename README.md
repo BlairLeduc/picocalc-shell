@@ -214,6 +214,11 @@ in BOOTSEL). The program can then do something else, such as power off.
 tell it beforehand, to label its menu item. The header is under the MIT licence as well
 as the GPL-3.0, so a program under any licence can include it.
 
+You don't need to do anything to return the user to their directory: after
+`picocalc_shell_exit()` the shell comes back to where it was. Treat `/.shell/`
+as private to the shell: don't read, change or delete its files, because they
+may change between versions.
+
 A program that links `hardware_powman` also gets the shell's clock:
 
 ```c

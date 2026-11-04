@@ -73,6 +73,9 @@ bool files_redirect(shell_t *sh, const char *arg, bool append);
 /* After the command: put the file in place, or keep the old one and say
  * why. False if the output was lost. The caller puts sh->out back. */
 bool files_redirect_end(shell_t *sh);
+/* The same for the errors, for `2>`: sh->err goes to it; at the end, back to `was`. */
+bool files_redirect_err(shell_t *sh, const char *arg, bool append);
+bool files_redirect_err_end(shell_t *sh, const out_t *was);
 
 /* `< arg` for the next command: sh->in. */
 bool files_input(shell_t *sh, const char *arg);
@@ -142,6 +145,8 @@ int cmd_mkdir(shell_t *sh, int argc, char **argv);
 int cmd_mv(shell_t *sh, int argc, char **argv);
 int cmd_pwd(shell_t *sh, int argc, char **argv);
 int cmd_rm(shell_t *sh, int argc, char **argv);
+int cmd_tee(shell_t *sh, int argc, char **argv);
+int cmd_find(shell_t *sh, int argc, char **argv);
 int cmd_rmdir(shell_t *sh, int argc, char **argv);
 int cmd_touch(shell_t *sh, int argc, char **argv);
 

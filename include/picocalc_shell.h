@@ -20,7 +20,10 @@
  *         show_message("Cannot return to the shell");
  *
  * The program must close its files first: the reboot does not wait for
- * them. Holding Up, F1 or F5 at power-on also returns to the shell, for
+ * them. It need do nothing to return the user to their directory: the
+ * shell comes back to where it was. /.shell/ on the card is private to
+ * the shell: do not read, change or delete its files, which may change
+ * between versions. Holding Up, F1 or F5 at power-on also returns to the shell, for
  * any program. With the shell's patched loader (design.md M7), power-on
  * gives the shell with no key held, and Up, F1 or F5 the program; a
  * program's own watchdog_reboot(0, 0, 0) starts it again under either

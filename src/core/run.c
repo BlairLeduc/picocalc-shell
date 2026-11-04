@@ -145,59 +145,99 @@ static bool in_dir(shell_t *sh, const char *dir, const char *file) {
            f_stat(s_path, &s_fno) == FR_OK && !(s_fno.fattrib & AM_DIR);
 }
 
-/* `name` as a program: a path if it has a '/' (in DOS, a '\' or a
- * drive), otherwise name.uf2 in the first directory of $PATH that has
- * it, the directories separated by ':' (DOS: ';', after the current
- * directory, as DOS looked). False, with the error printed, if none. */
-static bool find(shell_t *sh, const char *name) {
-    static char file[SHELL_PATH_MAX + 1], dir[SHELL_PATH_MAX + 1];
+static bool ends_with(const char *name, const char *ext) {
+    size_t n = strlen(name), e = strlen(ext);
+    return n > e && path_same(name + n - e, ext);
+}
+
+/* `name`, a path, into s_path if it is a file there: with no extension,
+ * name.uf2 first, as C:\WP51\WP was WP.EXE and as a name on $PATH is. */
+static bool at_path(void) {
+    size_t len = strlen(s_path);
+    if (!strchr(path_base(s_path), '.') && len + sizeof SHELL_PROGRAM_EXT <= sizeof s_path) {
+        memcpy(s_path + len, SHELL_PROGRAM_EXT, sizeof SHELL_PROGRAM_EXT);
+        if (f_stat(s_path, &s_fno) == FR_OK && !(s_fno.fattrib & AM_DIR)) return true;
+        s_path[len] = '\0';
+    }
+    return f_stat(s_path, &s_fno) == FR_OK && !(s_fno.fattrib & AM_DIR);
+}
+
+/* `file` in the first directory of $PATH that has it, into s_path, the
+ * directories separated by ':' (DOS: ';'; after the current directory,
+ * as DOS looked). An empty entry is the current directory, as in sh. */
+static bool on_path(shell_t *sh, const char *file) {
+    static char dir[SHELL_PATH_MAX + 1];
+    if (SHELL_DOS && in_dir(sh, ".", file)) return true;
+    for (const char *p = vars_get("PATH", 4); p;) {
+        const char *colon = strchr(p, FLAVOUR_PATH_SEP);
+        size_t len = colon ? (size_t)(colon - p) : strlen(p);
+        if (len < sizeof dir) {
+            memcpy(dir, p, len);
+            dir[len] = '\0';
+            if (len == 0) strcpy(dir, ".");
+            if (in_dir(sh, dir, file)) return true;
+        }
+        p = colon ? colon + 1 : NULL;
+    }
+    return false;
+}
+
+/* What to look for on $PATH: name.uf2, or a name typed with .uf2 (or
+ * .sh, UNIX's scripts) as it is. False if it cannot fit. */
+static bool search_name(char file[SHELL_PATH_MAX + 1], const char *name) {
     size_t n = strlen(name);
-    FRESULT r;
+    if (n + sizeof SHELL_PROGRAM_EXT > SHELL_PATH_MAX + 1) return false;
+    memcpy(file, name, n + 1);
+    if (!ends_with(name, SHELL_PROGRAM_EXT) && (SHELL_DOS || !ends_with(name, ".sh")))
+        memcpy(file + n, SHELL_PROGRAM_EXT, sizeof SHELL_PROGRAM_EXT);
+    return true;
+}
+
+/* `name` as a program: a path if it has a '/' (in DOS, a '\' or a
+ * drive), otherwise along $PATH. False, with the error printed, if none. */
+static bool find(shell_t *sh, const char *name) {
+    static char file[SHELL_PATH_MAX + 1];
     if (flavour_is_path(name)) {
         if (!flavour_resolve(s_path, sh->cwd, name)) {
             shell_error(sh, "%s: name too long\n", name);
             return false;
         }
-        /* DOS: a path with no extension is the program's, as C:\WP51\WP
-         * was WP.EXE. */
-        size_t len = strlen(s_path);
-        if (SHELL_DOS && !strchr(path_base(s_path), '.') &&
-            len + sizeof SHELL_PROGRAM_EXT <= sizeof s_path) {
-            memcpy(s_path + len, SHELL_PROGRAM_EXT, sizeof SHELL_PROGRAM_EXT);
-            r = f_stat(s_path, &s_fno);
-            if (r == FR_OK && !(s_fno.fattrib & AM_DIR)) return true;
-            s_path[len] = '\0';
-        }
-        r = f_stat(s_path, &s_fno);
-        if (r == FR_OK && !(s_fno.fattrib & AM_DIR)) return true;
+        if (at_path()) return true;
+        FRESULT r = f_stat(s_path, &s_fno);
         if (r == FR_OK) shell_error(sh, "%s: is a directory\n", name);
         else shell_error(sh, "%s: %s\n", name, files_why(r));
         return false;
     }
-    if (n + sizeof SHELL_PROGRAM_EXT <= sizeof file) {
-        size_t ext = sizeof SHELL_PROGRAM_EXT - 1;
-        memcpy(file, name, n + 1);
-        /* DOS: NAME.UF2 typed in full, as WP.EXE was. */
-        if (!SHELL_DOS || n <= ext || !path_same(name + n - ext, SHELL_PROGRAM_EXT))
-            memcpy(file + n, SHELL_PROGRAM_EXT, sizeof SHELL_PROGRAM_EXT);
-        if (SHELL_DOS && in_dir(sh, ".", file)) return true;
-        /* An empty entry is the current directory, as in sh. */
-        for (const char *p = vars_get("PATH", 4); p;) {
-            const char *colon = strchr(p, FLAVOUR_PATH_SEP);
-            size_t len = colon ? (size_t)(colon - p) : strlen(p);
-            if (len < sizeof dir) {
-                memcpy(dir, p, len);
-                dir[len] = '\0';
-                if (len == 0) strcpy(dir, ".");
-                if (in_dir(sh, dir, file)) return true;
-            }
-            p = colon ? colon + 1 : NULL;
-        }
-    }
+    if (search_name(file, name) && on_path(sh, file)) return true;
     /* A name not found is "not found", whatever stopped the search, as
      * in sh. */
     flavour_not_found(sh, name);
     return false;
+}
+
+const char *run_which(shell_t *sh, const char *name) {
+    static char file[SHELL_PATH_MAX + 1];
+    if (flavour_is_path(name))
+        return flavour_resolve(s_path, sh->cwd, name) && at_path() ? s_path : NULL;
+    return search_name(file, name) && on_path(sh, file) ? s_path : NULL;
+}
+
+const char *run_script_path(shell_t *sh, const char *name) {
+    static char file[SHELL_PATH_MAX + 1];
+    if (flavour_is_path(name)) {
+        if (!flavour_resolve(s_path, sh->cwd, name) || f_stat(s_path, &s_fno) != FR_OK ||
+            (s_fno.fattrib & AM_DIR))
+            return NULL;
+        if (ends_with(s_path, ".sh")) return s_path;
+        /* A file with no .sh is a script if it says so. */
+        char start[2];
+        UINT got = 0;
+        if (f_open(&s_prog, s_path, FA_READ) != FR_OK) return NULL;
+        f_read(&s_prog, start, sizeof start, &got);
+        f_close(&s_prog);
+        return got == 2 && start[0] == '#' && start[1] == '!' ? s_path : NULL;
+    }
+    return ends_with(name, ".sh") && search_name(file, name) && on_path(sh, file) ? s_path : NULL;
 }
 
 int run_program(shell_t *sh, int argc, char **argv, bool redirected) {
