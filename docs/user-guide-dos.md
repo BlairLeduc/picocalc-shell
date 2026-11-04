@@ -37,21 +37,24 @@ The card is drive `C:`, and the prompt is the drive and directory
 followed by `>`:
 
 ```
-C:\HOME>DIR
+C:\>DIR
  Volume in drive C has no label
  Volume Serial Number is 5C23-0000
- Directory of C:\HOME
+ Directory of C:\
 
 NOTES          <DIR>
 TODO     TXT                          6
     1 file(s)              6 bytes
                   66,040,832 bytes free
-C:\HOME>CD ..
-C:\>
+C:\>CD NOTES
+C:\NOTES>
 ```
 
-The shell starts in `C:\HOME` if the card has one, and otherwise in
-`C:\`. The screen shows 40 columns in IBM's PC font, as DOS did.
+The shell starts in `C:\`, as DOS did; a `CD` in `AUTOEXEC.BAT` starts it
+elsewhere. Coming back from a program, a `REBOOT` or `EXIT`, it returns to
+the directory you left, if that is still on the card. After `POWEROFF` or
+the power switch at the prompt, it starts as at first. The screen shows 40
+columns in IBM's PC font, as DOS did.
 
 `HELP` lists the commands, and `HELP name` explains one:
 
@@ -195,11 +198,24 @@ and time on the next row, so every row fits the 40 columns.
 
 | Command | Does |
 |---|---|
-| `COPY [/V] [/B] source [destination]` | copies files: `COPY A.TXT B.TXT`, `COPY *.TXT \BACKUP`, `COPY *.TXT *.BAK`. `/V` and `/B` are accepted and change nothing; `COPY NAME+,,` touches a file (below) |
+| `COPY [/V] [/B] source [destination]` | copies files: `COPY A.TXT B.TXT`, `COPY *.TXT \BACKUP`, `COPY *.TXT *.BAK`. `/V` and `/B` are accepted and change nothing; `COPY NAME+,,` touches a file, and `CON` and `NUL` are devices (below) |
 | `XCOPY source [destination] [/S]` | copies files and, with `/S`, every directory below |
 
 `COPY` and `XCOPY` give each copy the date and time of the file it was
 copied from, as DOS did.
+
+COPY also takes two devices, `CON` (the keyboard and screen) and `NUL`
+(nothing), as `CON:` and `NUL:` too:
+
+- `COPY CON NOTE.TXT` writes what you type to a file, each line ended
+  with CR LF. Ctrl+Z or F6 finishes at once, with no Enter needed after it.
+  Esc drops the line being typed; Ctrl+C or Break stops, leaving any old
+  file as it was.
+- `COPY NOTE.TXT CON` shows a file; `COPY NOTE.TXT NUL` only reads it, so
+  it tells you the file can be read.
+- `COPY NUL NOTE.TXT` makes an empty file.
+
+Only COPY treats these names as devices, and redirection takes `> NUL`.
 
 `COPY /B NAME+,,` gives a file the date and time now, leaving what is in
 it, as in DOS: UNIX's `touch`. A wildcard does each file it matches. With
@@ -389,10 +405,24 @@ gone, it moves to `C:\`.
 
 ## 5. Running programs
 
-Type a program's name to run it: `PICO-ATOM` runs `PICO-ATOM.UF2`. The
-shell looks in the current directory first, then in each directory of
-`PATH`, which starts as `C:\PICO2-APPS`. A batch file of the same name,
-`PICO-ATOM.BAT`, anywhere it looks, runs in its place.
+Type a program's name to run it: `PICO-ATOM` runs `PICO-ATOM.UF2`. A
+program can live wherever you keep its files:
+
+```
+C:\>CD ATOM
+C:\ATOM>PICO-ATOM
+```
+
+or by its path, `C:\ATOM\PICO-ATOM`, or from any directory you add to
+`PATH`. `PICO-ATOM.UF2` typed in full works too.
+
+The shell looks in the current directory first, then in each directory of
+`PATH`, which starts as `C:\PICO2-APPS`, the directory UF2 Loader's own
+menu lists. Only programs there show up in that menu. In each directory,
+as in DOS, a program comes before a batch file of the same name, so
+`PICO-ATOM.BAT` in the current directory runs ahead of `PICO-ATOM.UF2` on
+`PATH`, but not ahead of one beside it. Type `PICO-ATOM.BAT` to run the
+batch file anyway.
 
 ```
 C:\>PICO-ORIC
@@ -667,12 +697,12 @@ opens, but must be saved under another name.
 ```
 C:\BOOT2350.UF2       the shell
 C:\BOOT2350.ORG       UF2 Loader's own menu, run with EXIT
-C:\PICO2-APPS\        programs, run by name
+C:\PICO2-APPS\        programs, run by name; they can live elsewhere too
 C:\PICO2-APPS\NTP.UF2 the Pico 2 W build's NTP
 C:\NTP\NTP.CFG        NTP's settings
 C:\AUTOEXEC.BAT       run each time the shell starts
-C:\HOME\              where the shell starts
-C:\.shell\            the shell's history, and large pipes while they run
+C:\.shell\            the shell's history, the directory to come back to,
+                      and large pipes while they run
 ```
 
 - **Hidden files.** `DIR` and wildcards leave out names that start with

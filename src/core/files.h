@@ -102,6 +102,9 @@ const char *files_chdir(shell_t *sh, const char *path);
  * in place. */
 extern const char FILES_STOPPED[];
 const char *files_copy(shell_t *sh, const char *src, const char *dst, const char **which);
+/* Read a whole file, to `to`, or to nothing if it is NULL: NULL, why not,
+ * or FILES_STOPPED. */
+const char *files_read_out(shell_t *sh, const char *src, const out_t *to);
 
 /* A walk down the tree under a directory, for the DOS flavour's /S,
  * XCOPY and DELTREE: depth first, in the card's order, one directory

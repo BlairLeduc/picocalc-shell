@@ -556,6 +556,23 @@ const char *files_copy(shell_t *sh, const char *src, const char *dst, const char
     return files_safe_commit(&s_copy);
 }
 
+const char *files_read_out(shell_t *sh, const char *src, const out_t *to) {
+    FRESULT r = f_open(&s_src, src, FA_READ);
+    if (r != FR_OK) return files_why(r);
+    for (;;) {
+        UINT n;
+        r = f_read(&s_src, s_buf, sizeof s_buf, &n);
+        if (r != FR_OK || n == 0) break;
+        if (to) out_write(to, (const char *)s_buf, n);
+        if (shell_interrupted(sh)) {
+            f_close(&s_src);
+            return FILES_STOPPED;
+        }
+    }
+    f_close(&s_src);
+    return r == FR_OK ? NULL : files_why(r);
+}
+
 /* One file to `dst`, both absolute, through dst.new. */
 static int copy_file(shell_t *sh, const char *src, const char *dst) {
     if (path_same(src, dst)) {

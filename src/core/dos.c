@@ -274,7 +274,7 @@ const shell_builtin_t flavour_builtins[] = {
     { "CHDIR",     dos_cd,        "CHDIR [path]", "Displays or changes the directory" },
     { "CHOICE",    dos_choice,    "CHOICE [/C[:]keys] [/N] [/S] [/T[:]c,nn] [text]", "Waits for one of a set of keys" },
     { "CLS",       dos_cls,       "CLS", "Clears the screen" },
-    { "COPY",      dos_copy,      "COPY [/V] [/B] source [destination]", "Copy one or more files" },
+    { "COPY",      dos_copy,      "COPY [/V] [/B] source [destination]", "Copies files; CON, NUL are devices" },
     { "DATE",      dos_date,      "DATE [/T | date]", "Displays or sets the date" },
     { "DEL",       dos_del,       "DEL [/P] path", "Removes one or more files" },
     { "DELTREE",   dos_deltree,   "DELTREE [/Y] path...", "Deletes a directory and its contents" },
@@ -337,7 +337,7 @@ static int stage(shell_t *sh, int k, pipe_t *from, pipe_t *to, void *ctx) {
         return 0;
     }
     dos_tail = c->tail;
-    /* A batch file, ahead of a program of the same name. */
+    /* A batch file, unless a program of the same name is found first. */
     const char *bat = shell_is_builtin(name) ? NULL : dos_batch_find(sh, name);
     if (bat) {
         if (c->in || c->out || from || to) {

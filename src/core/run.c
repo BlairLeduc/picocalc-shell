@@ -101,6 +101,7 @@ static int run_path(shell_t *sh, const char *name, const char *path, bool ram_on
 
     switch (r) {
     case UF2_FLASH:
+        shell_keep_cwd(sh);
         shell_leaving(sh);
         ld->boot(ld->ctx, NULL, &info);
         return 0;
@@ -110,6 +111,7 @@ static int run_path(shell_t *sh, const char *name, const char *path, bool ram_on
             shell_error(sh, "%s: %s\n", name, files_why(fr));
             return 1;
         }
+        shell_keep_cwd(sh);
         shell_leaving(sh);
         ld->boot(ld->ctx, s_sfn, &info);
         return 0;
@@ -156,6 +158,16 @@ static bool find(shell_t *sh, const char *name) {
             shell_error(sh, "%s: name too long\n", name);
             return false;
         }
+        /* DOS: a path with no extension is the program's, as C:\WP51\WP
+         * was WP.EXE. */
+        size_t len = strlen(s_path);
+        if (SHELL_DOS && !strchr(path_base(s_path), '.') &&
+            len + sizeof SHELL_PROGRAM_EXT <= sizeof s_path) {
+            memcpy(s_path + len, SHELL_PROGRAM_EXT, sizeof SHELL_PROGRAM_EXT);
+            r = f_stat(s_path, &s_fno);
+            if (r == FR_OK && !(s_fno.fattrib & AM_DIR)) return true;
+            s_path[len] = '\0';
+        }
         r = f_stat(s_path, &s_fno);
         if (r == FR_OK && !(s_fno.fattrib & AM_DIR)) return true;
         if (r == FR_OK) shell_error(sh, "%s: is a directory\n", name);
@@ -163,8 +175,11 @@ static bool find(shell_t *sh, const char *name) {
         return false;
     }
     if (n + sizeof SHELL_PROGRAM_EXT <= sizeof file) {
-        memcpy(file, name, n);
-        memcpy(file + n, SHELL_PROGRAM_EXT, sizeof SHELL_PROGRAM_EXT);
+        size_t ext = sizeof SHELL_PROGRAM_EXT - 1;
+        memcpy(file, name, n + 1);
+        /* DOS: NAME.UF2 typed in full, as WP.EXE was. */
+        if (!SHELL_DOS || n <= ext || !path_same(name + n - ext, SHELL_PROGRAM_EXT))
+            memcpy(file + n, SHELL_PROGRAM_EXT, sizeof SHELL_PROGRAM_EXT);
         if (SHELL_DOS && in_dir(sh, ".", file)) return true;
         /* An empty entry is the current directory, as in sh. */
         for (const char *p = vars_get("PATH", 4); p;) {
