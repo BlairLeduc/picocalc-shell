@@ -56,7 +56,7 @@ int cmd_help(shell_t *sh, int argc, char **argv) {
         }
     }
     out_puts(&sh->out, SHELL_DOS ? "\nHELP name for one. Any other name runs\n"
-                                   "a program from PATH, as NAME.UF2.\n"
+                                   "a program here or on PATH: NAME.UF2.\n"
                                  : "\n`man name` for one. Any other name runs\n"
                                    "a program from $PATH, as `name.uf2`.\n");
     return 0;
