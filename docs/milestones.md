@@ -49,10 +49,15 @@ recorded), from the card, 2026-11-04:
   inside a program, then on and back to the shell, to the directory left;
   `poweroff` at the prompt, then power-on, to the directory of that `CD`.
 
+**Checked by the owner,** on a Plus 2, from the card, 2026-11-04, the UNIX
+flavour: `poweroff` as expected; a power cycle from the shell; a power cycle
+inside a program, restoring the directory left.
+
 **Not checked:** the card write's cost in the time to come back, as a
-measurement. The power switch at the prompt, which writes nothing, as `poweroff`
-does not (host test only). Switching off and `AUTOEXEC.BAT`'s counterpart,
-`/etc/profile`, in the UNIX flavour. A Pico 2 or a Pico 2 W.
+measurement. The power switch at the prompt in the DOS flavour, which writes
+nothing, as `poweroff` does not (host test only). `AUTOEXEC.BAT`'s counterpart,
+`/etc/profile`, with a `cd`, beside a kept directory in the UNIX flavour. A Pico 2
+or a Pico 2 W.
 
 ## M7 — Shell at power-on (2026-10-25, branch `m7-boot-shell`)
 
