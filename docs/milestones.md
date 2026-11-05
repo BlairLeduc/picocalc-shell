@@ -16,12 +16,12 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
-## M13 — Program arguments (branch `m13-args`, 2026-11-04): built, the power cut's decision outstanding
+## M13 — Program arguments (branch `m13-args`, 2026-11-04, done 2026-11-05)
 
-**Not done yet.** §3.5's *Done when* asks for a power cut between the write and the
-program. The owner cannot make one: the power button is soft, and takes over a second to
-cut the power, and the window is milliseconds. The nearest thing was done over SWD (below);
-whether it stands in for the cut is the owner's to say.
+**Done.** §3.5's *Done when* asked for a power cut between the write and the program. The
+owner cannot make one: the power button is soft, and takes over a second to cut the power,
+and the window is milliseconds. The owner accepted the cut simulated over SWD (below) in its
+place, 2026-11-05.
 
 **Checked on the board:** Claude, on the Plus 2 W on the probe (RP2350B,
 `7458DC82A89AAC12`), its test card (`PLUS 2 W`, FAT32), under M7's patched stage3
@@ -109,7 +109,8 @@ All built under `-Werror`; `picotool info -a` still reads `args-test.uf2`.
 - The release builds, whose `/.shell/args` path is the same code.
 - Power-on and the menu under the stock loader, and with Up or F5 held; the no-command
   reboot above takes the same path in the program.
-- A real power cut between the write and the program, for the reason above.
+- A real power cut between the write and the program, for the reason above: the card losing
+  power, and a cut during a card write, are what the simulation leaves out.
 - Earlier records that the Plus 2 W's flash held a program "at offset 0" (M7, M12's
   2026-10-22 and 2026-10-25 notes in CLAUDE.md) may be this mapping and not the flash:
   those saves were read after a `reset halt`. Not looked into.

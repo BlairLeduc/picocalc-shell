@@ -21,7 +21,7 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-12 | The shell replaces the UF2 Loader's `BOOT2350.UF2`. | 3.2 |
 | 2026-10-12 | Programs may add an exit command that returns to the shell. | 3.4 |
 | 2026-10-12 | Power-on with no key held starts the last program, as the loader does now. | 3.4 |
-| 2026-10-12 | Program arguments are deferred. *Replaced by the design in §3.5, its questions answered 2026-11-04 and built on branch `m13-args`; M13's board runs are outstanding (§10).* | 3.5 |
+| 2026-10-12 | Program arguments are deferred. *Replaced by the design in §3.5, its questions answered 2026-11-04 and built on branch `m13-args`; M13 done 2026-11-05 (§10).* | 3.5 |
 | 2026-10-12 | The terminal uses the owner's own 10-pixel fonts. | 4.1 |
 | 2026-10-12 | The shell is called **shell**. Its prompt is the current directory followed by `>`. | 4.4 |
 | 2026-10-12 | The licence is GPL-3.0. | 9 |
@@ -44,6 +44,7 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-11-03 | Closer to UNIX (§4.4): the error stream can be redirected; a path or `NAME.sh` on `$PATH` runs a script; `rm -f`, `~`, `cd -`, `$PWD`; and `exit`, `test`, `which`, `tee`, `find`, `uniq`, `sort`, `true`, `false`, `less`. `exit` at the prompt stays in the shell and shows its header. There is still no `if`, `for` or `$(...)`, and the current directory is still not searched. | 4.4 |
 | 2026-11-03 | Closer to DOS (§4.7): the DOS flavour starts in `C:\`, not `C:\HOME`; a `NAME` looks in one directory at a time, a program before a batch file, in place of a batch file anywhere beating a program; `NAME.UF2` and a path with no extension run a program; COPY takes `CON` and `NUL`. In both flavours a restart comes back to the directory left (§4.3). | 4.3, 4.7 |
 | 2026-11-04 | In the DOS flavour `/` is never a path separator, as at MS-DOS's command line: it is the switch character, and only `\\` separates names. `CD /HOME`, `TYPE HOME/A.TXT`, `/GAMES/ORIC` and `C:/GAMES/ORIC` no longer work; `$PATH`, Tab and `picocalc_shell_args_path` follow the same rule. This replaces the earlier rule that a `/` outside a switch separates names. | 3.5, 4.7 |
+| 2026-11-05 | M13's power cut between the write and the program is simulated over SWD, stopped at a breakpoint and reset: the power button is soft, takes over a second to cut the power, and cannot hit a window of milliseconds. | 3.5 |
 | 2026-10-22 | For M12 (§3.8): the DS3231 is on `i2c0`, on the bus alone, with no GPIO (no `SQW`). Time zones are POSIX `TZ` strings. The UNIX flavour sets the time in POSIX's form, `date mmddHHMM[[cc]yy]`. The Wi-Fi password may be kept in plain text on the card. `i2c0` is on GP4 (SDA) and GP5 (SCL). The DOS flavour has `C:\CONFIG.SYS`, with `COUNTRY=`. `DIR` takes the 39-column layout with the size moved left. `/ntp/ntp.cfg` names one network (*changed the same day:* it was to hold several). The development build's UART moves off GP4 and GP5, to the pins left for it: 2, 3, 21 and 28. | 3.8 |
 | 2026-10-22 | Each flavour has a Pico 2 build and a separate Pico 2 W build; only the W build supports NTP (§3.8). A release offers `shell-unix.uf2`, `shell-dos.uf2`, `shell-unix-w.uf2` and `shell-dos-w.uf2`, and `ntp.uf2` for `/pico2-apps/`; this extends the 2026-10-16 decision. | 3.8, 4.7 |
 | 2026-10-22 | M12's design (§3.8) is settled: NTP runs in a separate RAM program, `ntp.uf2`, at most once per power-on, joining the one network `/ntp/ntp.cfg` names; `i2c0` runs at 100 kHz; the AON timer and the DS3231 hold UTC, POSIX `TZ` gives local time, and FAT timestamps are local; the record of the clock is in POWMAN scratch 0–2; `picocalc_shell.h` gains `picocalc_shell_time()` and `picocalc_shell_set_time()`; a clock that is not set is handled as in §3.8 (`date`'s status 1; `DATE`, `TIME`, and `/T` with `ERRORLEVEL`); file times as in §3.8 (`touch` sets an existing file's time, `cp` the current time, `COPY` keeps the source's; `ls -l`'s six-month rule); `CONFIG.SYS` as in §3.8. | 3.8 |
@@ -331,9 +332,8 @@ would change where the shell comes back to.
 #### Design: program arguments and the directory (*2026-11-03, M13; built 2026-11-04*)
 
 *The owner answered its questions on 2026-11-04 (below). It is built on branch
-`m13-args` and checked on the host; the board runs in *Done when* are
-outstanding ([milestones.md](milestones.md)). What the building changed or
-settled is marked* As built.
+`m13-args` and done, 2026-11-05 ([milestones.md](milestones.md)). What the
+building changed or settled is marked* As built.
 
 **What a user would see.** An option says what a file is for, in the flavour's
 spelling: `-t` or `-d` in UNIX's, `/T` or `/D` in DOS's. The name is found from
@@ -471,7 +471,8 @@ written and removed around a fake loader, with a failed write stopping the
 start; the header's parser, options and path rules run under `test_args`, in
 both flavours. On a board, a test program prints what it was given, from flash and
 from RAM, under stock and patched loaders, and a power cut between the write and
-the program leaves the next start of the shell clean.
+the program, simulated over SWD (*the owner, 2026-11-05:* the soft power button
+cannot time a real one), leaves the next start of the shell clean.
 
 ### 3.6 Programs that keep data in flash
 
@@ -2737,7 +2738,7 @@ in [milestones.md](milestones.md).
   the prompt. (*The owner, 2026-10-23:* the AON timer's drift against NTP
   is not measured: the clock is for general use.)
 - **M13 — Program arguments (designed 2026-11-03, questions answered
-  2026-11-04, built on branch `m13-args` 2026-11-04, board runs outstanding;
+  2026-11-04, built on branch `m13-args` 2026-11-04, done 2026-11-05;
   §3.5).** `pico-oric -t game.tap` and `PICO-ORIC /T
   GAME.TAP`: the declaration a program makes, `/.shell/args`, and the header's
   parser and options, which give a program the file's full path. The emulators
