@@ -72,6 +72,11 @@ not, and stops the shell between FatFs calls, not during a card write.
 power-on with F1 held says it has no file, and from the loader's menu both `args-test` and
 `args-ram` say the same. Started by the shell with words, `args-test` showed them on the panel.
 
+**A real program, in the release builds.** The owner, on a Plus 2, 2026-11-05, reported: the
+release builds of both flavours, with pico-oric changed to take arguments (not yet committed
+in its repository). Given the options for a tape and a disc, pico-oric received them and set
+itself up as asked.
+
 The card now has the M13 UNIX W development shell as `/BOOT2350.UF2` and the two test
 programs in `/bin`; what it held before is in `out/m13-card-before/`. Flash's app
 partition holds `args-test`.
@@ -111,7 +116,6 @@ All built under `-Werror`; `picotool info -a` still reads `args-test.uf2`.
 
 **Not checked:**
 
-- The release builds, whose `/.shell/args` path is the same code.
 - Power-on and the menu under the stock loader, and with Up or F5 held; the no-command
   reboot above takes the same path in the program.
 - A real power cut between the write and the program, for the reason above: the card losing
@@ -161,11 +165,12 @@ recorded), from the card, 2026-11-04:
 flavour: `poweroff` as expected; a power cycle from the shell; a power cycle
 inside a program, restoring the directory left.
 
+**The owner,** 2026-11-05, reported that a `cd` in `/etc/profile` works as expected
+beside a kept directory in the UNIX flavour.
+
 **Not checked:** the card write's cost in the time to come back, as a
 measurement. The power switch at the prompt in the DOS flavour, which writes
-nothing, as `poweroff` does not (host test only). `AUTOEXEC.BAT`'s counterpart,
-`/etc/profile`, with a `cd`, beside a kept directory in the UNIX flavour. A Pico 2
-or a Pico 2 W.
+nothing, as `poweroff` does not (host test only). A Pico 2 or a Pico 2 W.
 
 ## M7 — Shell at power-on (2026-10-25, branch `m7-boot-shell`)
 
