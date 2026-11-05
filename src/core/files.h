@@ -86,6 +86,9 @@ void files_input_end(shell_t *sh);
  * failure with the error printed as "cmd: arg: why". */
 FRESULT files_open_read(shell_t *sh, const char *cmd, const char *arg, FIL *f);
 
+/* The same for an absolute path the shell already holds, not one as typed. */
+FRESULT files_open_path(shell_t *sh, const char *cmd, const char *path, FIL *f);
+
 /* Leading options, such as -l -a or -la, up to "--" or the first
  * operand: each letter of `allowed` found sets its bit in *flags. The
  * index of the first operand, or -1 after printing the usage. */
@@ -94,6 +97,10 @@ int files_options(shell_t *sh, int argc, char **argv, const char *allowed, unsig
 
 /* The volume's type, size and free space, as df, info and DIR show them. */
 FRESULT files_space(const char **type, uint64_t *total, uint64_t *avail);
+
+/* The absolute `path`, each name spelled as the card has it: NULL, or why
+ * not. */
+const char *files_spelled(const char *path, char out[SHELL_PATH_MAX + 1]);
 
 /* Make `path` (absolute, a directory) the current directory, each name
  * spelled as the card has it: NULL, or why not. */

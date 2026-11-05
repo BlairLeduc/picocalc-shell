@@ -61,7 +61,9 @@ static bool where(shell_t *sh, const char *arg, char *out) {
         return false;
     }
     if (dos_resolve(out, sh->cwd, arg)) return true;
-    dos_error(sh, "Invalid path", arg);
+    const char *slash = strchr(arg, '/');
+    if (slash) dos_error(sh, "Invalid switch", slash);
+    else dos_error(sh, "Invalid path", arg);
     return false;
 }
 

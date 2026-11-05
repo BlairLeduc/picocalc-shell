@@ -177,7 +177,7 @@ static int unit_tests(void) {
         const char *arg, *want;
     } rs[] = {
         { "C:\\X", "/X" },   { "..\\Y", "/Y" },       { "C:Z", "/HOME/Z" },
-        { "/A/B", "/A/B" },  { "c:", "/HOME" },        { "C:\\", "/" },
+        { "c:", "/HOME" },        { "C:\\", "/" },
         { "a\\.\\b\\..", "/HOME/a" }, { "\\", "/" },
     };
     for (unsigned i = 0; i < sizeof rs / sizeof rs[0]; i++) {
@@ -188,6 +188,9 @@ static int unit_tests(void) {
     char out[SHELL_PATH_MAX + 1];
     CHECK(!dos_resolve(out, "/", "A:\\X") && dos_other_drive("b:") && !dos_other_drive("C:"),
           "other drives");
+    CHECK(!dos_resolve(out, "/HOME", "/A/B") && !dos_resolve(out, "/HOME", "A/B") &&
+              !dos_resolve(out, "/HOME", "C:/A"),
+          "'/' is no separator");
     char shown[64];
     dos_show(shown, sizeof shown, "/");
     CHECK(strcmp(shown, "C:\\") == 0, "root shown '%s'", shown);
@@ -471,7 +474,16 @@ static int dos_tests(bool fat32) {
     CHECK(run("CD..") == 0 && strcmp(sh.cwd, "/HOME") == 0, "cd..");
     CHECK(run("CD\\") == 0 && strcmp(sh.cwd, "/") == 0, "cd\\");
     CHECK(run("CD C:\\HOME\\DOCS") == 0 && strcmp(sh.cwd, "/HOME/DOCS") == 0, "cd C:");
-    CHECK(run("CD /HOME") == 0 && strcmp(sh.cwd, "/HOME") == 0, "cd with /");
+    CHECK(run("CD \\HOME") == 0 && strcmp(sh.cwd, "/HOME") == 0, "back: '%s'", con);
+    /* '/' is a switch, never a separator. */
+    CHECK(run("CD /HOME") == 1 && strcmp(con, "Invalid switch - /HOME\n") == 0, "cd with /: '%s'", con);
+    CHECK(run("CD DOCS/X") == 1 && strcmp(con, "Invalid switch - /X\n") == 0, "cd a/b: '%s'", con);
+    CHECK(run("TYPE DOCS/A.TXT") == 1 && strcmp(con, "Invalid switch - /A.TXT\n") == 0, "type a/b: '%s'", con);
+    CHECK(run("MD /NEWDIR") == 1 && strcmp(con, "Invalid switch - /NEWDIR\n") == 0 && !exists("/NEWDIR"),
+          "md /x: '%s'", con);
+    CHECK(run("ECHO hi > DOCS/OUT.TXT") != 0 && !exists("/HOME/DOCS/OUT.TXT"), "> a/b: '%s'", con);
+    CHECK(run("IF EXIST \\HOME ECHO yes") == 0 && strcmp(con, "yes\n") == 0, "IF EXIST \\: '%s'", con);
+    CHECK(run("IF EXIST /HOME ECHO yes") == 0 && strcmp(con, "") == 0, "IF EXIST /: '%s'", con);
     CHECK(run("CD NOPE") == 1 && strcmp(con, "Invalid directory\n") == 0, "'%s'", con);
     CHECK(run("MD DOCS") == 1 && strcmp(con, "Unable to create directory\n") == 0, "'%s'", con);
     CHECK(run("A:") == 1 && strcmp(con, "Invalid drive specification\n") == 0, "'%s'", con);
@@ -862,6 +874,10 @@ static int dos_tests(bool fat32) {
     CHECK(strcmp(sh.line.text, "CD PAPERS\\") == 0, "Tab: '%s'", sh.line.text);
     for (const char *s = "DE\t"; *s; s++) shell_input(&sh, (unsigned char)*s);
     CHECK(strcmp(sh.line.text, "CD PAPERS\\DEEP\\") == 0, "Tab again: '%s'", sh.line.text);
+    shell_input(&sh, 0x1B);
+    /* A '/' separates nothing, so nothing is completed after it. */
+    for (const char *s = "CD PAPERS/DE\t"; *s; s++) shell_input(&sh, (unsigned char)*s);
+    CHECK(strcmp(sh.line.text, "CD PAPERS/DE") == 0, "Tab after /: '%s'", sh.line.text);
     shell_input(&sh, 0x1B);
     for (const char *s = "xc\t"; *s; s++) shell_input(&sh, (unsigned char)*s);
     CHECK(strcmp(sh.line.text, "XCOPY ") == 0, "a command: '%s'", sh.line.text);

@@ -666,10 +666,32 @@ from the card without writing flash.
   and on. For a program that runs from RAM, only switching off and on
   works.
 
+### Giving a program a file
+
+A program that says it takes arguments can be given them after its name.
+By convention, `-t` names a tape and `-d` a disc, and each program decides
+which it takes. A name is found from your directory, not the program's own:
+
+```
+/home>pico-oric -t game.tap
+```
+
+This loads `/home/game.tap`. Variables, quotes and globs work as for any
+command; with `-t *.tap`, the program takes the first match. A program that
+has not said it takes arguments is refused rather than started without them:
+
+```
+/home>pico-atom -t game.tap
+pico-atom: takes no arguments
+```
+
+The arguments last for that one start. Switching off and on starts the
+program with none, and so does starting it from the loader's menu.
+
 ### Limits
 
-- **Programs take no arguments yet.** `pico-oric game.tap` is refused,
-  and so is running a program with a redirection or in a pipe.
+- **A program takes no redirection or pipe.** Running one with `>` or in a
+  pipe is refused.
 - **Programs that keep files in flash.** Running a program rewrites the
   program area of flash, so a program that keeps its own files there,
   after its code, loses them when another program runs.

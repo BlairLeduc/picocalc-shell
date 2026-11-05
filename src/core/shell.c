@@ -131,6 +131,7 @@ void shell_start(shell_t *sh) {
      * run from the usual place. */
     static char kept[SHELL_PATH_MAX + 1];
     bool back = history_take_cwd(kept);
+    history_drop_args();
     flavour_start(sh);
     if (back && files_is_dir(kept)) files_chdir(sh, kept);
     sh->stop = false;

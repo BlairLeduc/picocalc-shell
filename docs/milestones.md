@@ -16,6 +16,108 @@ Each entry gives:
 - a **not checked** list, carried forward until something checks each item
   or a decision drops it.
 
+## M13 — Program arguments (branch `m13-args`, 2026-11-04): built, the power cut's decision outstanding
+
+**Not done yet.** §3.5's *Done when* asks for a power cut between the write and the
+program. The owner cannot make one: the power button is soft, and takes over a second to
+cut the power, and the window is milliseconds. The nearest thing was done over SWD (below);
+whether it stands in for the cut is the owner's to say.
+
+**Checked on the board:** Claude, on the Plus 2 W on the probe (RP2350B,
+`7458DC82A89AAC12`), its test card (`PLUS 2 W`, FAT32), under M7's patched stage3
+(`2.5-shell`), 2026-11-04, the W development builds of `v1.2-2-gc074b1b-dirty`
+installed as `/BOOT2350.UF2` and started by stage3, `args-test` and `args-ram` in
+`/bin`, driven and read over UART0, in `out/m13-*.log`. In each flavour, from a
+subdirectory:
+
+- From flash and from RAM, the flavour, directory, card-spelled path, declared name,
+  words and full paths arrive as sent; with no words, the directory still does.
+- `atom`, an older program, is refused; so is a redirection, and a pipe (UNIX); none
+  writes `/.shell/args`.
+- A key returns to the shell in the same directory with the file gone.
+- `echo stale > /.shell/args` with `args.new`, then `reboot`: both gone at the next start.
+- UNIX: a watchdog reboot with no command, as a program's own restart, starts
+  `args-test` with no file (it says so); with a stale file, it ignores and removes it.
+- DOS: `ARGS-TEST/T GAME.TAP`; a batch file's `@ARGS-TEST /T %1`; `D:\X` and `/A/B`
+  give no path; `CD /HOME`, `TYPE GO/A.TXT`, `MD /NEWDIR` say `Invalid switch`;
+  `/BIN/ARGS-TEST` and `C:/BIN/ARGS-TEST` say `Bad command or file name`.
+
+**Under the stock loader,** the same day and board: stock 2.5 built for 16 MB
+(`tools/build-loader.sh --stock 16`) written at offset 0 over SWD, and read back, with
+the app partition unchanged (HW §7.2's `ATRANS` note). `info` said `UF2 Loader 2.5`. In
+both flavours, from flash and RAM (`out/m13-stock-*.log`): the same words and paths;
+the refusals; the file gone on return, with the directory kept; a batch file (DOS);
+planted `args` and `args.new` gone at the next start; and a no-command reboot, with no
+file and with a stale one. The DOS flavour also ran the no-word start, the pipe's
+refusal, `args.new` and the no-command reboots here, which the patched runs left out.
+The patched stage3 was then written back, its first 16 KB identical to what was saved
+(`out/m13-plus2w-flash-before-stock.bin`), and `args-test -t a.tap` ran under it.
+
+**A cut simulated over SWD,** the same day and board, patched stage3, UNIX W development
+build, with a hardware breakpoint on core 0 (`set USE_CORE 0`: with both cores, OpenOCD
+often failed to attach, and a reset in the session that had stopped left the board silent
+until a new session reset it), in `out/m13-cut-*.log`:
+
+- Stopped at `f_rename`, `r0` reading `/.shell/args.new`: the file written, not yet
+  renamed. Reset: the shell came up with only `history` in `/.shell`.
+- Stopped at `shell_keep_cwd`, just after `/.shell/args` was committed. Reset: the same.
+- Stopped there, then a no-command reboot, which starts the program as power-on does under
+  the stock loader: `args-test` read the whole file, words and paths right, and removed it.
+
+In the first two the shell came back to `/home`, not the directory left, since the
+directory is written after the stop. A reset leaves the card powered, which a real cut would
+not, and stops the shell between FatFs calls, not during a card write.
+
+**The owner,** on the same board and card, patched stage3, 2026-11-05: `args-test` started at
+power-on with F1 held says it has no file, and from the loader's menu both `args-test` and
+`args-ram` say the same. Started by the shell with words, `args-test` showed them on the panel.
+
+The card now has the M13 UNIX W development shell as `/BOOT2350.UF2` and the two test
+programs in `/bin`; what it held before is in `out/m13-card-before/`. Flash's app
+partition holds `args-test`.
+
+**Checked on the host.** 31 of 31 under CTest. The new `test_args` and
+`test_args_dos`, each over FAT16 and FAT32, cover: the record at every aligned
+place in a UF2, flash and RAM, and not found off its alignment, with half its
+magic, with a bad name or in another chip's block; each refusal, with no flash or
+card write; `/.shell/args` byte for byte, with a failed write at every write it
+takes stopping the start; what is left removed by the next `shell_start`; each
+flavour's words; and the header's parser, options and path rules. With
+`tools/fetch-suites.sh` run, the record is found in the real `args-test.uf2` and
+`args-ram.uf2` and absent from `pico-ace.uf2` and the loader's menu.
+
+Faults the tests and the real build caught while it was built:
+
+- `retain` is ignored by the Arm toolchain (`-Werror=attributes`), which would have
+  lost the record to `--gc-sections`; the macro keeps it with a constructor (§3.5).
+- `f_stat` gives a long name back as typed, so `/PICO2-APPS/DECL.UF2` gave the
+  program the typed spelling; `files_chdir`'s walk through the listings is now
+  `files_spelled`, which both use.
+- The DOS parser's first version of `NAME/T` also cut `/PICO2-APPS/OLD` at its second
+  `/`.
+- Removing `/` as a DOS separator (the owner, 2026-11-04) stopped every batch file
+  found by name: `open_batch` sent its absolute card path back through the typed-word
+  resolver. It now uses `files_open_path`; `test_dos_time`'s `\\ASK` caught it.
+
+**Memory** (SDK 2.3.1, the development UNIX build): text 189,564 to 190,636 bytes,
+1,072 more; bss unchanged at 287,488; 478,124 in all. The other builds, text + bss:
+DOS 448,656; release UNIX 474,468; release DOS 445,008; W UNIX 480,384; W DOS 451,192.
+All built under `-Werror`; `picotool info -a` still reads `args-test.uf2`.
+
+**Not checked:**
+
+- The release builds, whose `/.shell/args` path is the same code.
+- Power-on and the menu under the stock loader, and with Up or F5 held; the no-command
+  reboot above takes the same path in the program.
+- A real power cut between the write and the program, for the reason above.
+- Earlier records that the Plus 2 W's flash held a program "at offset 0" (M7, M12's
+  2026-10-22 and 2026-10-25 notes in CLAUDE.md) may be this mapping and not the flash:
+  those saves were read after a `reset halt`. Not looked into.
+- The time the extra card write and the path's walk add to each start: an estimate of
+  a few milliseconds, not measured.
+
+The emulators adopting it is their own repositories' work (§3.5).
+
 ## Closer to DOS and to UNIX (not a milestone; branches `dos-closer`, `unix-comfort`, 2026-11-04)
 
 **Checked on the board:** Claude, on the Plus 2 W on the probe (RP2350B), its

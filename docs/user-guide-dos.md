@@ -102,9 +102,9 @@ from the command line.
 
 ### Paths
 
-- Paths use `\`: `C:\ORIC\KEYMAPS`. `/` works as well, except in DIR,
-  COPY, XCOPY, DEL and DELTREE, where a `/` starts a switch anywhere in
-  a word, as in DOS: `DIR \/W` is `DIR \ /W`.
+- Paths use `\`: `C:\ORIC\KEYMAPS`. `/` starts a switch and never
+  separates names, as in DOS: `DIR \/W` is `DIR \ /W`, and `CD /HOME` is
+  `Invalid switch - /HOME`.
 - A path may start with `C:` or not: `C:\HOME` and `\HOME` are the same.
 - Commands and switches can be typed in either case: `dir /w` is `DIR /W`.
 - `CD..`, `CD\` and `DIR/W` work with no space, as in DOS.
@@ -458,10 +458,35 @@ from the card without writing flash.
   and on. For a program that runs from RAM, only switching off and on
   works.
 
+### Giving a program a file
+
+A program that says it takes arguments can be given them after its name.
+By convention, `/T` names a tape and `/D` a disc, and each program decides
+which it takes. A name is found from your directory, not the program's own:
+
+```
+C:\HOME>PICO-ORIC /T GAME.TAP
+```
+
+This loads `C:\HOME\GAME.TAP`. `PICO-ORIC/T GAME.TAP` is the same, since a
+`/` ends a command's name, as in `DIR/W`; so write a relative path with `\`,
+as `GAMES\ORIC`. `%NAME%` works as for any command, and `PICO-ORIC /T %1` in a
+batch file, though nothing after that line runs. Wildcards go to the program
+as typed. A file on another drive is refused by the program. A program that
+has not said it takes arguments is refused rather than started without them:
+
+```
+C:\HOME>PICO-ATOM /T GAME.TAP
+PICO-ATOM: takes no arguments
+```
+
+The arguments last for that one start. Switching off and on starts the
+program with none, and so does starting it from the loader's menu.
+
 ### Limits
 
-- **Programs take no arguments yet.** `PICO-ORIC GAME.TAP` is refused,
-  and so is running a program with a redirection or in a pipe.
+- **A program takes no redirection or pipe.** Running one with `>` or in a
+  pipe is refused.
 - **Programs that keep files in flash.** Running a program rewrites the
   program area of flash, so a program that keeps its own files there,
   after its code, loses them when another program runs. **Pico Logo**

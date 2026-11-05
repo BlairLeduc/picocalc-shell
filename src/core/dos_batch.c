@@ -213,7 +213,7 @@ static bool for_wild(shell_t *sh, level_t *lv, char var, const char *cmd, const 
     else *slash = '\0';
     size_t prefix = 0;
     for (size_t i = 0; item[i]; i++)
-        if (item[i] == '\\' || item[i] == '/' || item[i] == ':') prefix = i + 1;
+        if (item[i] == '\\' || item[i] == ':') prefix = i + 1;
     if (f_opendir(&lv->dir, dir) != FR_OK) return true;
     bool go = true;
     while (go && f_readdir(&lv->dir, &lv->ent) == FR_OK && lv->ent.fname[0]) {
@@ -340,7 +340,7 @@ const char *dos_batch_find(shell_t *sh, const char *name) {
     char *file = s_name;
     const char *base = name;
     for (const char *s = name; *s; s++)
-        if (*s == '\\' || *s == '/' || *s == ':') base = s + 1;
+        if (*s == '\\' || *s == ':') base = s + 1;
     const char *dot = strrchr(base, '.');
     if (dot && !path_same(dot, ".BAT")) return NULL;
     size_t n = strlen(name);
@@ -411,7 +411,7 @@ static bool open_batch(shell_t *sh, unsigned d, const char *path, const char *na
                        const char *tail, bool startup) {
     level_t *lv = &s_levels[d];
     FRESULT r = startup ? files_open_startup(&lv->fil, path)
-                        : files_open_read(sh, name, path, &lv->fil);
+                        : files_open_path(sh, name, path, &lv->fil);
     if (r != FR_OK) {
         if (startup && r != FR_NO_FILE && r != FR_NO_PATH && r != FR_NOT_READY)
             flavour_file_error(sh, name, path, files_why(r));

@@ -86,7 +86,10 @@ bool files_is_dir(const char *path) {
 /* `arg` as typed, in the flavour's paths, made absolute. */
 static bool resolve(shell_t *sh, const char *cmd, const char *arg, char *out) {
     if (flavour_resolve(out, sh->cwd, arg)) return true;
-    flavour_file_error(sh, cmd, arg, "name too long");
+    /* In DOS's paths, '/' can only have been a switch (§4.7). */
+    const char *slash = SHELL_DOS ? strchr(arg, '/') : NULL;
+    if (slash) shell_error(sh, "Invalid switch - %s\n", slash);
+    else flavour_file_error(sh, cmd, arg, "name too long");
     return false;
 }
 
@@ -294,19 +297,18 @@ int cmd_cd(shell_t *sh, int argc, char **argv) {
     return 0;
 }
 
-const char *files_chdir(shell_t *sh, const char *path) {
-    /* The prompt shows each name as the card spells it, not as typed.
-     * f_stat gives a long name back as it was asked for, so each one is
+const char *files_spelled(const char *path, char out[SHELL_PATH_MAX + 1]) {
+    /* f_stat gives a long name back as it was asked for, so each one is
      * found in its directory's listing. */
     FRESULT r;
     if (path != s_a) strcpy(s_a, path);
     size_t len = 0;
-    s_b[0] = '\0';
+    out[0] = '\0';
     for (char *p = s_a + 1; *p;) {
         char *e = strchr(p, '/');
         if (e) *e = '\0';
         DIR d;
-        r = f_opendir(&d, len ? s_b : "/");
+        r = f_opendir(&d, len ? out : "/");
         while (r == FR_OK && (r = f_readdir(&d, &s_fno)) == FR_OK && s_fno.fname[0])
             if (path_same(s_fno.fname, p) || path_same(s_fno.altname, p)) break;
         f_closedir(&d);
@@ -314,13 +316,20 @@ const char *files_chdir(shell_t *sh, const char *path) {
         if (r != FR_OK) return files_why(r);
         size_t n = strlen(s_fno.fname);
         if (len + 1u + n > SHELL_PATH_MAX) return "name too long";
-        s_b[len++] = '/';
-        memcpy(s_b + len, s_fno.fname, n + 1);
+        out[len++] = '/';
+        memcpy(out + len, s_fno.fname, n + 1);
         len += n;
         p = e ? e + 1 : p + strlen(p);
     }
-    strcpy(sh->cwd, len ? s_b : "/");
+    if (!len) strcpy(out, "/");
     return NULL;
+}
+
+const char *files_chdir(shell_t *sh, const char *path) {
+    /* The prompt shows each name as the card spells it, not as typed. */
+    const char *why = files_spelled(path, s_b);
+    if (!why) strcpy(sh->cwd, s_b);
+    return why;
 }
 
 /* ---- ls --------------------------------------------------------------- */
@@ -521,15 +530,24 @@ static int cat_in(shell_t *sh, const input_t *in, const char *shown) {
     }
 }
 
-FRESULT files_open_read(shell_t *sh, const char *cmd, const char *arg, FIL *f) {
-    if (!resolve(sh, cmd, arg, s_a)) return FR_INVALID_NAME;
-    FRESULT r = f_open(f, s_a, FA_READ);
+/* The absolute `path`, with any error naming `shown`. */
+static FRESULT open_read(shell_t *sh, const char *cmd, const char *shown, const char *path, FIL *f) {
+    FRESULT r = f_open(f, path, FA_READ);
     if (r != FR_OK) {
         /* FatFs opens a directory as no file at all. */
-        bool dir = r == FR_NO_FILE && files_is_dir(s_a);
-        flavour_file_error(sh, cmd, arg, dir ? "is a directory" : files_why(r));
+        bool dir = r == FR_NO_FILE && files_is_dir(path);
+        flavour_file_error(sh, cmd, shown, dir ? "is a directory" : files_why(r));
     }
     return r;
+}
+
+FRESULT files_open_read(shell_t *sh, const char *cmd, const char *arg, FIL *f) {
+    if (!resolve(sh, cmd, arg, s_a)) return FR_INVALID_NAME;
+    return open_read(sh, cmd, arg, s_a, f);
+}
+
+FRESULT files_open_path(shell_t *sh, const char *cmd, const char *path, FIL *f) {
+    return open_read(sh, cmd, path, path, f);
 }
 
 int cmd_cat(shell_t *sh, int argc, char **argv) {
