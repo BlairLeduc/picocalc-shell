@@ -12,6 +12,7 @@
 #include "flavour.h"
 #include "history.h"
 #include "host_disk.h"
+#include "path.h"
 #include "picocalc_shell.h"
 #include "run.h"
 #include "shell.h"
@@ -420,6 +421,7 @@ static int run(const char *line) {
 #define CD_ROOT "CD \\"
 #define CD_TAPES "CD \\TAPES"
 #define DECL     "DECL"
+#define DEEP_RUN "DEEP"
 #define OPT_T    "/T"
 #define SHOW_DIR "CD"
 #define MENU     "EXIT"
@@ -429,6 +431,7 @@ static int run(const char *line) {
 #define CD_ROOT "cd /"
 #define CD_TAPES "cd /TAPES"
 #define DECL     "decl"
+#define DEEP_RUN "./deep"
 #define OPT_T    "-t"
 #define SHOW_DIR "pwd"
 #define MENU     "menu"
@@ -620,6 +623,28 @@ static int test_shell(void) {
     /* And it does no harm with nothing there. */
     shell_start(&sh);
     CHECK(run(SHOW_DIR) == 0, "the shell runs: '%s'", con);
+
+    /* A RAM program whose path stage3 could not open stops before anything
+     * is written: each name is longer as its 8.3 entry, past the limit, so
+     * nothing is left for the loader's menu to start the program with. */
+    make(UF2_SRAM_BASE, 8);
+    declare(3, 64, "decl-name");
+    static char deep[SHELL_PATH_MAX + 1];
+    deep[0] = '\0';
+    size_t deep_len = 0;
+    for (int i = 0; i < 60; i++) {
+        deep_len += (size_t)snprintf(deep + deep_len, sizeof deep - deep_len, "/a+");
+        CHECK(f_mkdir(deep) == FR_OK, "mkdir %d", i);
+    }
+    char deep_prog[SHELL_PATH_MAX + 1];
+    CHECK(path_join(deep_prog, deep, "deep.uf2") && put(deep_prog, ubuf, ulen), "the program");
+    f_unlink(CWD_FILE);
+    snprintf(sh.cwd, sizeof sh.cwd, "%s", deep);
+    int deep_status = run(DEEP_RUN " x");
+    CHECK(deep_status == 1 && boots == 0 && strstr(con, DEEP_RUN), "too deep: %d '%s'", deep_status, con);
+    CHECK(!exists(ARGS_FILE) && !exists(ARGS_FILE ".new"), "too deep: a file was left");
+    CHECK(!exists(CWD_FILE), "too deep: the directory was kept");
+    CHECK(run(CD_ROOT) == 0, "cd: '%s'", con);
 
     /* The menu is never given any. */
     make(UF2_SRAM_BASE, 16);

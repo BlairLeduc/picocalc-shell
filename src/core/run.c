@@ -15,6 +15,7 @@ static FIL      s_prog;
 static FILINFO  s_fno;
 static char     s_path[SHELL_PATH_MAX + 1];
 static char     s_sfn[SHELL_PATH_MAX + 1];
+static char     s_spelled[SHELL_PATH_MAX + 1];
 
 /* The path stage3 can open: each name of the absolute `path` as its 8.3
  * entry, as the loader's menu makes it (get_short_path in ui/uf2.c).
@@ -75,8 +76,8 @@ static uint32_t since(shell_t *sh, uint64_t t0) {
 static bool leave_for(shell_t *sh, const char *name, const char *path, const uf2_info_t *info,
                       int argc, char **argv) {
     if (info->args_name[0]) {
-        const char *err = files_spelled(path, s_sfn);
-        if (!err) err = history_keep_args(sh->cwd, s_sfn, info->args_name, argc, argv);
+        const char *err = files_spelled(path, s_spelled);
+        if (!err) err = history_keep_args(sh->cwd, s_spelled, info->args_name, argc, argv);
         if (err) {
             shell_error(sh, "%s: %s: %s\n", name, ARGS_FILE, err);
             return false;
@@ -134,12 +135,14 @@ static int run_path(shell_t *sh, const char *name, const char *path, bool ram_on
         ld->boot(ld->ctx, NULL, &info);
         return 0;
     case UF2_RAM:
-        if (!leave_for(sh, name, path, &info, argc, argv)) return 1;
+        /* Before anything is written: nothing may fail once the file is
+         * there, or it waits for a program started from the loader's menu. */
         fr = short_path(path, s_sfn);
         if (fr != FR_OK) {
             shell_error(sh, "%s: %s\n", name, files_why(fr));
             return 1;
         }
+        if (!leave_for(sh, name, path, &info, argc, argv)) return 1;
         ld->boot(ld->ctx, s_sfn, &info);
         return 0;
     case UF2_NOT_UF2:

@@ -98,9 +98,14 @@ Faults the tests and the real build caught while it was built:
 - Removing `/` as a DOS separator (the owner, 2026-11-04) stopped every batch file
   found by name: `open_batch` sent its absolute card path back through the typed-word
   resolver. It now uses `files_open_path`; `test_dos_time`'s `\\ASK` caught it.
+- A RAM program whose 8.3 path passed the limit left `/.shell/args` behind with the program
+  not started, where the loader's menu could give it to a program of the same declared name
+  (Copilot's review of the PR, 2026-11-05). The short path now comes before anything is
+  written, and `test_args` covers it. Not run on the board: it needs a path 60 directories deep.
 
-**Memory** (SDK 2.3.1, the development UNIX build): text 189,564 to 190,636 bytes,
-1,072 more; bss unchanged at 287,488; 478,124 in all. The other builds, text + bss:
+**Memory** (SDK 2.3.1, the development UNIX build): text 189,564 to 190,640 bytes,
+1,076 more; bss 287,488 to 287,744, 256 more for the program's path; 478,384 in all. The
+other builds, text + bss, before those 260 bytes:
 DOS 448,656; release UNIX 474,468; release DOS 445,008; W UNIX 480,384; W DOS 451,192.
 All built under `-Werror`; `picotool info -a` still reads `args-test.uf2`.
 
