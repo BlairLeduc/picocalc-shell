@@ -7,6 +7,7 @@
 
 #include "files.h"
 #include "flavour.h"
+#include "history.h"
 #include "path.h"
 #include "vars.h"
 
@@ -14,6 +15,7 @@ static FIL      s_prog;
 static FILINFO  s_fno;
 static char     s_path[SHELL_PATH_MAX + 1];
 static char     s_sfn[SHELL_PATH_MAX + 1];
+static char     s_spelled[SHELL_PATH_MAX + 1];
 
 /* The path stage3 can open: each name of the absolute `path` as its 8.3
  * entry, as the loader's menu makes it (get_short_path in ui/uf2.c).
@@ -67,9 +69,30 @@ static uint32_t since(shell_t *sh, uint64_t t0) {
     return (uint32_t)(sh->hooks.now_us(sh->hooks.ctx) - t0);
 }
 
-/* Check, flash if need be, and reboot into the program at `path`,
- * which exists. `ram_only` for the menu, which must never be flashed. */
-static int run_path(shell_t *sh, const char *name, const char *path, bool ram_only) {
+/* The last steps before the reboot, in order: what a program that takes
+ * arguments is to be given, without which it must not start; then the
+ * directory to come back to, and the history. False, with the error
+ * printed, if the program must not start. */
+static bool leave_for(shell_t *sh, const char *name, const char *path, const uf2_info_t *info,
+                      int argc, char **argv) {
+    if (info->args_name[0]) {
+        const char *err = files_spelled(path, s_spelled);
+        if (!err) err = history_keep_args(sh->cwd, s_spelled, info->args_name, argc, argv);
+        if (err) {
+            shell_error(sh, "%s: %s: %s\n", name, ARGS_FILE, err);
+            return false;
+        }
+    }
+    shell_keep_cwd(sh);
+    shell_leaving(sh);
+    return true;
+}
+
+/* Check, flash if need be, and reboot into the program at `path`, which
+ * exists, giving it argv[1..argc-1] if it declared that it takes them.
+ * `ram_only` for the menu, which must never be flashed. */
+static int run_path(shell_t *sh, const char *name, const char *path, bool ram_only, int argc,
+                    char **argv) {
     const shell_loader_t *ld = sh->loader;
     if (!ld || ld->problem) {
         shell_error(sh, "%s: cannot run programs: %s\n", name,
@@ -85,6 +108,13 @@ static int run_path(shell_t *sh, const char *name, const char *path, bool ram_on
     uint64_t t0 = sh->hooks.now_us(sh->hooks.ctx);
     uf2_result_t r = uf2_check(&s_prog, &ld->flash, &info, stop, sh);
     info.check_us = since(sh, t0);
+    /* Refused before flash is touched, not started without what was asked
+     * for (design.md §3.5). */
+    if ((r == UF2_FLASH || r == UF2_RAM) && argc > 1 && !info.args_name[0]) {
+        f_close(&s_prog);
+        shell_error(sh, "%s: takes no arguments\n", name);
+        return 2;
+    }
     if (r == UF2_FLASH && ram_only) {
         f_close(&s_prog);
         shell_error(sh, "%s: %s: not a RAM program\n", name, path);
@@ -101,18 +131,18 @@ static int run_path(shell_t *sh, const char *name, const char *path, bool ram_on
 
     switch (r) {
     case UF2_FLASH:
-        shell_keep_cwd(sh);
-        shell_leaving(sh);
+        if (!leave_for(sh, name, path, &info, argc, argv)) return 1;
         ld->boot(ld->ctx, NULL, &info);
         return 0;
     case UF2_RAM:
+        /* Before anything is written: nothing may fail once the file is
+         * there, or it waits for a program started from the loader's menu. */
         fr = short_path(path, s_sfn);
         if (fr != FR_OK) {
             shell_error(sh, "%s: %s\n", name, files_why(fr));
             return 1;
         }
-        shell_keep_cwd(sh);
-        shell_leaving(sh);
+        if (!leave_for(sh, name, path, &info, argc, argv)) return 1;
         ld->boot(ld->ctx, s_sfn, &info);
         return 0;
     case UF2_NOT_UF2:
@@ -199,7 +229,8 @@ static bool find(shell_t *sh, const char *name) {
     static char file[SHELL_PATH_MAX + 1];
     if (flavour_is_path(name)) {
         if (!flavour_resolve(s_path, sh->cwd, name)) {
-            shell_error(sh, "%s: name too long\n", name);
+            if (SHELL_DOS) flavour_not_found(sh, name);
+            else shell_error(sh, "%s: name too long\n", name);
             return false;
         }
         if (at_path()) return true;
@@ -242,22 +273,21 @@ const char *run_script_path(shell_t *sh, const char *name) {
 
 int run_program(shell_t *sh, int argc, char **argv, bool redirected) {
     if (!find(sh, argv[0])) return 127;
-    /* Arguments are deferred (design.md §3.5); none is ignored. */
-    if (argc > 1 || redirected) {
-        shell_error(sh, "%s: a program takes no arguments, redirection or pipe yet\n", argv[0]);
+    if (redirected) {
+        shell_error(sh, "%s: a program takes no redirection or pipe\n", argv[0]);
         return 2;
     }
-    return run_path(sh, argv[0], s_path, false);
+    return run_path(sh, argv[0], s_path, false, argc, argv);
 }
 
 int run_ram(shell_t *sh, const char *name, const char *path) {
     snprintf(s_path, sizeof s_path, "%s", path);
-    return run_path(sh, name, s_path, true);
+    return run_path(sh, name, s_path, true, 0, NULL);
 }
 
 int run_ram_program(shell_t *sh, const char *name) {
     if (!find(sh, name)) return 127;
-    return run_path(sh, name, s_path, true);
+    return run_path(sh, name, s_path, true, 0, NULL);
 }
 
 int cmd_menu(shell_t *sh, int argc, char **argv) {

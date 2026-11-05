@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "files.h"
+#include "flavour.h"
 
 /* Lines, oldest first, each NUL-ended. */
 static char     s_hist[SHELL_HISTORY_BYTES];
@@ -104,6 +105,31 @@ bool history_take_cwd(char out[SHELL_PATH_MAX + 1]) {
     if (n <= 0 || !whole || s_line[0] != '/' || (size_t)n > SHELL_PATH_MAX) return false;
     memcpy(out, s_line, (size_t)n + 1);
     return true;
+}
+
+static void save_line(const char *line) {
+    files_safe_write(&s_save, line, strlen(line));
+    files_safe_write(&s_save, "\n", 1);
+}
+
+const char *history_keep_args(const char *cwd, const char *program, const char *name, int argc,
+                              char **argv) {
+    FRESULT r = f_mkdir("/.shell");
+    if (r != FR_OK && r != FR_EXIST) return files_why(r);
+    const char *err = files_safe_open(&s_save, ARGS_FILE);
+    if (err) return err;
+    save_line("picocalc-args 1");
+    save_line(SHELL_DOS ? "dos" : "unix");
+    save_line(cwd);
+    save_line(program);
+    save_line(name);
+    for (int i = 1; i < argc; i++) save_line(argv[i]);
+    return files_safe_commit(&s_save);
+}
+
+void history_drop_args(void) {
+    f_unlink(ARGS_FILE);
+    f_unlink(ARGS_FILE ".new");
 }
 
 int cmd_history(shell_t *sh, int argc, char **argv) {

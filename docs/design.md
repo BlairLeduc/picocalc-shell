@@ -21,7 +21,7 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-12 | The shell replaces the UF2 Loader's `BOOT2350.UF2`. | 3.2 |
 | 2026-10-12 | Programs may add an exit command that returns to the shell. | 3.4 |
 | 2026-10-12 | Power-on with no key held starts the last program, as the loader does now. | 3.4 |
-| 2026-10-12 | Program arguments are deferred. *The design is written in §3.5 and its questions answered (2026-11-04); until M13 is built, this stands.* | 3.5 |
+| 2026-10-12 | Program arguments are deferred. *Replaced by the design in §3.5, its questions answered 2026-11-04 and built on branch `m13-args`; M13 done 2026-11-05 (§10).* | 3.5 |
 | 2026-10-12 | The terminal uses the owner's own 10-pixel fonts. | 4.1 |
 | 2026-10-12 | The shell is called **shell**. Its prompt is the current directory followed by `>`. | 4.4 |
 | 2026-10-12 | The licence is GPL-3.0. | 9 |
@@ -43,6 +43,8 @@ only open questions are M10's, a flash filesystem for programs to share
 | 2026-10-17 | `picocalc_shell_exit()` returns false when UF2 Loader did not start the program, as well as with no card, and the program decides what to do then (such as power off by its own means). The header stays independent and does not touch the southbridge; `picocalc_shell_loader_present()` tells a program beforehand. | 3.4 |
 | 2026-11-03 | Closer to UNIX (§4.4): the error stream can be redirected; a path or `NAME.sh` on `$PATH` runs a script; `rm -f`, `~`, `cd -`, `$PWD`; and `exit`, `test`, `which`, `tee`, `find`, `uniq`, `sort`, `true`, `false`, `less`. `exit` at the prompt stays in the shell and shows its header. There is still no `if`, `for` or `$(...)`, and the current directory is still not searched. | 4.4 |
 | 2026-11-03 | Closer to DOS (§4.7): the DOS flavour starts in `C:\`, not `C:\HOME`; a `NAME` looks in one directory at a time, a program before a batch file, in place of a batch file anywhere beating a program; `NAME.UF2` and a path with no extension run a program; COPY takes `CON` and `NUL`. In both flavours a restart comes back to the directory left (§4.3). | 4.3, 4.7 |
+| 2026-11-04 | In the DOS flavour `/` is never a path separator, as at MS-DOS's command line: it is the switch character, and only `\\` separates names. `CD /HOME`, `TYPE HOME/A.TXT`, `/GAMES/ORIC` and `C:/GAMES/ORIC` no longer work; `$PATH`, Tab and `picocalc_shell_args_path` follow the same rule. This replaces the earlier rule that a `/` outside a switch separates names. | 3.5, 4.7 |
+| 2026-11-05 | M13's power cut between the write and the program is simulated over SWD, stopped at a breakpoint and reset: the power button is soft, takes over a second to cut the power, and cannot hit a window of milliseconds. | 3.5 |
 | 2026-10-22 | For M12 (§3.8): the DS3231 is on `i2c0`, on the bus alone, with no GPIO (no `SQW`). Time zones are POSIX `TZ` strings. The UNIX flavour sets the time in POSIX's form, `date mmddHHMM[[cc]yy]`. The Wi-Fi password may be kept in plain text on the card. `i2c0` is on GP4 (SDA) and GP5 (SCL). The DOS flavour has `C:\CONFIG.SYS`, with `COUNTRY=`. `DIR` takes the 39-column layout with the size moved left. `/ntp/ntp.cfg` names one network (*changed the same day:* it was to hold several). The development build's UART moves off GP4 and GP5, to the pins left for it: 2, 3, 21 and 28. | 3.8 |
 | 2026-10-22 | Each flavour has a Pico 2 build and a separate Pico 2 W build; only the W build supports NTP (§3.8). A release offers `shell-unix.uf2`, `shell-dos.uf2`, `shell-unix-w.uf2` and `shell-dos-w.uf2`, and `ntp.uf2` for `/pico2-apps/`; this extends the 2026-10-16 decision. | 3.8, 4.7 |
 | 2026-10-22 | M12's design (§3.8) is settled: NTP runs in a separate RAM program, `ntp.uf2`, at most once per power-on, joining the one network `/ntp/ntp.cfg` names; `i2c0` runs at 100 kHz; the AON timer and the DS3231 hold UTC, POSIX `TZ` gives local time, and FAT timestamps are local; the record of the clock is in POWMAN scratch 0–2; `picocalc_shell.h` gains `picocalc_shell_time()` and `picocalc_shell_set_time()`; a clock that is not set is handled as in §3.8 (`date`'s status 1; `DATE`, `TIME`, and `/T` with `ERRORLEVEL`); file times as in §3.8 (`touch` sets an existing file's time, `cp` the current time, `COPY` keeps the source's; `ls -l`'s six-month rule); `CONFIG.SYS` as in §3.8. | 3.8 |
@@ -241,8 +243,8 @@ and non-contiguous UF2s, comes with it.
   `name.uf2` in `/pico2-apps`, a fixed directory until `$PATH` comes with
   variables (M4). A name not found is "not found" whatever stopped the
   search, as in sh; a path says why. A program ends the line: the reboot
-  drops whatever follows it. Arguments and redirections are refused
-  (§3.5).
+  drops whatever follows it. Redirections are refused, and arguments
+  unless the program declares them (§3.5).
 - **The loader.** `loader.c` reads stage3's version from its binary info
   and runs programs only under 2.3, 2.4, 2.4.1 and 2.5, the versions with this
   scratch-command protocol (2.2 had none). Under anything else, or with no
@@ -316,10 +318,8 @@ The candidate is a file, `/.shell/args`, which the shell writes before the
 reboot and the program reads and deletes. Its content would be `cwd` and
 `argv`, and an emulator would treat it like a build-time `BOOT_TAPE` (EL
 §13.1). A block in SRAM does not survive the program's crt0. Exit status
-could come back the same way. *Deferred, 2026-10-12.* Until then, a word
-after a program's name is an error, so nothing comes to depend on a
-behaviour we have not designed. A program runs exactly as it does from the
-loader's menu.
+could come back the same way. *Deferred, 2026-10-12, so nothing came to
+depend on a behaviour not yet designed; designed below and built at M13.*
 
 **`/.shell/` is private** (*2026-11-03*). `/.shell/cwd` (§4.3) must not become
 this channel, and the README and `picocalc_shell.h` tell programs to leave
@@ -329,10 +329,11 @@ restarted at power-on, or started from the loader's menu after `menu`, would
 read a directory from an earlier session. And a program that changed it
 would change where the shell comes back to.
 
-#### Design: program arguments and the directory (*2026-11-03, M13, not built*)
+#### Design: program arguments and the directory (*2026-11-03, M13; built 2026-11-04*)
 
-*The owner answered its questions on 2026-11-04 (below). Nothing here is
-built; the sizes and costs are estimates.*
+*The owner answered its questions on 2026-11-04 (below). It is built on branch
+`m13-args` and done, 2026-11-05 ([milestones.md](milestones.md)). What the
+building changed or settled is marked* As built.
 
 **What a user would see.** An option says what a file is for, in the flavour's
 spelling: `-t` or `-d` in UNIX's, `/T` or `/D` in DOS's. The name is found from
@@ -367,6 +368,15 @@ and no flat image. The Pico SDK's binary info was the first thought, and
 over the program, which would mean seeking about in the UF2. The macro must
 survive `--gc-sections`, to be checked with a real build.
 
+*As built:* the `retain` attribute was the first way, and the Arm toolchain
+(14.2) refuses it: `'retain' attribute ignored`. The macro also defines a
+constructor that only names the record, which keeps it, as every linker script
+keeps `.init_array`; it costs a few instructions before `main`. `test_args`
+finds the record in `args-test.uf2` and `args-ram.uf2`, real links under SDK
+2.3.1, once `tools/fetch-suites.sh` has copied them. The macro belongs in a
+source file that is sure to be linked: in a static library's object that
+nothing else pulls in, it is lost like anything else there.
+
 **The file.** The shell writes `/.shell/args`, through name.new, only for a
 program that declares this, just before it restarts (beside `shell_keep_cwd`
 in `run_path`). An older program costs no card write and leaves nothing
@@ -385,7 +395,10 @@ game.tap
 ```
 
 The words a line can make limit it to about 4.7 KB (`SHELL_ARGS_TEXT`, plus a
-path each for the directory and the program). The program's own path also lets
+path each for the directory and the program; *as built,*
+`PICOCALC_SHELL_ARGS_SIZE`, 4700, which `test_args` checks at compile time). The
+program's own path, walked through the directory listings by `files_spelled`
+since `f_stat` hands a long name back as typed, also lets
 a program kept with its files (§4.7) find them. Names are the card's bytes
 (`FF_CODE_PAGE` 437, not Unicode).
 
@@ -425,9 +438,13 @@ the UNIX flavour's after variables, quotes and globs, so `pico-oric -t *.tap`
 gives each match, of which the helper takes the first; the DOS flavour's after
 `%NAME%`, and with wildcards as typed, since in DOS each command expands its
 own. So `PICO-ORIC /T %1` works in a batch file, though nothing after that line
-runs (§4.7). A redirection or a pipe is still refused. `PICO-ORIC/T`, with no
-space, as DOS's `DIR/W`, reads today as a path, and must be looked at when this
-is built.
+runs (§4.7). A redirection or a pipe is still refused.
+
+*As built:* in the DOS flavour a `/` ends any command's name, as DOS's switch
+character did, so `PICO-ORIC/T GAME.TAP` is `PICO-ORIC /T GAME.TAP` and
+`C:\GAMES\ORIC/T` works too. `/` is never a separator there (§4.7, *the owner,
+2026-11-04*), so `GAMES/ORIC` is `GAMES` with the switch `/ORIC`, and a program given
+`/T /A/B` gets no path from `picocalc_shell_args_option`.
 
 **What it does not do.** No exit status back to the shell, though a later
 version line could add it. `sh` still takes no `$1`, which is separate work.
@@ -454,7 +471,8 @@ written and removed around a fake loader, with a failed write stopping the
 start; the header's parser, options and path rules run under `test_args`, in
 both flavours. On a board, a test program prints what it was given, from flash and
 from RAM, under stock and patched loaders, and a power cut between the write and
-the program leaves the next start of the shell clean.
+the program, simulated over SWD (*the owner, 2026-11-05:* the soft power button
+cannot time a real one), leaves the next start of the shell clean.
 
 ### 3.6 Programs that keep data in flash
 
@@ -1777,16 +1795,20 @@ rules for size, CR LF and safe save (§4.6).
   `/`, `\` or `.` when what comes before is a builtin, so `DIR/W`, `CD..`,
   `CD\` and `ECHO.` work. ECHO, SET, PATH and PROMPT read what followed
   the name as typed, so `ECHO a   b` keeps its spaces.
-- **`/` as a switch or a separator.** The commands that take switches
-  (DIR, COPY, XCOPY, DEL, DELTREE, FIND) read a word that starts with `/`
-  as switches, one or several (`/W/P`), in either case; an unknown one
-  is `Invalid switch - /X`. Every other `/` separates names, so
-  `CD /HOME` works, and so does `TYPE HOME/A.TXT`. *(Changed
-  2026-10-26, at the owner's asking:* in DIR, COPY, XCOPY, DEL and
-  DELTREE a `/` anywhere in a word starts its switches, as in DOS, so
-  `DIR \/W` is `DIR \ /W` and `DIR HOME/SUB` is `Invalid switch -
-  /SUB`. FIND and DATE keep a `/` inside a word, for FIND's string,
-  whose quotes are gone by then, and DATE's `10/22/26`.)
+- **`/` is a switch, never a separator** (*the owner, 2026-11-04*). As at
+  MS-DOS's command line, only `\\` separates names, though DOS's own file
+  calls took `/` as well. The commands that take switches (DIR, COPY,
+  XCOPY, DEL, DELTREE, FIND) read a word that starts with `/` as switches,
+  one or several (`/W/P`), in either case; an unknown one is `Invalid
+  switch - /X`. Any other command given a file with a `/` says the same:
+  `CD /HOME` is `Invalid switch - /HOME`, and `TYPE HOME/A.TXT` is `Invalid
+  switch - /A.TXT`. A `/` ends a command's name, so `/GAMES/ORIC` and
+  `C:/GAMES/ORIC` are `Bad command or file name`. `dos_resolve` is what
+  refuses it, in the word as typed; the card's own paths use `/` and reach
+  FatFs without it (`files_open_path`). In DIR, COPY, XCOPY, DEL and
+  DELTREE a `/` anywhere in a word starts its switches, so `DIR \/W` is
+  `DIR \ /W`. FIND and DATE keep a `/` inside a word, for FIND's string,
+  whose quotes are gone by then, and DATE's `10/22/26`.
 - **Wildcards** (`dos_match`). A pattern with no `.` matches the whole
   name; one with a `.` matches the parts before and after the name's last
   `.` separately. `*` matches the rest of a part, `?` one character or
@@ -2716,7 +2738,8 @@ in [milestones.md](milestones.md).
   the prompt. (*The owner, 2026-10-23:* the AON timer's drift against NTP
   is not measured: the clock is for general use.)
 - **M13 — Program arguments (designed 2026-11-03, questions answered
-  2026-11-04, not started; §3.5).** `pico-oric -t game.tap` and `PICO-ORIC /T
+  2026-11-04, built on branch `m13-args` 2026-11-04, done 2026-11-05;
+  §3.5).** `pico-oric -t game.tap` and `PICO-ORIC /T
   GAME.TAP`: the declaration a program makes, `/.shell/args`, and the header's
   parser and options, which give a program the file's full path. The emulators
   adopt it in their own repositories. Done when as in §3.5.

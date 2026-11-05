@@ -68,6 +68,20 @@ target_include_directories(test_edit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(test_edit PRIVATE ${SHELL_WARNINGS})
 add_test(NAME test_edit COMMAND test_edit)
 
+# Program arguments, in each flavour: the file the shell writes and what
+# include/picocalc_shell.h makes of it, through the fake SDK (design.md §3.5).
+add_executable(test_args test_args.c)
+target_link_libraries(test_args PRIVATE shell_core shell_host_disk)
+add_executable(test_args_dos test_args.c)
+target_link_libraries(test_args_dos PRIVATE shell_core_dos shell_host_disk)
+foreach(t test_args test_args_dos)
+    target_include_directories(${t} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/fake_sdk ${CMAKE_SOURCE_DIR}/include)
+    target_compile_options(${t} PRIVATE ${SHELL_WARNINGS})
+    target_compile_definitions(${t} PRIVATE SHELL_SUITES_DIR="${CMAKE_SOURCE_DIR}/test/suites")
+    add_test(NAME ${t} COMMAND ${t})
+endforeach()
+
 # The port's renderer has no SDK header, so it is tested here on its own
 # source, against a model of the panel in place of lcd.c.
 add_executable(test_screen test_screen.c fake_lcd.c ${CMAKE_SOURCE_DIR}/src/port/screen.c)

@@ -113,7 +113,7 @@ programs. Installing pelrun's stock loader again undoes it.
 |/etc/profile |         Runs at startup for the UNIX flavour|
 |/AUTOEXEC.BAT |        Runs at startup for the DOS flavour|
 |/home/ |               Your home directory|
-|/.shell/ |             The shell's history and large pipes|
+|/.shell/ |             The shell's history, large pipes and a program's arguments|
 
 
 ### Programs that keep data in flash
@@ -192,7 +192,9 @@ eject it on the computer, or press Esc, to come back to the shell.
 **The PicoCalc:** `battery`, `backlight`, `phosphor` (the text's colour:
 white, green or amber), `info`, `poweroff`, `reboot` and `bootsel`.
 
-Program arguments (`pico-oric game.tap`) are not supported yet.
+**Programs with a file:** `pico-oric -t game.tap` (`PICO-ORIC /T GAME.TAP` in the
+DOS flavour) gives a program a file from your directory, if the program says it
+takes arguments. Any other program refuses them.
 
 ## Adding an exit command to a program
 
@@ -217,7 +219,27 @@ as the GPL-3.0, so a program under any licence can include it.
 You don't need to do anything to return the user to their directory: after
 `picocalc_shell_exit()` the shell comes back to where it was. Treat `/.shell/`
 as private to the shell: don't read, change or delete its files, because they
-may change between versions.
+may change between versions. The one exception is the file below.
+
+To take arguments, a program says so in one line of the source file with its
+`main`, reads `PICOCALC_SHELL_ARGS_FILE` at its start with its own FatFs, removes
+it, and hands the text to the header:
+
+```c
+PICOCALC_SHELL_TAKES_ARGS("pico-oric");
+...
+static char text[PICOCALC_SHELL_ARGS_SIZE];
+picocalc_shell_args_t args;
+if (picocalc_shell_args_parse(text, len, "pico-oric", &args)) {
+    char path[256];
+    if (picocalc_shell_args_option(&args, 't', path, sizeof path)) load_tape(path);
+}
+```
+
+`picocalc_shell_args_option` handles both flavours' spellings and gives the full
+path. `args.dir` is the user's directory, and `args.program` the program's own
+path, so a program started by the shell always knows them, with or without
+arguments. Started any other way, it finds no file and starts as usual.
 
 A program that links `hardware_powman` also gets the shell's clock:
 

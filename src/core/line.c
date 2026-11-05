@@ -223,7 +223,7 @@ static const char k_sep[] = { SHELL_DOS ? '\\' : '/', '\0' };
 /* Whether c ends a directory in a path being completed: in DOS, '\',
  * '/' and the ':' of C:. */
 static bool is_sep(char c) {
-    return c == '/' || (SHELL_DOS && (c == '\\' || c == ':'));
+    return SHELL_DOS ? c == '\\' || c == ':' : c == '/';
 }
 
 /* Put name[from, to) in at the cursor, escaped. */

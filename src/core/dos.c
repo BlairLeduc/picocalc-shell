@@ -328,11 +328,21 @@ static dos_parse_t s_parse[SHELL_DEPTH];
 static int stage(shell_t *sh, int k, pipe_t *from, pipe_t *to, void *ctx) {
     const dos_cmd_t *c = &((const dos_parse_t *)ctx)->cmds[k];
     const char *name = c->argv[0];
+    /* /GAMES/ORIC has no name before its switch. */
+    if (!name[0]) {
+        flavour_not_found(sh, c->tail);
+        return 127;
+    }
     /* C: is the drive there is; any other is not. */
-    if (name[0] && name[1] == ':' && !name[2]) {
+    if (name[1] == ':' && !name[2]) {
         if (dos_other_drive(name)) {
             shell_error(sh, "Invalid drive specification\n");
             return 1;
+        }
+        /* C:/GAMES/ORIC is not a path. */
+        if (c->tail[0] == '/') {
+            flavour_not_found(sh, c->tail);
+            return 127;
         }
         return 0;
     }
